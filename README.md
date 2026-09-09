@@ -1,4 +1,4 @@
-# Computer-Use Automation System
+# ReplayForge
 
 A focused implementation of a computer-use system that uses an LLM to discover a workflow on a real UI, saves that workflow as a typed and reviewable capability, and replays it deterministically without an LLM in the decision loop.
 
@@ -23,4 +23,3 @@ Setup instructions, configuration, offline mode, and the exact discovery and rep
 - Source code and tests
 - [`REPORT.md`](REPORT.md), covering the required design decisions and trade-offs
 - `evidence/`, containing a saved capability and logs from genuine discovery and replay runs
-
