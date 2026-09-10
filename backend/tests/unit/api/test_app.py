@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -9,12 +10,23 @@ from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.capabilities.serialization import dump_artifact_yaml
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
+from replayforge.interventions.leases import LeaseConflictError
+from replayforge.interventions.models import (
+    ControlLease,
+    ControlOwner,
+    Intervention,
+    InterventionStatus,
+    OwnerKind,
+)
+from replayforge.interventions.router import InterventionNotFoundError
+from replayforge.interventions.service import InterventionTransition
 from replayforge.runs.results import (
     CapabilityReference,
     RunResult,
     SuccessResult,
     VerifiedCheckpoint,
 )
+from replayforge.shared.ids import EntityKind, new_id
 
 
 @dataclass
@@ -59,6 +71,65 @@ class FakeDiscoveryInvoker:
             artifact=self.artifact,
             evidence_manifest="evidence://test/manifest.json",
         )
+
+
+@dataclass
+class FakeInterventionInvoker:
+    transition: InterventionTransition
+
+    def get(self, intervention_id: str) -> InterventionTransition:
+        return self.transition
+
+    def claim(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        return self.transition
+
+    def release(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        return self.transition
+
+    def begin_resume(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        return self.transition
+
+    def terminate(
+        self,
+        intervention_id: str,
+        expected_lease_version: int,
+        operator_id: str | None,
+        resolution: str,
+    ) -> InterventionTransition:
+        return self.transition
+
+
+def intervention_transition() -> InterventionTransition:
+    now = datetime(2026, 9, 10, 12, tzinfo=UTC)
+    session_id = new_id(EntityKind.SESSION)
+    intervention_id = new_id(EntityKind.INTERVENTION)
+    return InterventionTransition(
+        Intervention(
+            id=intervention_id,
+            run_id=new_id(EntityKind.RUN),
+            session_id=session_id,
+            trigger_code="unexpected_dialog",
+            explanation="Automation paused safely.",
+            status=InterventionStatus.CLAIMED,
+            created_at=now,
+            operator_id="operator-7",
+        ),
+        ControlLease(
+            session_id=session_id,
+            owner=ControlOwner(OwnerKind.HUMAN, "operator-7"),
+            version=3,
+            issued_at=now,
+            last_heartbeat=now,
+            expires_at=now + timedelta(seconds=30),
+            intervention_id=intervention_id,
+        ),
+    )
 
 
 def client(invoker: FakeReplayInvoker | None = None) -> TestClient:
@@ -211,3 +282,120 @@ def test_successful_discovery_returns_compiled_artifact(
     assert response.status_code == 200
     assert response.json()["status"] == "success"
     assert response.json()["artifact"]["capability"]["id"] == artifact.capability.id
+
+
+def test_intervention_claim_returns_new_owner_and_lease_version() -> None:
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    )
+
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/claim",
+        json={"expected_lease_version": 2, "operator_id": "operator-7"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["control_owner"] == "human:operator-7"
+    assert response.json()["lease_version"] == 3
+
+
+def test_intervention_runtime_absence_is_retryable() -> None:
+    response = client().get("/api/v1/interventions/int_0123456789abcdef0123456789abcdef")
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "intervention_runtime_unavailable"
+    assert response.json()["retryable"] is True
+
+
+def test_stale_intervention_error_is_sanitized() -> None:
+    class ConflictingInvoker(FakeInterventionInvoker):
+        def claim(
+            self, intervention_id: str, expected_lease_version: int, operator_id: str
+        ) -> InterventionTransition:
+            raise LeaseConflictError("internal current owner details")
+
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=ConflictingInvoker(transition),
+            )
+        )
+    )
+
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/claim",
+        json={"expected_lease_version": 2, "operator_id": "operator-7"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "intervention_transition_conflict"
+    assert "internal current owner" not in response.text
+
+
+def test_intervention_read_release_resume_and_terminate_contracts() -> None:
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    )
+    base = f"/api/v1/interventions/{transition.intervention.id}"
+
+    responses = [
+        api.get(base),
+        api.post(
+            f"{base}/release",
+            json={"expected_lease_version": 3, "operator_id": "operator-7"},
+        ),
+        api.post(
+            f"{base}/resume",
+            json={"expected_lease_version": 3, "operator_id": "operator-7"},
+        ),
+        api.post(
+            f"{base}/terminate",
+            json={
+                "expected_lease_version": 3,
+                "operator_id": "operator-7",
+                "resolution": "Operator ended the run.",
+            },
+        ),
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(
+        response.json()["intervention_id"] == str(transition.intervention.id)
+        for response in responses
+    )
+
+
+def test_unknown_intervention_error_is_sanitized() -> None:
+    class MissingInterventionInvoker(FakeInterventionInvoker):
+        def get(self, intervention_id: str) -> InterventionTransition:
+            raise InterventionNotFoundError("internal intervention lookup")
+
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=MissingInterventionInvoker(transition),
+            )
+        )
+    )
+
+    response = api.get(f"/api/v1/interventions/{transition.intervention.id}")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "intervention_not_found"
+    assert "internal intervention lookup" not in response.text

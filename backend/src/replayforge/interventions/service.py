@@ -16,6 +16,10 @@ from replayforge.interventions.models import (
 from replayforge.interventions.router import InMemoryInterventionRouter
 
 
+class InterventionAuthorizationError(ValueError):
+    """The operator is not authorized for the requested intervention transition."""
+
+
 @dataclass(frozen=True, slots=True)
 class InterventionTransition:
     intervention: Intervention
@@ -26,6 +30,11 @@ class InterventionTransition:
 class InterventionCoordinator:
     interventions: InMemoryInterventionRouter
     leases: ControlLeaseService
+
+    def get(self, intervention_id: str) -> InterventionTransition:
+        intervention = self.interventions.get(intervention_id)
+        lease = self.leases.repository.get(str(intervention.session_id))
+        return InterventionTransition(intervention, lease)
 
     def claim(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
@@ -45,7 +54,7 @@ class InterventionCoordinator:
     ) -> InterventionTransition:
         current = self.interventions.get(intervention_id)
         if current.operator_id != operator_id:
-            raise ValueError("operator does not own this intervention")
+            raise InterventionAuthorizationError("operator does not own this intervention")
         replacement = current.release()
         lease = self.leases.release(str(current.session_id), expected_lease_version, operator_id)
         updated = self.interventions.compare_and_swap(
@@ -58,7 +67,7 @@ class InterventionCoordinator:
     ) -> InterventionTransition:
         current = self.interventions.get(intervention_id)
         if current.operator_id != operator_id:
-            raise ValueError("operator does not own this intervention")
+            raise InterventionAuthorizationError("operator does not own this intervention")
         replacement = current.begin_resume()
         lease = self.leases.begin_resume(
             str(current.session_id), expected_lease_version, operator_id
@@ -82,7 +91,9 @@ class InterventionCoordinator:
         elif current.status is InterventionStatus.CLAIMED and current.operator_id == operator_id:
             expected_owner = ControlOwner(OwnerKind.HUMAN, operator_id)
         else:
-            raise ValueError("operator cannot terminate this intervention state")
+            raise InterventionAuthorizationError(
+                "operator cannot terminate this intervention state"
+            )
         replacement = current.terminate(resolution)
         lease = self.leases.terminate(
             str(current.session_id), expected_lease_version, expected_owner

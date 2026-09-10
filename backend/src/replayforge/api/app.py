@@ -16,7 +16,10 @@ from replayforge.api.contracts import (
     DiscoveryInvocation,
     ErrorBody,
     HealthResponse,
+    InterventionTransitionResponse,
+    LeaseTransitionRequest,
     ReplayInvocation,
+    TerminateInterventionRequest,
 )
 from replayforge.api.services import ApiServices
 from replayforge.capabilities.registry import CapabilityNotFoundError
@@ -27,6 +30,16 @@ from replayforge.capabilities.serialization import (
     load_artifact_yaml,
 )
 from replayforge.discovery.models import DiscoverySuccess
+from replayforge.interventions.leases import LeaseConflictError, LeaseNotFoundError
+from replayforge.interventions.models import InterventionTransitionError
+from replayforge.interventions.router import (
+    InterventionConflictError,
+    InterventionNotFoundError,
+)
+from replayforge.interventions.service import (
+    InterventionAuthorizationError,
+    InterventionTransition,
+)
 from replayforge.shared.ids import EntityKind, new_id
 
 _CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{8,100}$")
@@ -78,6 +91,16 @@ def create_app(services: ApiServices) -> FastAPI:
             code="capability_not_found",
             message="The requested capability or version was not found.",
         )
+
+    for not_found_error in (InterventionNotFoundError, LeaseNotFoundError):
+        app.add_exception_handler(not_found_error, _intervention_not_found)
+    for conflict_error in (
+        LeaseConflictError,
+        InterventionConflictError,
+        InterventionTransitionError,
+        InterventionAuthorizationError,
+    ):
+        app.add_exception_handler(conflict_error, _intervention_conflict)
 
     @app.get("/health/live", response_model=HealthResponse)
     def live() -> HealthResponse:
@@ -153,6 +176,79 @@ def create_app(services: ApiServices) -> FastAPI:
     def invoke(capability_id: str, body: ReplayInvocation) -> JSONResponse:
         return replay(capability_id, body)
 
+    @app.get(
+        "/api/v1/interventions/{intervention_id}",
+        response_model=InterventionTransitionResponse,
+    )
+    def get_intervention(
+        request: Request, intervention_id: str
+    ) -> InterventionTransitionResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return _transition_response(invoker.get(intervention_id))
+
+    @app.post(
+        "/api/v1/interventions/{intervention_id}/claim",
+        response_model=InterventionTransitionResponse,
+    )
+    def claim_intervention(
+        request: Request, intervention_id: str, body: LeaseTransitionRequest
+    ) -> InterventionTransitionResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return _transition_response(
+            invoker.claim(intervention_id, body.expected_lease_version, body.operator_id)
+        )
+
+    @app.post(
+        "/api/v1/interventions/{intervention_id}/release",
+        response_model=InterventionTransitionResponse,
+    )
+    def release_intervention(
+        request: Request, intervention_id: str, body: LeaseTransitionRequest
+    ) -> InterventionTransitionResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return _transition_response(
+            invoker.release(intervention_id, body.expected_lease_version, body.operator_id)
+        )
+
+    @app.post(
+        "/api/v1/interventions/{intervention_id}/resume",
+        response_model=InterventionTransitionResponse,
+    )
+    def resume_intervention(
+        request: Request, intervention_id: str, body: LeaseTransitionRequest
+    ) -> InterventionTransitionResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return _transition_response(
+            invoker.begin_resume(intervention_id, body.expected_lease_version, body.operator_id)
+        )
+
+    @app.post(
+        "/api/v1/interventions/{intervention_id}/terminate",
+        response_model=InterventionTransitionResponse,
+    )
+    def terminate_intervention(
+        request: Request, intervention_id: str, body: TerminateInterventionRequest
+    ) -> InterventionTransitionResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return _transition_response(
+            invoker.terminate(
+                intervention_id,
+                body.expected_lease_version,
+                body.operator_id,
+                body.resolution,
+            )
+        )
+
     return app
 
 
@@ -173,3 +269,49 @@ def _error_response(
         details=details or [],
     )
     return JSONResponse(body.model_dump(mode="json"), status_code=status_code)
+
+
+async def _intervention_not_found(request: Request, error: Exception) -> JSONResponse:
+    del error
+    return _error_response(
+        request,
+        status_code=404,
+        code="intervention_not_found",
+        message="The requested intervention was not found.",
+    )
+
+
+async def _intervention_conflict(request: Request, error: Exception) -> JSONResponse:
+    del error
+    return _error_response(
+        request,
+        status_code=409,
+        code="intervention_transition_conflict",
+        message="The intervention state or control lease is stale.",
+    )
+
+
+def _intervention_invoker(request: Request, services: ApiServices) -> Any:
+    if services.intervention_invoker is not None:
+        return services.intervention_invoker
+    return _error_response(
+        request,
+        status_code=503,
+        code="intervention_runtime_unavailable",
+        message="The intervention runtime is unavailable.",
+        retryable=True,
+    )
+
+
+def _transition_response(
+    transition: InterventionTransition,
+) -> InterventionTransitionResponse:
+    return InterventionTransitionResponse(
+        intervention_id=str(transition.intervention.id),
+        run_id=str(transition.intervention.run_id),
+        session_id=str(transition.intervention.session_id),
+        status=transition.intervention.status.value,
+        control_owner=transition.lease.owner.value,
+        lease_version=transition.lease.version,
+        lease_expires_at=transition.lease.expires_at.isoformat().replace("+00:00", "Z"),
+    )

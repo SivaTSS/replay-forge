@@ -50,3 +50,24 @@ class ErrorBody(ApiModel):
     correlation_id: str
     retryable: bool
     details: list[dict[str, str]] = Field(default_factory=list)
+
+
+class LeaseTransitionRequest(ApiModel):
+    expected_lease_version: int = Field(ge=1)
+    operator_id: str = Field(pattern=r"^[A-Za-z0-9_.@-]{2,100}$")
+
+
+class TerminateInterventionRequest(ApiModel):
+    expected_lease_version: int = Field(ge=1)
+    operator_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_.@-]{2,100}$")
+    resolution: str = Field(min_length=3, max_length=500)
+
+
+class InterventionTransitionResponse(ApiModel):
+    intervention_id: str
+    run_id: str
+    session_id: str
+    status: str
+    control_owner: str
+    lease_version: int
+    lease_expires_at: str

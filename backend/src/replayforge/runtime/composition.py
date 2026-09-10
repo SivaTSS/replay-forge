@@ -23,6 +23,7 @@ from replayforge.interventions.leases import (
     InMemoryControlLeaseRepository,
 )
 from replayforge.interventions.router import InMemoryInterventionRouter
+from replayforge.interventions.service import InterventionCoordinator, InterventionTransition
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import Risk
@@ -125,9 +126,51 @@ class ManagedDiscoveryExecutor:
 
 
 @dataclass(slots=True)
+class RuntimeInterventionService:
+    coordinator: InterventionCoordinator
+    live_drivers: dict[str, PlaywrightSurfaceDriver]
+    lock: Lock
+
+    def get(self, intervention_id: str) -> InterventionTransition:
+        return self.coordinator.get(intervention_id)
+
+    def claim(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        return self.coordinator.claim(intervention_id, expected_lease_version, operator_id)
+
+    def release(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        return self.coordinator.release(intervention_id, expected_lease_version, operator_id)
+
+    def begin_resume(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        return self.coordinator.begin_resume(intervention_id, expected_lease_version, operator_id)
+
+    def terminate(
+        self,
+        intervention_id: str,
+        expected_lease_version: int,
+        operator_id: str | None,
+        resolution: str,
+    ) -> InterventionTransition:
+        transition = self.coordinator.terminate(
+            intervention_id, expected_lease_version, operator_id, resolution
+        )
+        with self.lock:
+            driver = self.live_drivers.pop(intervention_id, None)
+        if driver is not None:
+            driver.close()
+        return transition
+
+
+@dataclass(slots=True)
 class LocalRuntime:
     service: ReplayApplicationService
     discovery_service: DiscoveryApplicationService
+    intervention_service: RuntimeInterventionService
     journals: dict[str, InMemoryRunJournal]
     interventions: InMemoryInterventionRouter
     live_drivers: dict[str, PlaywrightSurfaceDriver]
@@ -135,7 +178,7 @@ class LocalRuntime:
 
     @property
     def api_services(self) -> ApiServices:
-        return ApiServices(self.service, self.discovery_service)
+        return ApiServices(self.service, self.discovery_service, self.intervention_service)
 
     def close(self) -> None:
         with self._lock:
@@ -229,4 +272,15 @@ def build_runtime(settings: object) -> LocalRuntime:
         discovery_factory,
         lambda: provider is not None and target_ready(),
     )
-    return LocalRuntime(service, discovery_service, journals, interventions, live_drivers, lock)
+    intervention_service = RuntimeInterventionService(
+        InterventionCoordinator(interventions, lease_service), live_drivers, lock
+    )
+    return LocalRuntime(
+        service,
+        discovery_service,
+        intervention_service,
+        journals,
+        interventions,
+        live_drivers,
+        lock,
+    )
