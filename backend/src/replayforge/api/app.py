@@ -18,6 +18,7 @@ from replayforge.api.contracts import (
     ReplayInvocation,
 )
 from replayforge.api.services import ApiServices
+from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.capabilities.serialization import (
     ArtifactParseError,
     artifact_content_hash,
@@ -62,6 +63,18 @@ def create_app(services: ApiServices) -> FastAPI:
             code="request_validation_failed",
             message="The request does not satisfy the API contract.",
             details=details,
+        )
+
+    @app.exception_handler(CapabilityNotFoundError)
+    async def capability_not_found(
+        request: Request, error: CapabilityNotFoundError
+    ) -> JSONResponse:
+        del error
+        return _error_response(
+            request,
+            status_code=404,
+            code="capability_not_found",
+            message="The requested capability or version was not found.",
         )
 
     @app.get("/health/live", response_model=HealthResponse)

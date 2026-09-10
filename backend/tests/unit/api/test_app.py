@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from replayforge.api.app import create_app
 from replayforge.api.services import ApiServices
 from replayforge.capabilities.models import CapabilityArtifact
+from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.capabilities.serialization import dump_artifact_yaml
 from replayforge.runs.results import (
     CapabilityReference,
@@ -131,3 +132,26 @@ def test_request_validation_errors_exclude_input_values() -> None:
     assert response.json()["code"] == "request_validation_failed"
     assert sensitive_marker not in response.text
     assert all("input" not in detail for detail in response.json()["details"])
+
+
+def test_unknown_capability_is_a_sanitized_404() -> None:
+    class MissingInvoker(FakeReplayInvoker):
+        def invoke(
+            self,
+            capability_id: str,
+            version: str | None,
+            tenant: str,
+            inputs: dict[str, Any],
+        ) -> RunResult:
+            raise CapabilityNotFoundError(f"internal lookup: {capability_id}/{version}")
+
+    api = client(MissingInvoker())
+
+    response = api.post(
+        "/api/v1/capabilities/member.missing/replays",
+        json={"version": "1.0.0", "tenant": "harbor_credit_union", "inputs": {}},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "capability_not_found"
+    assert "internal lookup" not in response.text
