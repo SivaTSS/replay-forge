@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import NewType
 
+from replayforge.policy.types import Risk
 from replayforge.shared.ids import EntityId
 
 SurfaceSessionId = NewType("SurfaceSessionId", str)
@@ -73,6 +74,7 @@ class ResolvedTarget:
     description: str
     candidate_index: int
     observed_count: int
+    registered_risk: Risk | None = None
 
     def __post_init__(self) -> None:
         if self.candidate_index < 0 or self.observed_count != 1:

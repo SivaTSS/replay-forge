@@ -147,6 +147,7 @@ class ReplayEngine:
                         step.id,
                     )
             observation = session.observe()
+            target = session.resolve(step.target, step.timeout_ms) if step.target else None
             decision = self.policy_evaluator.evaluate(
                 self.effective_policy,
                 ActionContext(
@@ -160,7 +161,9 @@ class ReplayEngine:
                     action_type=step.action.kind,
                     target_description=step.target.description if step.target else step.name,
                     declared_risk=step.risk,
-                    registered_target_risk=step.risk,
+                    registered_target_risk=(
+                        target.registered_risk if target is not None else step.risk
+                    ),
                     control_owner=AUTOMATION_OWNER.value,
                 ),
             )
@@ -179,7 +182,6 @@ class ReplayEngine:
                     request, session, step.id, decision.reason_code, observation, lease_version
                 )
 
-            target = session.resolve(step.target, step.timeout_ms) if step.target else None
             self.recorder.record("action_intent", request.run_id, step_id=step.id)
             if isinstance(step.action, ExtractAction):
                 if target is None:

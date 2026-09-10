@@ -1,0 +1,266 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
+
+from replayforge.capabilities.models import CapabilityArtifact
+from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
+from replayforge.discovery.models import (
+    ActProposal,
+    CompleteProposal,
+    DiscoveryProposal,
+    DiscoverySuccess,
+    EscalateProposal,
+    ProviderContext,
+    RecordedDiscoveryStep,
+)
+from replayforge.interventions.leases import (
+    ControlLeaseService,
+    InMemoryControlLeaseRepository,
+)
+from replayforge.policy.evaluator import PolicyEvaluator
+from replayforge.policy.models import EffectivePolicy, PolicyLayer
+from replayforge.policy.types import Risk
+from replayforge.runs.results import FailureResult, InterventionRequiredResult
+from replayforge.shared.clock import FrozenClock
+from replayforge.shared.ids import EntityKind, new_id
+from replayforge.surfaces.models import NormalizedObservation
+from tests.unit.replay.test_engine import (
+    FakeSurfaceDriver,
+    FakeSurfaceSession,
+    MemoryInterventionRouter,
+    MemoryRecorder,
+)
+
+
+@dataclass
+class QueueModelProvider:
+    proposals: list[DiscoveryProposal]
+    provider_name: str = "test-provider"
+    model_name: str = "test-model"
+    calls: list[ProviderContext] = field(default_factory=list)
+
+    def decide(self, context: ProviderContext) -> DiscoveryProposal:
+        self.calls.append(context)
+        return self.proposals.pop(0)
+
+
+@dataclass
+class ReturningCompiler:
+    artifact: CapabilityArtifact
+    calls: list[tuple[RecordedDiscoveryStep, ...]] = field(default_factory=list)
+
+    def compile(
+        self,
+        *,
+        run_id: str,
+        goal: str,
+        application_family: str,
+        tenant: str,
+        entry_point: str,
+        steps: tuple[RecordedDiscoveryStep, ...],
+        final_observation: NormalizedObservation,
+        provider_name: str,
+        model_name: str,
+        evidence_manifest: str,
+    ) -> CapabilityArtifact:
+        self.calls.append(steps)
+        return self.artifact
+
+
+def build_discovery(
+    session: FakeSurfaceSession,
+    provider: QueueModelProvider,
+    artifact: CapabilityArtifact,
+) -> tuple[DiscoveryEngine, ReturningCompiler]:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, 30, tzinfo=UTC))
+    compiler = ReturningCompiler(artifact)
+    policy = EffectivePolicy.intersect(
+        PolicyLayer(
+            name="test",
+            allowed_origins=frozenset({session.origin}),
+            allowed_route_patterns=frozenset({"/members/search"}),
+            allowed_action_types=frozenset({"type", "click", "extract"}),
+            maximum_risk=Risk.READ_ONLY,
+        )
+    )
+    return (
+        DiscoveryEngine(
+            surface_driver=FakeSurfaceDriver(session),
+            model_provider=provider,
+            artifact_compiler=compiler,
+            policy_evaluator=PolicyEvaluator(clock),
+            effective_policy=policy,
+            lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
+            recorder=MemoryRecorder(),
+            intervention_router=MemoryInterventionRouter(),
+            clock=clock,
+        ),
+        compiler,
+    )
+
+
+def make_request(**changes: Any) -> DiscoveryRequest:
+    defaults: dict[str, Any] = {
+        "run_id": new_id(EntityKind.RUN),
+        "goal": "Look up the synthetic member savings balance",
+        "application_family": "northstar_member_service",
+        "tenant": "harbor_credit_union",
+        "entry_point": "member_search",
+        "inputs": {"member_id": "12345"},
+    }
+    defaults.update(changes)
+    return DiscoveryRequest(**defaults)
+
+
+def test_successful_loop_records_action_and_compiles_verified_artifact(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    extract_step = artifact.steps[2]
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=extract_step.action,
+                target=extract_step.target,
+                rationale="The balance is visible and should be captured.",
+                expected_effect="Available balance is bound as an output.",
+                declared_risk=Risk.READ_ONLY,
+                confidence=0.99,
+            ),
+            CompleteProposal(kind="complete", rationale="The requested balance is visible."),
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, compiler = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, DiscoverySuccess)
+    assert result.artifact == artifact
+    assert len(compiler.calls) == 1
+    assert len(compiler.calls[0]) == 1
+    assert compiler.calls[0][0].target is not extract_step.target
+    assert session.closed is True
+
+
+def test_low_confidence_escalates_and_preserves_session(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[1]
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=step.action,
+                target=step.target,
+                rationale="The target might be correct.",
+                expected_effect="Search results may load.",
+                declared_risk=Risk.READ_ONLY,
+                confidence=0.2,
+            )
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, InterventionRequiredResult)
+    assert result.code == "low_model_confidence"
+    assert session.closed is False
+
+
+def test_provider_can_explicitly_request_human_help(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    provider = QueueModelProvider(
+        [
+            EscalateProposal(
+                kind="escalate",
+                reason_code="unknown_dialog",
+                rationale="The dialog is not recognized.",
+            )
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, InterventionRequiredResult)
+    assert result.code == "unknown_dialog"
+    assert session.closed is False
+
+
+def test_step_budget_stops_unbounded_discovery(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[1]
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=step.action,
+                target=step.target,
+                rationale="Submit the search.",
+                expected_effect="Search results load.",
+                declared_risk=Risk.READ_ONLY,
+                confidence=1,
+            )
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request(max_steps=1))
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "max_steps_exceeded"
+    assert session.closed is True
+
+
+def test_repeated_observation_escalates_before_looping_forever(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[1]
+    proposal = ActProposal(
+        kind="act",
+        action=step.action,
+        target=step.target,
+        rationale="Submit the search.",
+        expected_effect="Search results load.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    provider = QueueModelProvider([proposal, proposal])
+    session = FakeSurfaceSession(static_fingerprint=True)
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request(max_repeated_state=1))
+
+    assert isinstance(result, InterventionRequiredResult)
+    assert result.code == "repeated_observation"
+    assert session.closed is False
+
+
+def test_unverified_completion_is_failure(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    provider = QueueModelProvider(
+        [CompleteProposal(kind="complete", rationale="I think the task is done.")]
+    )
+    session = FakeSurfaceSession(checkpoint_valid=False)
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "completion_not_verified"

@@ -8,6 +8,7 @@ from replayforge.capabilities.models import (
     AllCondition,
     CapabilityArtifact,
     Condition,
+    LocatorBundle,
     OutputValidCondition,
     RouteCondition,
     TextCondition,
@@ -27,7 +28,7 @@ from replayforge.runs.results import (
     SuccessResult,
 )
 from replayforge.shared.clock import FrozenClock
-from replayforge.shared.ids import EntityKind, new_id
+from replayforge.shared.ids import EntityId, EntityKind, new_id
 from replayforge.surfaces.models import (
     ActionReceipt,
     ActionStatus,
@@ -46,17 +47,24 @@ class FakeSurfaceSession:
     resolve_error: SurfaceError | None = None
     resolve_failures_remaining: int = 0
     closed: bool = False
-    session_id: str = field(default_factory=lambda: new_id(EntityKind.SESSION))
+    static_fingerprint: bool = False
+    observation_count: int = 0
+    session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     origin: str = "http://demo.local:3001"
 
     def observe(self) -> NormalizedObservation:
+        self.observation_count += 1
         return NormalizedObservation(
             id=new_id(EntityKind.EVENT),
-            session_id=new_id(EntityKind.SESSION),
+            session_id=self.session_id,
             captured_at=datetime(2026, 9, 10, 12, 30, tzinfo=UTC),
             route="/members/search",
             viewport=Viewport(1280, 800),
-            fingerprint="stable-fingerprint",
+            fingerprint=(
+                "stable-fingerprint"
+                if self.static_fingerprint
+                else f"state-{self.observation_count}"
+            ),
             landmarks=("Member Search",),
         )
 
@@ -65,7 +73,15 @@ class FakeSurfaceSession:
             if self.resolve_failures_remaining > 0:
                 self.resolve_failures_remaining -= 1
             raise self.resolve_error
-        return ResolvedTarget("fake-handle", "resolved control", 0, 1)
+        return ResolvedTarget("fake-handle", "resolved control", 0, 1, Risk.READ_ONLY)
+
+    def capture_locator(self, target: ResolvedTarget) -> LocatorBundle:
+        return LocatorBundle.model_validate(
+            {
+                "description": target.description,
+                "candidates": [{"strategy": "role_name", "role": "button", "name": "Resolved"}],
+            }
+        )
 
     def execute(
         self, action: object, target: ResolvedTarget | None, inputs: dict[str, Any]
