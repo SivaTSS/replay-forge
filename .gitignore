@@ -18,6 +18,8 @@ __pycache__/
 
 # Node.js
 node_modules/
+.next/
+*.tsbuildinfo
 
 # Browser automation output
 playwright-report/
