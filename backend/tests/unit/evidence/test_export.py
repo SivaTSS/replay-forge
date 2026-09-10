@@ -14,6 +14,7 @@ from replayforge.evidence.export import (
     verify_evidence_bundle,
 )
 from replayforge.evidence.local_store import LocalEvidenceStore
+from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError
 from replayforge.policy.types import DataClassification
 from replayforge.runs.journal import InMemoryRunJournal
@@ -26,6 +27,24 @@ def _retained_run(tmp_path: Path) -> tuple[LocalEvidenceStore, InMemoryRunJourna
     store = LocalEvidenceStore(tmp_path / "runtime", clock)
     journal = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
     journal.record("replay_started", journal.run_id)
+    journal.attach_sanitized(
+        "intervention-before",
+        SanitizedEvidence(
+            b"\x89PNG\r\n\x1a\nmasked-synthetic-frame",
+            "image/png",
+            ("mask:input",),
+        ),
+        RetentionClass.HUMAN_AUDIT,
+    )
+    journal.attach_sanitized(
+        "browser-trace",
+        SanitizedEvidence(
+            b"PK\x03\x04sanitized-synthetic-trace",
+            "application/zip",
+            ("sanitize:trace",),
+        ),
+        RetentionClass.OPERATIONAL,
+    )
     journal.finalize(
         {"status": "success", "run_id": journal.run_id, "outputs": {"balance": "42.00"}},
         {"outputs.balance": DataClassification.FINANCIAL},
@@ -59,9 +78,27 @@ def test_export_writes_stable_verified_bundle(tmp_path: Path) -> None:
     manifest = json.loads((destination / "manifest.json").read_text())
     events = (destination / "events.jsonl").read_bytes()
     result = (destination / "result.json").read_bytes()
+    screenshot = (destination / "screenshots/001.png").read_bytes()
+    trace = (destination / "trace.zip").read_bytes()
     assert manifest["run_id"] == journal.run_id
     assert manifest["redaction"]["source_manifest_verified"] is True
-    assert manifest["redaction"]["directives"] == ["redact:outputs.balance"]
+    assert manifest["redaction"]["directives"] == [
+        "mask:input",
+        "redact:outputs.balance",
+        "sanitize:trace",
+    ]
+    assert manifest["attachments"] == {
+        "screenshots/001.png": {
+            "content_hash": f"sha256:{hashlib.sha256(screenshot).hexdigest()}",
+            "media_type": "image/png",
+            "size_bytes": len(screenshot),
+        },
+        "trace.zip": {
+            "content_hash": f"sha256:{hashlib.sha256(trace).hexdigest()}",
+            "media_type": "application/zip",
+            "size_bytes": len(trace),
+        },
+    }
     assert manifest["files"]["events.jsonl"]["content_hash"] == (
         f"sha256:{hashlib.sha256(events).hexdigest()}"
     )
@@ -87,6 +124,66 @@ def test_bundle_verifier_rejects_missing_file(tmp_path: Path) -> None:
     (destination / "events.jsonl").unlink()
 
     with pytest.raises(EvidenceBundleIntegrityError, match="missing"):
+        verify_evidence_bundle(destination)
+
+
+@pytest.mark.parametrize("attachment", ["screenshots/001.png", "trace.zip"])
+def test_bundle_verifier_rejects_missing_attachment(tmp_path: Path, attachment: str) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    (destination / attachment).unlink()
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="attachment is missing"):
+        verify_evidence_bundle(destination)
+
+
+@pytest.mark.parametrize(
+    ("attachment", "invalid_content", "message"),
+    [
+        ("screenshots/001.png", b"not-a-png", "screenshot.*invalid signature"),
+        ("trace.zip", b"not-a-zip", "trace.*invalid signature"),
+    ],
+)
+def test_bundle_verifier_rejects_invalid_attachment_signature(
+    tmp_path: Path,
+    attachment: str,
+    invalid_content: bytes,
+    message: str,
+) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    attachment_path = destination / attachment
+    attachment_path.write_bytes(invalid_content)
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["attachments"][attachment].update(
+        content_hash=f"sha256:{hashlib.sha256(invalid_content).hexdigest()}",
+        size_bytes=len(invalid_content),
+    )
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(EvidenceBundleIntegrityError, match=message):
+        verify_evidence_bundle(destination)
+
+
+@pytest.mark.parametrize("mutation", ["unsafe_path", "duplicate_trace"])
+def test_bundle_verifier_rejects_invalid_attachment_manifest(tmp_path: Path, mutation: str) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if mutation == "unsafe_path":
+        manifest["attachments"]["../escape.png"] = manifest["attachments"].pop(
+            "screenshots/001.png"
+        )
+    else:
+        manifest["attachments"]["screenshots/999.png"] = {**manifest["attachments"]["trace.zip"]}
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="manifest is invalid"):
         verify_evidence_bundle(destination)
 
 

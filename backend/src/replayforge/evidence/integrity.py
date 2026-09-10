@@ -15,6 +15,7 @@ from replayforge.shared.ids import EntityKind, parse_id
 
 _MAX_MANIFEST_BYTES = 2_000_000
 _MAX_EVENT_BYTES = 2_000_000
+_MAX_ATTACHMENT_BYTES = 20_000_000
 
 
 class EvidenceIntegrityError(ValueError):
@@ -30,10 +31,10 @@ class ManifestEntry(_StrictModel):
     created_at: datetime
     evidence_id: str
     key: str = Field(pattern=r"^evidence://.+$")
-    media_type: Literal["application/json"]
+    media_type: Literal["application/json", "image/png", "application/zip"]
     redaction_directives: tuple[str, ...]
     retention_class: RetentionClass
-    size_bytes: int = Field(ge=0, le=_MAX_EVENT_BYTES)
+    size_bytes: int = Field(ge=0, le=_MAX_ATTACHMENT_BYTES)
 
     @field_validator("created_at")
     @classmethod
@@ -48,6 +49,7 @@ class RunEvidenceManifest(_StrictModel):
     run_id: str
     generated_at: datetime
     events: tuple[ManifestEntry, ...] = Field(min_length=1, max_length=10_000)
+    attachments: tuple[ManifestEntry, ...] = Field(default=(), max_length=100)
     terminal_result: ManifestEntry | None = None
 
     @field_validator("run_id")
@@ -112,6 +114,7 @@ class EvidenceVerification:
     manifest_hash: str
     run_id: str
     event_count: int
+    attachment_count: int
     terminal_result_verified: bool
 
 
@@ -142,6 +145,20 @@ def verify_run_manifest(
         if event.sequence != expected_sequence:
             raise EvidenceIntegrityError("event sequence is not contiguous and ordered")
 
+    for attachment in manifest.attachments:
+        if attachment.key in seen_keys:
+            raise EvidenceIntegrityError("evidence manifest contains a duplicate key")
+        seen_keys.add(attachment.key)
+        if not attachment.key.startswith(expected_prefix):
+            raise EvidenceIntegrityError("evidence attachment belongs to a different run")
+        content = _verified_content(store, attachment)
+        if attachment.media_type == "image/png" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise EvidenceIntegrityError("PNG evidence has an invalid signature")
+        if attachment.media_type == "application/zip" and not content.startswith(b"PK"):
+            raise EvidenceIntegrityError("ZIP evidence has an invalid signature")
+        if attachment.media_type == "application/json":
+            raise EvidenceIntegrityError("structured events cannot be declared as attachments")
+
     terminal_verified = manifest.terminal_result is not None
     if manifest.terminal_result is None:
         if require_terminal:
@@ -166,6 +183,7 @@ def verify_run_manifest(
         manifest_hash=f"sha256:{hashlib.sha256(manifest_content).hexdigest()}",
         run_id=manifest.run_id,
         event_count=len(manifest.events),
+        attachment_count=len(manifest.attachments),
         terminal_result_verified=terminal_verified,
     )
 

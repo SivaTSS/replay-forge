@@ -105,6 +105,12 @@ Each scenario contains:
 - `trace.zip`: where required
 - Artifact reference and content hash
 
+Run manifests carry binary screenshots and traces in a separate bounded `attachments` collection,
+so ordered JSON domain events remain independently parseable. Attachment media type, size, content
+hash, run-key ownership, and PNG/ZIP signature are checked both before persistence and during
+independent verification. Reviewer-bundle manifests map them only to numbered `screenshots/*.png`
+or one `trace.zip`; older bundles without attachments remain valid.
+
 The successful discovery directory also includes provider/model metadata and the produced YAML artifact. It excludes credentials, raw chain-of-thought, and sensitive request headers.
 
 ## 5. Evidence scenarios

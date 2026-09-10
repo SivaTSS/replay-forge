@@ -27,6 +27,7 @@ from replayforge.evidence.redaction import StructuredRedactor
 
 _SCENARIO_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
 _COMMIT_PATTERN = re.compile(r"^[0-9a-f]{7,40}$")
+_ATTACHMENT_PATH_PATTERN = re.compile(r"^(?:screenshots/[0-9]{3}\.png|trace\.zip)$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +74,10 @@ class BundleFile(_BundleModel):
     size_bytes: int = Field(ge=0, le=20_000_000)
 
 
+class BundleAttachment(BundleFile):
+    media_type: Literal["image/png", "application/zip"]
+
+
 class BundleArtifact(_BundleModel):
     capability_id: str = Field(pattern=r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
     content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
@@ -91,6 +96,7 @@ class BundleSourceManifest(_BundleModel):
 
 class EvidenceBundleManifest(_BundleModel):
     artifact: BundleArtifact
+    attachments: dict[str, BundleAttachment] = Field(default_factory=dict, max_length=100)
     commands: tuple[str, ...] = Field(min_length=1, max_length=20)
     commit_sha: str = Field(pattern=r"^[0-9a-f]{7,40}$")
     files: dict[Literal["events.jsonl", "result.json"], BundleFile]
@@ -108,6 +114,17 @@ class EvidenceBundleManifest(_BundleModel):
     ) -> dict[Literal["events.jsonl", "result.json"], BundleFile]:
         if set(value) != {"events.jsonl", "result.json"}:
             raise ValueError("bundle must declare exactly the required files")
+        return value
+
+    @field_validator("attachments")
+    @classmethod
+    def require_safe_attachment_paths(
+        cls, value: dict[str, BundleAttachment]
+    ) -> dict[str, BundleAttachment]:
+        if any(_ATTACHMENT_PATH_PATTERN.fullmatch(path) is None for path in value):
+            raise ValueError("bundle attachment path is invalid")
+        if sum(item.media_type == "application/zip" for item in value.values()) > 1:
+            raise ValueError("bundle may contain at most one trace archive")
         return value
 
 
@@ -138,10 +155,29 @@ def export_evidence_bundle(
         "events.jsonl": _file_metadata(events_content),
         "result.json": _file_metadata(result_content),
     }
+    attachment_content: dict[str, bytes] = {}
+    attachment_metadata: dict[str, dict[str, object]] = {}
+    screenshot_sequence = 0
+    for entry in source.attachments:
+        content = store.read(entry.key)
+        if entry.media_type == "image/png":
+            screenshot_sequence += 1
+            relative_path = f"screenshots/{screenshot_sequence:03d}.png"
+        elif entry.media_type == "application/zip":
+            relative_path = "trace.zip"
+            if relative_path in attachment_content:
+                raise RuntimeError("source evidence contains more than one trace archive")
+        else:
+            raise RuntimeError("source evidence contains an unsupported attachment")
+        attachment_content[relative_path] = content
+        attachment_metadata[relative_path] = {
+            **_file_metadata(content),
+            "media_type": entry.media_type,
+        }
     redaction_directives = sorted(
         {
             directive
-            for entry in (*source.events, source.terminal_result)
+            for entry in (*source.events, *source.attachments, source.terminal_result)
             for directive in entry.redaction_directives
         }
     )
@@ -151,6 +187,7 @@ def export_evidence_bundle(
             "content_hash": artifact_content_hash(request.artifact),
             "version": request.artifact.capability.version,
         },
+        "attachments": attachment_metadata,
         "commands": list(request.commands),
         "commit_sha": request.commit_sha,
         "files": files,
@@ -176,6 +213,10 @@ def export_evidence_bundle(
     try:
         _durable_write(temporary / "events.jsonl", events_content)
         _durable_write(temporary / "result.json", result_content)
+        for relative_path, content in attachment_content.items():
+            attachment_path = temporary / relative_path
+            attachment_path.parent.mkdir(parents=True, exist_ok=True)
+            _durable_write(attachment_path, content)
         _durable_write(temporary / "manifest.json", sanitized_manifest.content + b"\n")
         temporary.replace(destination)
     except BaseException:
@@ -204,6 +245,18 @@ def verify_evidence_bundle(directory: Path) -> EvidenceExport:
         if _file_metadata(content) != declared.model_dump(mode="python"):
             raise EvidenceBundleIntegrityError("evidence bundle file hash or size does not match")
         content_by_name[name] = content
+
+    for relative_path, declared in manifest.attachments.items():
+        try:
+            content = (directory / relative_path).read_bytes()
+        except OSError as error:
+            raise EvidenceBundleIntegrityError("evidence bundle attachment is missing") from error
+        if _file_metadata(content) != declared.model_dump(mode="python", exclude={"media_type"}):
+            raise EvidenceBundleIntegrityError("evidence attachment hash or size does not match")
+        if declared.media_type == "image/png" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise EvidenceBundleIntegrityError("evidence screenshot has an invalid signature")
+        if declared.media_type == "application/zip" and not content.startswith(b"PK"):
+            raise EvidenceBundleIntegrityError("evidence trace has an invalid signature")
 
     events = [line for line in content_by_name["events.jsonl"].splitlines() if line]
     if not events:

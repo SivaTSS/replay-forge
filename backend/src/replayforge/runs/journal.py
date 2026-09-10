@@ -17,6 +17,7 @@ from replayforge.shared.ids import EntityId, EntityKind, new_id, parse_id
 
 _EVENT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 _STEP_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]+$")
+_MAX_ATTACHMENT_BYTES = 20_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,7 @@ class InMemoryRunJournal:
     evidence_store: EvidenceStore | None = None
     _events: list[RunEvent] = field(init=False, default_factory=list)
     _evidence_records: list[EvidenceRecord] = field(init=False, default_factory=list)
+    _attachments: list[EvidenceRecord] = field(init=False, default_factory=list)
     _terminal_result: EvidenceRecord | None = field(init=False, default=None)
     _manifest_key: str | None = field(init=False, default=None)
     _finalized: bool = field(init=False, default=False)
@@ -97,12 +99,59 @@ class InMemoryRunJournal:
                         run_id,
                         event.occurred_at,
                         (*self._evidence_records, evidence_record),
+                        tuple(self._attachments),
                     ),
                     RetentionClass.OPERATIONAL,
                 )
                 self._evidence_records.append(evidence_record)
                 self._manifest_key = manifest_record.key
             self._events.append(event)
+
+    def attach_sanitized(
+        self,
+        kind: str,
+        payload: SanitizedEvidence,
+        retention_class: RetentionClass,
+    ) -> EvidenceRecord:
+        """Persist already-sanitized binary evidence and publish a new manifest snapshot."""
+
+        if payload.media_type not in {"image/png", "application/zip"}:
+            raise ValueError("run attachments must be PNG images or ZIP archives")
+        if not payload.content:
+            raise ValueError("run attachments cannot be empty")
+        if len(payload.content) > _MAX_ATTACHMENT_BYTES:
+            raise ValueError("run attachment exceeds the twenty-megabyte limit")
+        if payload.media_type == "image/png" and not payload.content.startswith(
+            b"\x89PNG\r\n\x1a\n"
+        ):
+            raise ValueError("PNG run attachment has an invalid signature")
+        if payload.media_type == "application/zip" and not payload.content.startswith(b"PK"):
+            raise ValueError("ZIP run attachment has an invalid signature")
+        with self._lock:
+            if self._finalized:
+                raise RuntimeError("cannot attach evidence after run finalization")
+            if self.evidence_store is None:
+                raise RuntimeError("run attachments require an evidence store")
+            attachment = self.evidence_store.write(
+                self.run_id,
+                kind,
+                payload,
+                retention_class,
+            )
+            manifest = self.evidence_store.write(
+                self.run_id,
+                "manifest",
+                _manifest_payload(
+                    self.run_id,
+                    self.clock.now(),
+                    tuple(self._evidence_records),
+                    (*self._attachments, attachment),
+                ),
+                RetentionClass.OPERATIONAL,
+            )
+            self._attachments.append(attachment)
+            self._manifest_key = manifest.key
+            return attachment
 
     def events(self) -> tuple[RunEvent, ...]:
         with self._lock:
@@ -141,6 +190,7 @@ class InMemoryRunJournal:
                     self.run_id,
                     self.clock.now(),
                     tuple(self._evidence_records),
+                    tuple(self._attachments),
                     terminal_result,
                 ),
                 RetentionClass.OPERATIONAL,
@@ -172,11 +222,13 @@ def _manifest_payload(
     run_id: str,
     generated_at: datetime,
     records: tuple[EvidenceRecord, ...],
+    attachments: tuple[EvidenceRecord, ...] = (),
     terminal_result: EvidenceRecord | None = None,
 ) -> SanitizedEvidence:
     content = json.dumps(
         {
             "events": [_manifest_record(record) for record in records],
+            "attachments": [_manifest_record(record) for record in attachments],
             "generated_at": _timestamp(generated_at),
             "run_id": run_id,
             "schema_version": "1.0",
@@ -187,7 +239,11 @@ def _manifest_payload(
         indent=2,
         sort_keys=True,
     ).encode()
-    all_records = (*records, *((terminal_result,) if terminal_result is not None else ()))
+    all_records = (
+        *records,
+        *attachments,
+        *((terminal_result,) if terminal_result is not None else ()),
+    )
     directives = tuple(
         sorted({directive for record in all_records for directive in record.redaction_directives})
     )

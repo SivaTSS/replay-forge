@@ -116,6 +116,66 @@ def test_journal_retains_human_input_as_human_audit_evidence(tmp_path: Path) -> 
     assert manifest["events"][0]["retention_class"] == "human_audit"
 
 
+def test_journal_persists_sanitized_binary_attachment(tmp_path: Path) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "evidence", clock)
+    recorder = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+    recorder.record("intervention_required", recorder.run_id)
+    screenshot = SanitizedEvidence(
+        b"\x89PNG\r\n\x1a\nmasked-synthetic-frame",
+        "image/png",
+        ("mask:input",),
+    )
+
+    attachment = recorder.attach_sanitized(
+        "intervention-before",
+        screenshot,
+        RetentionClass.HUMAN_AUDIT,
+    )
+    recorder.finalize({"status": "failure", "run_id": recorder.run_id})
+
+    manifest = json.loads(store.read(recorder.evidence_manifest_key))
+    assert manifest["attachments"] == [
+        {
+            "content_hash": attachment.content_hash,
+            "created_at": "2026-09-10T12:00:00Z",
+            "evidence_id": str(attachment.id),
+            "key": attachment.key,
+            "media_type": "image/png",
+            "redaction_directives": ["mask:input"],
+            "retention_class": "human_audit",
+            "size_bytes": len(screenshot.content),
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        SanitizedEvidence(b"", "image/png", ()),
+        SanitizedEvidence(b"{}", "application/json", ()),
+        SanitizedEvidence(b"not-a-png", "image/png", ()),
+        SanitizedEvidence(b"not-a-zip", "application/zip", ()),
+    ],
+)
+def test_journal_rejects_invalid_attachment(payload: SanitizedEvidence) -> None:
+    recorder = journal()
+
+    with pytest.raises((ValueError, RuntimeError)):
+        recorder.attach_sanitized("invalid", payload, RetentionClass.OPERATIONAL)
+
+
+def test_journal_requires_store_for_valid_attachment() -> None:
+    recorder = journal()
+
+    with pytest.raises(RuntimeError, match="require an evidence store"):
+        recorder.attach_sanitized(
+            "screenshot",
+            SanitizedEvidence(b"\x89PNG\r\n\x1a\nmasked", "image/png", ("mask:all",)),
+            RetentionClass.OPERATIONAL,
+        )
+
+
 class FailingEvidenceStore:
     def write(
         self,
