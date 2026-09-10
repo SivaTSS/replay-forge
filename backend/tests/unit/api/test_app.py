@@ -101,6 +101,11 @@ class FakeInterventionInvoker:
     ) -> bytes:
         return self.frame
 
+    def heartbeat(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        return self.transition
+
     def terminate(
         self,
         intervention_id: str,
@@ -332,6 +337,26 @@ def test_intervention_viewport_is_non_cacheable_png() -> None:
     assert response.headers["cache-control"] == "no-store, max-age=0"
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_intervention_heartbeat_returns_rotated_lease() -> None:
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    )
+
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/heartbeat",
+        json={"expected_lease_version": 2, "operator_id": "operator-7"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["lease_version"] == transition.lease.version
 
 
 def test_intervention_runtime_absence_is_retryable() -> None:

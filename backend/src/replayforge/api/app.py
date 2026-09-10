@@ -256,6 +256,20 @@ def create_app(services: ApiServices) -> FastAPI:
         )
 
     @app.post(
+        "/api/v1/interventions/{intervention_id}/heartbeat",
+        response_model=InterventionTransitionResponse,
+    )
+    def heartbeat_intervention(
+        request: Request, intervention_id: str, body: LeaseTransitionRequest
+    ) -> InterventionTransitionResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return _transition_response(
+            invoker.heartbeat(intervention_id, body.expected_lease_version, body.operator_id)
+        )
+
+    @app.post(
         "/api/v1/interventions/{intervention_id}/terminate",
         response_model=InterventionTransitionResponse,
     )

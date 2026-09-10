@@ -77,6 +77,19 @@ class InterventionCoordinator:
         )
         return InterventionTransition(updated, lease)
 
+    def heartbeat(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        current = self.interventions.get(intervention_id)
+        if current.status is not InterventionStatus.CLAIMED or current.operator_id != operator_id:
+            raise InterventionAuthorizationError("operator does not own this intervention")
+        lease = self.leases.heartbeat(
+            str(current.session_id),
+            expected_lease_version,
+            ControlOwner(OwnerKind.HUMAN, operator_id),
+        )
+        return InterventionTransition(current, lease)
+
     def terminate(
         self,
         intervention_id: str,

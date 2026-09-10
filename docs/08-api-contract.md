@@ -93,6 +93,7 @@ Intervention result includes intervention/session IDs, trigger, current step, ri
 - `POST /api/v1/interventions/{id}/release` returns control to paused automation.
 - `POST /api/v1/interventions/{id}/resume` starts deterministic revalidation; it does not immediately declare resumption.
 - `GET /api/v1/interventions/{id}/viewport` returns a bounded, non-cacheable PNG only to the operator holding the exact live lease version.
+- `POST /api/v1/interventions/{id}/heartbeat` renews claimed human ownership and returns the next monotonic lease version.
 - `POST /api/v1/interventions/{id}/complete` requires a verifiable manual-completion contract.
 - `POST /api/v1/interventions/{id}/terminate` safely closes the run after final evidence.
 

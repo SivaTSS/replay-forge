@@ -215,6 +215,12 @@ class RuntimeInterventionService:
             raise RuntimeError("live viewport frame violates its media contract")
         return frame
 
+    def heartbeat(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition:
+        with self.lock:
+            return self.coordinator.heartbeat(intervention_id, expected_lease_version, operator_id)
+
     def terminate(
         self,
         intervention_id: str,

@@ -84,10 +84,16 @@ def test_viewport_requires_current_human_lease_and_uses_owner_thread() -> None:
             service.viewport(intervention_id, claimed.lease.version, "operator-8")
         with pytest.raises(LeaseConflictError):
             service.viewport(intervention_id, claimed.lease.version - 1, "operator-7")
+        heartbeat = service.heartbeat(intervention_id, claimed.lease.version, "operator-7")
+        with pytest.raises(LeaseConflictError):
+            service.viewport(intervention_id, claimed.lease.version, "operator-7")
+        assert service.viewport(intervention_id, heartbeat.lease.version, "operator-7").startswith(
+            b"\x89PNG"
+        )
     finally:
         service.terminate(
             intervention_id,
-            claimed.lease.version,
+            service.get(intervention_id).lease.version,
             "operator-7",
             "Test complete.",
         )

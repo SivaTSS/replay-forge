@@ -57,6 +57,10 @@ class InterventionInvoker(Protocol):
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> bytes: ...
 
+    def heartbeat(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> InterventionTransition: ...
+
     def terminate(
         self,
         intervention_id: str,

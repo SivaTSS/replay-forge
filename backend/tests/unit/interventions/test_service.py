@@ -75,6 +75,19 @@ def test_stale_claim_and_wrong_operator_fail_closed() -> None:
         service.release(intervention_id, claimed.lease.version, "operator-8")
 
 
+def test_heartbeat_rotates_current_human_lease() -> None:
+    service, intervention_id = coordinator()
+    claimed = service.claim(intervention_id, 2, "operator-7")
+
+    heartbeat = service.heartbeat(intervention_id, claimed.lease.version, "operator-7")
+
+    assert heartbeat.intervention == claimed.intervention
+    assert heartbeat.lease.version == claimed.lease.version + 1
+    assert heartbeat.lease.owner.value == "human:operator-7"
+    with pytest.raises(ValueError, match="does not own"):
+        service.heartbeat(intervention_id, heartbeat.lease.version, "operator-8")
+
+
 @pytest.mark.parametrize("claimed", [False, True])
 def test_termination_revokes_control(claimed: bool) -> None:
     service, intervention_id = coordinator()
