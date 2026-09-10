@@ -36,6 +36,7 @@ class Executor:
 def test_successful_discovery_publishes_artifact(valid_artifact_data: dict[str, Any]) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
+    registry.publish(artifact)
     executor = Executor(artifact, True)
     service = DiscoveryApplicationService(registry, lambda run_id: executor, lambda: True)
 
@@ -51,7 +52,9 @@ def test_successful_discovery_publishes_artifact(valid_artifact_data: dict[str, 
 
     assert isinstance(result, DiscoverySuccess)
     assert executor.request is not None and executor.request.run_id.startswith("run_")
-    assert registry.get(artifact.capability.id, artifact.capability.version).artifact == artifact
+    assert result.artifact.capability.version == "1.0.1"
+    assert registry.get(artifact.capability.id, "1.0.0").artifact == artifact
+    assert registry.get(artifact.capability.id, "1.0.1").artifact == result.artifact
 
 
 def test_failed_discovery_is_not_published(valid_artifact_data: dict[str, Any]) -> None:

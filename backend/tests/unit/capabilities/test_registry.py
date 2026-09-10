@@ -86,6 +86,18 @@ def test_latest_and_versions_use_semantic_order(valid_artifact_data: dict[str, A
     assert registry.latest("member.lookup_savings_balance").artifact.capability.version == "2.0.0"
 
 
+def test_publish_next_atomically_versions_and_rehashes(valid_artifact_data: dict[str, Any]) -> None:
+    registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
+    original = _artifact(valid_artifact_data, "1.0.0")
+    registry.publish(original)
+
+    published = registry.publish_next(original)
+
+    assert published.artifact.capability.version == "1.0.1"
+    assert published.artifact.provenance.artifact_content_hash == published.content_hash
+    assert registry.get(original.capability.id, "1.0.0").artifact == original
+
+
 @pytest.mark.parametrize("operation", ["get", "latest", "versions"])
 def test_unknown_capability_is_safe_not_found(operation: str) -> None:
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))

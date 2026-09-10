@@ -36,6 +36,8 @@ class CapabilityRegistry(Protocol):
 
     def publish(self, artifact: CapabilityArtifact) -> CapabilityVersionRecord: ...
 
+    def publish_next(self, artifact: CapabilityArtifact) -> CapabilityVersionRecord: ...
+
     def get(self, capability_id: str, version: str) -> CapabilityVersionRecord: ...
 
     def latest(self, capability_id: str) -> CapabilityVersionRecord: ...
@@ -84,6 +86,41 @@ class InMemoryCapabilityRegistry:
                 published_at=self.clock.now(),
             )
             self._records[key] = record
+            return record
+
+    def publish_next(self, artifact: CapabilityArtifact) -> CapabilityVersionRecord:
+        capability_id = artifact.capability.id
+        with self._lock:
+            registered_versions = [
+                _semantic_version(version)
+                for registered_id, version in self._records
+                if registered_id == capability_id
+            ]
+            proposed = _semantic_version(artifact.capability.version)
+            if registered_versions:
+                latest = max(registered_versions)
+                version = (latest[0], latest[1], latest[2] + 1)
+            else:
+                version = proposed
+            version_text = ".".join(str(part) for part in version)
+            candidate = artifact.model_copy(
+                update={
+                    "capability": artifact.capability.model_copy(update={"version": version_text}),
+                    "provenance": artifact.provenance.model_copy(
+                        update={"artifact_content_hash": None}
+                    ),
+                }
+            )
+            content_hash = artifact_content_hash(candidate)
+            candidate = candidate.model_copy(
+                update={
+                    "provenance": candidate.provenance.model_copy(
+                        update={"artifact_content_hash": content_hash}
+                    )
+                }
+            )
+            record = CapabilityVersionRecord(candidate, content_hash, self.clock.now())
+            self._records[(capability_id, version_text)] = record
             return record
 
     def get(self, capability_id: str, version: str) -> CapabilityVersionRecord:

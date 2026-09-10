@@ -57,5 +57,11 @@ class DiscoveryApplicationService:
             )
         )
         if isinstance(result, DiscoverySuccess):
-            self.registry.publish(result.artifact)
+            published = self.registry.publish_next(result.artifact)
+            return DiscoverySuccess(
+                status="success",
+                run_id=result.run_id,
+                artifact=published.artifact,
+                evidence_manifest=result.evidence_manifest,
+            )
         return result
