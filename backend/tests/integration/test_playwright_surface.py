@@ -23,6 +23,7 @@ from replayforge.capabilities.models import (
     RouteCondition,
     TypeAction,
 )
+from replayforge.policy.types import Risk
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
@@ -90,9 +91,11 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
                 candidates=(LocatorCandidate(strategy=LocatorStrategy.LABEL, value="Member ID"),),
             )
         )
+        member_target = session.resolve(member_field, 5_000)
+        assert member_target.registered_risk is Risk.READ_ONLY
         session.execute(
             TypeAction(kind="type", value=InputValue(source="input", path="member_id")),
-            session.resolve(member_field, 5_000),
+            member_target,
             {"member_id": "12345"},
         )
         search = in_member_frame(
@@ -107,7 +110,9 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
                 ),
             )
         )
-        session.execute(ClickAction(kind="click"), session.resolve(search, 5_000), {})
+        search_target = session.resolve(search, 5_000)
+        assert search_target.registered_risk is Risk.READ_ONLY
+        session.execute(ClickAction(kind="click"), search_target, {})
         details = in_member_frame(
             LocatorBundle(
                 description="Savings details link",
@@ -120,7 +125,9 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
                 ),
             )
         )
-        session.execute(ClickAction(kind="click"), session.resolve(details, 5_000), {})
+        details_target = session.resolve(details, 5_000)
+        assert details_target.registered_risk is Risk.READ_ONLY
+        session.execute(ClickAction(kind="click"), details_target, {})
         assert session.wait_until(
             RouteCondition(kind="route", pattern="/accounts/*/details"), {}, {}, 5_000
         )

@@ -55,6 +55,7 @@ from replayforge.capabilities.models import (
     TypeAction,
     WaitForAction,
 )
+from replayforge.policy.types import Risk
 from replayforge.shared.ids import EntityId, EntityKind, new_id
 from replayforge.surfaces.models import (
     ActionReceipt,
@@ -207,6 +208,7 @@ class PlaywrightSurfaceSession:
                 description=target.description,
                 candidate_index=index,
                 observed_count=count,
+                registered_risk=self._classify_target(selected),
             )
         ambiguous = any(
             isinstance(item.get("count"), int) and cast(int, item["count"]) > 1 for item in failures
@@ -406,6 +408,26 @@ class PlaywrightSurfaceSession:
             raise SurfaceError(
                 "target_handle_stale", "Resolved target is no longer available."
             ) from exc
+
+    @staticmethod
+    def _classify_target(locator: Locator) -> Risk | None:
+        facts = locator.evaluate(
+            """element => ({
+                tag: element.tagName.toLowerCase(),
+                type: (element.getAttribute('type') || '').toLowerCase(),
+                formMethod: element.form ? element.form.method.toLowerCase() : null,
+                href: element.closest('a') ? element.closest('a').getAttribute('href') : null
+            })"""
+        )
+        if not isinstance(facts, dict):
+            return None
+        if facts.get("type") == "password":
+            return Risk.SENSITIVE
+        if facts.get("href") is not None or facts.get("formMethod") == "get":
+            return Risk.READ_ONLY
+        if facts.get("tag") in {"dd", "dt"}:
+            return Risk.READ_ONLY
+        return None
 
     @staticmethod
     def _required(locator: Locator | None) -> Locator:
