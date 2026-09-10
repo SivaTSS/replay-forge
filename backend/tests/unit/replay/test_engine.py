@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from replayforge.capabilities.models import (
     AllCondition,
     CapabilityArtifact,
@@ -20,7 +22,12 @@ from replayforge.interventions.leases import (
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import Risk
-from replayforge.replay.engine import ReplayEngine, ReplayRequest
+from replayforge.replay.engine import (
+    ReplayContinuation,
+    ReplayEngine,
+    ReplayRequest,
+    ResumeValidationError,
+)
 from replayforge.runs.results import (
     BusinessOutcomeResult,
     FailureResult,
@@ -173,6 +180,9 @@ class MemoryInterventionRouter:
 
 def build_engine(
     session: FakeSurfaceSession,
+    *,
+    maximum_risk: Risk = Risk.READ_ONLY,
+    continuation_sink: list[ReplayContinuation] | None = None,
 ) -> tuple[ReplayEngine, MemoryRecorder, MemoryInterventionRouter]:
     clock = FrozenClock(datetime(2026, 9, 10, 12, 30, tzinfo=UTC))
     policy = EffectivePolicy.intersect(
@@ -181,7 +191,7 @@ def build_engine(
             allowed_origins=frozenset({session.origin}),
             allowed_route_patterns=frozenset({"/members/search", "/accounts/:account_id/details"}),
             allowed_action_types=frozenset({"type", "click", "extract"}),
-            maximum_risk=Risk.READ_ONLY,
+            maximum_risk=maximum_risk,
         )
     )
     recorder = MemoryRecorder()
@@ -193,6 +203,7 @@ def build_engine(
         lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
         recorder=recorder,
         intervention_router=router,
+        continuation_sink=(continuation_sink.append if continuation_sink is not None else None),
     )
     return engine, recorder, router
 
@@ -339,6 +350,75 @@ def test_unexpected_dialog_preserves_session_for_intervention(
     assert isinstance(result, InterventionRequiredResult)
     assert result.control_owner == "automation_paused"
     assert router.created == [result.intervention_id]
+    assert session.closed is False
+
+
+def test_replay_continuation_revalidates_and_finishes_without_replaying_human_step(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["postconditions"] = [
+        {"kind": "text", "value": "Member Results", "match": "exact"}
+    ]
+    session = FakeSurfaceSession()
+    continuations: list[ReplayContinuation] = []
+    engine, recorder, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+    request = request_for(valid_artifact_data)
+
+    paused_result = engine.execute(request)
+
+    assert isinstance(paused_result, InterventionRequiredResult)
+    assert len(continuations) == 1
+    continuation = continuations[0]
+    paused_lease = engine.lease_service.repository.get(str(session.session_id))
+    claimed = engine.lease_service.claim(
+        str(session.session_id),
+        paused_lease.version,
+        paused_result.intervention_id,
+        "operator-7",
+    )
+    returned = engine.lease_service.begin_resume(
+        str(session.session_id), claimed.version, "operator-7"
+    )
+    outcome = engine.validate_resume(continuation)
+    automation = engine.lease_service.complete_resume(str(session.session_id), returned.version)
+
+    resumed_result = engine.resume(continuation, automation.version, outcome)
+
+    assert isinstance(resumed_result, SuccessResult)
+    assert resumed_result.outputs == {"available_balance": "1420.57"}
+    assert session.closed is True
+    assert ("resume_revalidation_started", "search.submit") in recorder.events
+    assert ("resume_checkpoint_verified", "search.submit") in recorder.events
+
+
+def test_replay_continuation_rejects_unchanged_human_state(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["postconditions"] = [
+        {"kind": "text", "value": "Member Results", "match": "exact"}
+    ]
+    session = FakeSurfaceSession(static_fingerprint=True)
+    continuations: list[ReplayContinuation] = []
+    engine, _, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+
+    with pytest.raises(ResumeValidationError, match="has not changed"):
+        engine.validate_resume(continuations[0])
     assert session.closed is False
 
 

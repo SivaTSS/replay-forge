@@ -77,6 +77,13 @@ def _infer_risk(context: ActionContext) -> Risk:
 class PolicyEvaluator:
     clock: Clock
 
+    @staticmethod
+    def location_allowed(policy: EffectivePolicy, origin: str, route: str) -> bool:
+        canonical = _canonical_origin(origin)
+        return canonical in policy.allowed_origins and any(
+            _route_matches(route, pattern) for pattern in policy.allowed_route_patterns
+        )
+
     def evaluate(self, policy: EffectivePolicy, context: ActionContext) -> PolicyDecision:
         risk = _infer_risk(context)
         common: _DecisionContext = {
@@ -111,9 +118,7 @@ class PolicyEvaluator:
             return self._deny(
                 "origin_not_allowed", "The current origin is not allowlisted.", **common
             )
-        if not any(
-            _route_matches(context.route, pattern) for pattern in policy.allowed_route_patterns
-        ):
+        if not self.location_allowed(policy, context.origin, context.route):
             return self._deny(
                 "route_not_allowed", "The current route is not allowlisted.", **common
             )

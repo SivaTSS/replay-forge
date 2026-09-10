@@ -48,6 +48,29 @@ class ReplayRequest:
     inputs: dict[str, Any]
 
 
+class ResumeValidationError(RuntimeError):
+    """The retained surface does not satisfy the interrupted step contract."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.safe_message = message
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayContinuation:
+    intervention_id: str
+    request: ReplayRequest
+    session: SurfaceSession
+    inputs: dict[str, Any]
+    outputs: dict[str, Any]
+    interrupted_step_index: int
+    initial_fingerprint: str
+
+
+type ContinuationSink = Callable[[ReplayContinuation], None]
+
+
 @dataclass(frozen=True, slots=True)
 class ReplayEngine:
     surface_driver: SurfaceDriver
@@ -57,6 +80,7 @@ class ReplayEngine:
     recorder: RunRecorder
     intervention_router: InterventionRouter
     sleeper: Callable[[float], None] = sleep
+    continuation_sink: ContinuationSink | None = None
 
     def execute(self, request: ReplayRequest) -> RunResult:
         try:
@@ -88,43 +112,133 @@ class ReplayEngine:
                         False,
                     )
 
-            for step in request.artifact.steps:
+            for step_index, step in enumerate(request.artifact.steps):
                 result = self._execute_step(request, session, step, inputs, outputs, lease.version)
                 if result is not None:
                     preserve_session = isinstance(result, InterventionRequiredResult)
+                    if isinstance(result, InterventionRequiredResult):
+                        self._retain_continuation(
+                            result,
+                            request,
+                            session,
+                            inputs,
+                            outputs,
+                            step_index,
+                        )
                     return result
 
-            if not session.wait_until(
-                request.artifact.checkpoint.condition, outputs, inputs, 10_000
-            ):
-                return self._failure(
-                    request,
-                    "checkpoint_mismatch",
-                    "The final success checkpoint was not satisfied.",
-                    False,
-                )
-            try:
-                validated_outputs = validate_object(request.artifact.outputs, outputs)
-            except ContractValidationError as error:
-                return self._failure(request, "output_validation_failed", str(error), False)
-            self.recorder.record("checkpoint_verified", request.run_id)
-            return SuccessResult(
-                status="success",
-                run_id=request.run_id,
-                capability=CapabilityReference(
-                    id=request.artifact.capability.id,
-                    version=request.artifact.capability.version,
-                ),
-                outputs=validated_outputs,
-                checkpoint=VerifiedCheckpoint(id=request.artifact.checkpoint.id, verified=True),
-                evidence_manifest=self.recorder.evidence_manifest_key,
-            )
+            return self._complete(request, session, inputs, outputs)
         except SurfaceError as error:
             result = self._surface_failure(request, session, None, error)
             preserve_session = isinstance(result, InterventionRequiredResult)
             return result
         finally:
             if session is not None and not preserve_session:
+                session.close()
+
+    def validate_resume(self, continuation: ReplayContinuation) -> BusinessOutcome | None:
+        self._assert_continuation(continuation)
+        step = continuation.request.artifact.steps[continuation.interrupted_step_index]
+        session = continuation.session
+        observation = session.observe()
+        self.recorder.record(
+            "resume_revalidation_started",
+            continuation.request.run_id,
+            step_id=step.id,
+        )
+        if not self.policy_evaluator.location_allowed(
+            self.effective_policy, session.origin, observation.route
+        ):
+            raise ResumeValidationError(
+                "resume_location_not_allowed",
+                "The retained session is outside the capability's allowed location.",
+            )
+        outcome = self._detect_outcome(
+            continuation.request.artifact,
+            step,
+            session,
+            continuation.outputs,
+            continuation.inputs,
+        )
+        if outcome is not None:
+            self.recorder.record(
+                "resume_checkpoint_verified",
+                continuation.request.run_id,
+                step_id=step.id,
+                details={"disposition": "business_outcome"},
+            )
+            return outcome
+        if not step.postconditions:
+            raise ResumeValidationError(
+                "resume_checkpoint_missing",
+                "The interrupted step has no declared postcondition for safe resumption.",
+            )
+        if not all(
+            session.wait_until(condition, continuation.outputs, continuation.inputs, 2_000)
+            for condition in step.postconditions
+        ):
+            raise ResumeValidationError(
+                "resume_checkpoint_mismatch",
+                "The human-modified state does not satisfy the interrupted step postcondition.",
+            )
+        if session.observe().fingerprint == continuation.initial_fingerprint:
+            raise ResumeValidationError(
+                "resume_state_unchanged",
+                "The retained session has not changed since automation paused.",
+            )
+        self.recorder.record(
+            "resume_checkpoint_verified",
+            continuation.request.run_id,
+            step_id=step.id,
+            details={"disposition": "continue"},
+        )
+        return None
+
+    def resume(
+        self,
+        continuation: ReplayContinuation,
+        automation_lease_version: int,
+        outcome: BusinessOutcome | None = None,
+    ) -> RunResult:
+        self._assert_continuation(continuation)
+        request = continuation.request
+        session = continuation.session
+        if outcome is not None:
+            session.close()
+            return self._business_outcome(request, outcome, continuation.inputs)
+        preserve_session = False
+        try:
+            for step_index in range(
+                continuation.interrupted_step_index + 1, len(request.artifact.steps)
+            ):
+                step = request.artifact.steps[step_index]
+                result = self._execute_step(
+                    request,
+                    session,
+                    step,
+                    continuation.inputs,
+                    continuation.outputs,
+                    automation_lease_version,
+                )
+                if result is not None:
+                    preserve_session = isinstance(result, InterventionRequiredResult)
+                    if isinstance(result, InterventionRequiredResult):
+                        self._retain_continuation(
+                            result,
+                            request,
+                            session,
+                            continuation.inputs,
+                            continuation.outputs,
+                            step_index,
+                        )
+                    return result
+            return self._complete(request, session, continuation.inputs, continuation.outputs)
+        except SurfaceError as error:
+            result = self._surface_failure(request, session, None, error, automation_lease_version)
+            preserve_session = isinstance(result, InterventionRequiredResult)
+            return result
+        finally:
+            if not preserve_session:
                 session.close()
 
     def _execute_step(
@@ -284,6 +398,66 @@ class ReplayEngine:
             details=details,
             evidence_manifest=self.recorder.evidence_manifest_key,
         )
+
+    def _complete(
+        self,
+        request: ReplayRequest,
+        session: SurfaceSession,
+        inputs: dict[str, Any],
+        outputs: dict[str, Any],
+    ) -> RunResult:
+        if not session.wait_until(request.artifact.checkpoint.condition, outputs, inputs, 10_000):
+            return self._failure(
+                request,
+                "checkpoint_mismatch",
+                "The final success checkpoint was not satisfied.",
+                False,
+            )
+        try:
+            validated_outputs = validate_object(request.artifact.outputs, outputs)
+        except ContractValidationError as error:
+            return self._failure(request, "output_validation_failed", str(error), False)
+        self.recorder.record("checkpoint_verified", request.run_id)
+        return SuccessResult(
+            status="success",
+            run_id=request.run_id,
+            capability=CapabilityReference(
+                id=request.artifact.capability.id,
+                version=request.artifact.capability.version,
+            ),
+            outputs=validated_outputs,
+            checkpoint=VerifiedCheckpoint(id=request.artifact.checkpoint.id, verified=True),
+            evidence_manifest=self.recorder.evidence_manifest_key,
+        )
+
+    def _retain_continuation(
+        self,
+        result: InterventionRequiredResult,
+        request: ReplayRequest,
+        session: SurfaceSession,
+        inputs: dict[str, Any],
+        outputs: dict[str, Any],
+        interrupted_step_index: int,
+    ) -> None:
+        if self.continuation_sink is None:
+            return
+        observation = session.observe()
+        self.continuation_sink(
+            ReplayContinuation(
+                intervention_id=result.intervention_id,
+                request=request,
+                session=session,
+                inputs=dict(inputs),
+                outputs=dict(outputs),
+                interrupted_step_index=interrupted_step_index,
+                initial_fingerprint=observation.fingerprint,
+            )
+        )
+
+    @staticmethod
+    def _assert_continuation(continuation: ReplayContinuation) -> None:
+        if not 0 <= continuation.interrupted_step_index < len(continuation.request.artifact.steps):
+            raise ValueError("continuation step index is outside the artifact")
 
     def _surface_failure(
         self,
