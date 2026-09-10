@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from base64 import b64encode
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
@@ -65,6 +66,11 @@ class OpenAIModelProvider:
         return "openai"
 
     def decide(self, context: ProviderContext) -> DiscoveryProposal:
+        if not context.screenshot_png or len(context.screenshot_png) > 5 * 1024 * 1024:
+            raise ModelProviderError(
+                "provider_frame_invalid",
+                "The visual observation is empty or exceeds the provider frame limit.",
+            )
         request = {
             "goal": context.goal,
             "input_fields": sorted(context.inputs),
@@ -82,11 +88,23 @@ class OpenAIModelProvider:
             "recent_actions": list(context.action_history[-20:]),
             "allowed_action_types": sorted(context.allowed_action_types),
         }
+        input_content = [
+            {
+                "type": "input_text",
+                "text": json.dumps(request, separators=(",", ":"), ensure_ascii=False),
+            },
+            {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,"
+                + b64encode(context.screenshot_png).decode("ascii"),
+                "detail": "high",
+            },
+        ]
         try:
             response = self.client.responses.parse(
                 model=self.model_name,
                 instructions=_INSTRUCTIONS,
-                input=json.dumps(request, separators=(",", ":"), ensure_ascii=False),
+                input=[{"role": "user", "content": input_content}],
                 text_format=ProposalEnvelope,
                 max_output_tokens=self.max_output_tokens,
                 store=False,

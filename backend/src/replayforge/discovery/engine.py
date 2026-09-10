@@ -122,6 +122,7 @@ class DiscoveryEngine:
                         goal=request.goal,
                         inputs=request.inputs,
                         observation=observation,
+                        screenshot_png=session.capture_provider_frame(),
                         action_history=tuple(history),
                         allowed_action_types=self.effective_policy.allowed_action_types,
                     )

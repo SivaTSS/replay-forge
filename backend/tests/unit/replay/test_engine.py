@@ -68,6 +68,9 @@ class FakeSurfaceSession:
             landmarks=("Member Search",),
         )
 
+    def capture_provider_frame(self) -> bytes:
+        return b"\x89PNG\r\n\x1a\nsynthetic-frame"
+
     def resolve(self, target: object, timeout_ms: int) -> ResolvedTarget:
         if self.resolve_error is not None and (self.resolve_failures_remaining != 0):
             if self.resolve_failures_remaining > 0:

@@ -174,6 +174,14 @@ class PlaywrightSurfaceSession:
             dialog_text=dialog_text,
         )
 
+    def capture_provider_frame(self) -> bytes:
+        try:
+            return self.page.screenshot(type="png", full_page=False)
+        except Exception as exc:
+            raise SurfaceError(
+                "screenshot_failed", "The current UI frame could not be captured."
+            ) from exc
+
     def resolve(self, target: LocatorBundle, timeout_ms: int) -> ResolvedTarget:
         root = self._scoped_root(target)
         failures: list[dict[str, object]] = []

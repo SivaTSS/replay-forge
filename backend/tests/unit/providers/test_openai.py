@@ -50,6 +50,7 @@ def context() -> ProviderContext:
             fingerprint="state-1",
             landmarks=("Member Search", "Member ID"),
         ),
+        screenshot_png=b"\x89PNG\r\n\x1a\nsynthetic-frame",
         action_history=("opened search",),
         allowed_action_types=frozenset({"type", "click"}),
     )
@@ -68,9 +69,31 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     assert responses.request["store"] is False
     assert responses.request["tools"] == []
     assert responses.request["max_output_tokens"] == 2_000
-    sent = json.loads(responses.request["input"])
+    content = responses.request["input"][0]["content"]
+    sent = json.loads(content[0]["text"])
     assert sent["input_fields"] == ["member_id"]
-    assert "12345" not in responses.request["input"]
+    assert "12345" not in content[0]["text"]
+    assert content[1]["image_url"].startswith("data:image/png;base64,")
+
+
+@pytest.mark.parametrize("frame", [b"", b"x" * (5 * 1024 * 1024 + 1)])
+def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
+    provider = OpenAIModelProvider(FakeClient(FakeResponses()), "gpt-test")
+    provider_context = context()
+
+    with pytest.raises(ModelProviderError) as captured:
+        provider.decide(
+            ProviderContext(
+                goal=provider_context.goal,
+                inputs=provider_context.inputs,
+                observation=provider_context.observation,
+                screenshot_png=frame,
+                action_history=provider_context.action_history,
+                allowed_action_types=provider_context.allowed_action_types,
+            )
+        )
+
+    assert captured.value.code == "provider_frame_invalid"
 
 
 @pytest.mark.parametrize(

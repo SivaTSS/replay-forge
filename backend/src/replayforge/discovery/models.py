@@ -70,5 +70,6 @@ class ProviderContext:
     goal: str
     inputs: dict[str, Any]
     observation: NormalizedObservation
+    screenshot_png: bytes
     action_history: tuple[str, ...]
     allowed_action_types: frozenset[str]
