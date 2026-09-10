@@ -31,7 +31,13 @@ Terminal 2 — API:
 PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run uvicorn replayforge.main:app --host 127.0.0.1 --port 8000
 ```
 
-Terminal 3 — deterministic invocation:
+Optional Terminal 3 — intervention console:
+
+```bash
+npm_config_cache=/tmp/replayforge-npm-cache npx --yes pnpm@10.15.1 --filter @replayforge/control-plane dev --hostname 127.0.0.1 --port 3000
+```
+
+Terminal 3 or 4 — deterministic invocation:
 
 ```bash
 curl --fail-with-body --silent --show-error -H 'content-type: application/json' \
@@ -89,6 +95,7 @@ This runs formatting, lint, strict typing, the 90% branch-coverage gate, fronten
 
 - `backend/src/replayforge/` — domain, services, adapters, and ASGI composition
 - `apps/demo-bank/` — two-tenant synthetic target with controlled faults
+- `apps/control-plane/` — lease-aware same-session intervention console
 - `capabilities/` — reviewed immutable YAML versions
 - `evidence/` — local redacted event blobs and immutable hash manifests produced at runtime
 - `schemas/` — artifact JSON Schema
@@ -100,4 +107,4 @@ The [evidence index](evidence/README.md) separates genuine captured scenarios fr
 
 ## Current boundaries
 
-Run evidence is written atomically to the configured local evidence directory; registry, lease, and intervention metadata remain thread-safe and in-memory, with PostgreSQL repository contracts specified but not yet implemented. Same-session preservation, leases, intervention transitions, and lease-guarded viewport polling are implemented; continuous screencasting, input forwarding, and the operator UI remain follow-on work. These limits are explicit so a reviewer cannot mistake a partial control plane for a completed safety control.
+Run evidence is written atomically to the configured local evidence directory; registry, lease, and intervention metadata remain thread-safe and in-memory, with PostgreSQL repository contracts specified but not yet implemented. Same-session preservation, renewable leases, intervention transitions, lease-guarded viewport polling, and the operator lifecycle console are implemented; continuous screencasting and manual pointer/keyboard forwarding remain follow-on work. These limits are explicit so a reviewer cannot mistake lifecycle control for unrestricted remote input.

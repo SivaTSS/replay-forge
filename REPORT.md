@@ -18,7 +18,7 @@ One reviewed artifact supports Harbor and Summit through a shared application-fa
 
 ## 5. Escalation & handoff
 
-Discovery/replay can pause while retaining the live Playwright runtime on a dedicated owner thread. Intervention identity binds the same run and session. A monotonic lease permits one owner and rejects stale commands. Claim, release, begin-resume, viewport polling, and terminate have version-checked HTTP contracts; viewport bytes are bounded and non-cacheable, while termination revokes control and closes the browser. Resume stops in `RESUMING` until fresh-state validation—clicking Resume never asserts success. See [Human Handoff](docs/06-human-handoff.md).
+Discovery/replay can pause while retaining the live Playwright runtime on a dedicated owner thread. Intervention identity binds the same run and session. A renewable monotonic lease permits one owner and rejects stale commands. The operator console drives claim, heartbeat, release, begin-resume, viewport polling, and terminate through version-checked HTTP contracts; viewport bytes are bounded and non-cacheable, while termination revokes control and closes the browser. Resume stops in `RESUMING` until fresh-state validation—clicking Resume never asserts success. See [Human Handoff](docs/06-human-handoff.md).
 
 ## 6. Safety
 

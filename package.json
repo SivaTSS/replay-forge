@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.15.1",
   "scripts": {
     "build": "pnpm --recursive build",
+    "dev:control": "pnpm --filter @replayforge/control-plane dev",
     "dev:demo": "pnpm --filter @replayforge/demo-bank dev",
     "typecheck": "pnpm --recursive typecheck"
   }

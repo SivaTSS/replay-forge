@@ -1,5 +1,7 @@
 # Frontend and UX Specification
 
+> Implementation status: the current `apps/control-plane` vertical slice implements intervention lookup, exclusive claim, renewable heartbeat, lease-guarded viewport polling, release, begin-resume, and termination. The broader navigation and authoring surfaces below remain the product architecture, not a claim of completed UI breadth.
+
 ## Experience objective
 
 ReplayForge should feel like high-trust operational infrastructure. The UI is the primary surface for launching runs, reviewing capabilities, diagnosing evidence, and taking control—not a decorative wrapper around CLI commands.
