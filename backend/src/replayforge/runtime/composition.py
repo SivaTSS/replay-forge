@@ -15,6 +15,9 @@ from replayforge.capabilities.registry import (
     InMemoryCapabilityRegistry,
 )
 from replayforge.capabilities.serialization import load_artifact_yaml
+from replayforge.discovery.compiler import SavingsBalanceCompiler
+from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
+from replayforge.discovery.models import DiscoveryResult
 from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
@@ -23,7 +26,9 @@ from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import Risk
+from replayforge.providers.openai import OpenAIModelProvider
 from replayforge.replay.engine import ReplayEngine, ReplayRequest
+from replayforge.runs.discovery_service import DiscoveryApplicationService, DiscoveryExecutor
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.runs.results import InterventionRequiredResult, RunResult
 from replayforge.runs.service import ReplayApplicationService, ReplayExecutor
@@ -99,8 +104,30 @@ class ManagedReplayExecutor:
 
 
 @dataclass(slots=True)
+class ManagedDiscoveryExecutor:
+    engine: DiscoveryEngine
+    driver: PlaywrightSurfaceDriver
+    live_drivers: dict[str, PlaywrightSurfaceDriver]
+    lock: Lock
+
+    def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
+        try:
+            result = self.engine.execute(request)
+        except BaseException:
+            self.driver.close()
+            raise
+        if isinstance(result, InterventionRequiredResult):
+            with self.lock:
+                self.live_drivers[result.intervention_id] = self.driver
+        else:
+            self.driver.close()
+        return result
+
+
+@dataclass(slots=True)
 class LocalRuntime:
     service: ReplayApplicationService
+    discovery_service: DiscoveryApplicationService
     journals: dict[str, InMemoryRunJournal]
     interventions: InMemoryInterventionRouter
     live_drivers: dict[str, PlaywrightSurfaceDriver]
@@ -108,7 +135,7 @@ class LocalRuntime:
 
     @property
     def api_services(self) -> ApiServices:
-        return ApiServices(self.service)
+        return ApiServices(self.service, self.discovery_service)
 
     def close(self) -> None:
         with self._lock:
@@ -154,4 +181,52 @@ def build_runtime(settings: object) -> LocalRuntime:
             return False
 
     service = ReplayApplicationService(registry, executor_factory, (target_ready,))
-    return LocalRuntime(service, journals, interventions, live_drivers, lock)
+    provider = (
+        OpenAIModelProvider.from_api_key(
+            settings.openai_api_key.get_secret_value(), settings.openai_model
+        )
+        if settings.openai_api_key is not None and settings.openai_model is not None
+        else None
+    )
+
+    def discovery_factory(run_id: str) -> DiscoveryExecutor:
+        if provider is None:
+            raise RuntimeError("discovery provider is not configured")
+        journal = InMemoryRunJournal(run_id, clock)
+        with lock:
+            journals[run_id] = journal
+        driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
+        engine = DiscoveryEngine(
+            driver,
+            provider,
+            SavingsBalanceCompiler(clock),
+            PolicyEvaluator(clock),
+            EffectivePolicy.intersect(
+                PolicyLayer(
+                    "platform",
+                    frozenset({settings.demo_base_url}),
+                    _ALLOWED_ROUTES,
+                    _PLATFORM_ACTIONS,
+                    Risk.READ_ONLY,
+                ),
+                PolicyLayer(
+                    "application",
+                    frozenset({settings.demo_base_url}),
+                    _ALLOWED_ROUTES,
+                    frozenset({"type", "click", "extract"}),
+                    Risk.READ_ONLY,
+                ),
+            ),
+            lease_service,
+            journal,
+            interventions,
+            clock,
+        )
+        return ManagedDiscoveryExecutor(engine, driver, live_drivers, lock)
+
+    discovery_service = DiscoveryApplicationService(
+        registry,
+        discovery_factory,
+        lambda: provider is not None and target_ready(),
+    )
+    return LocalRuntime(service, discovery_service, journals, interventions, live_drivers, lock)

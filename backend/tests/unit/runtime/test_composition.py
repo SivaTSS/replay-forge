@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.runtime.composition import effective_replay_policy, load_registry
@@ -25,6 +25,32 @@ def test_settings_validate_origin_and_artifact_directory() -> None:
             artifact_directory=artifact_directory(),
             demo_base_url="http://user:secret@127.0.0.1:3001",
         )
+
+    with pytest.raises(ValidationError, match="configured together"):
+        RuntimeSettings(
+            artifact_directory=artifact_directory(),
+            openai_api_key=SecretStr("runtime-only-key"),
+        )
+
+
+def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready() -> None:
+    settings = RuntimeSettings(artifact_directory=artifact_directory())
+
+    assert "runtime-only-key" not in repr(
+        RuntimeSettings(
+            artifact_directory=artifact_directory(),
+            openai_api_key=SecretStr("runtime-only-key"),
+            openai_model="gpt-test",
+        )
+    )
+    from replayforge.runtime.composition import build_runtime
+
+    runtime = build_runtime(settings)
+    try:
+        assert not runtime.discovery_service.ready()
+        assert runtime.api_services.discovery_invoker is runtime.discovery_service
+    finally:
+        runtime.close()
 
 
 def test_registry_loads_reviewed_artifact_and_policy_intersects_five_layers() -> None:
