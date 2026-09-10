@@ -24,6 +24,9 @@ from replayforge.capabilities.models import (
     TypeAction,
 )
 from replayforge.policy.types import Risk
+from replayforge.runs.results import SuccessResult
+from replayforge.runtime.composition import build_runtime
+from replayforge.runtime.settings import RuntimeSettings
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
@@ -165,3 +168,36 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
     finally:
         session.close()
         driver.close()
+
+
+def test_registered_artifact_replays_end_to_end(demo_bank: str) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=repository / "capabilities",
+            demo_base_url=demo_bank,
+        )
+    )
+    try:
+        result = runtime.service.invoke(
+            "member.lookup_savings_balance",
+            "1.0.0",
+            "harbor",
+            {"member_id": "12345"},
+        )
+
+        assert isinstance(result, SuccessResult)
+        assert result.outputs == {
+            "member_id": "12345",
+            "account_type": "savings",
+            "currency": "USD",
+            "available_balance": "1420.57",
+            "as_of": "2026-09-10T12:30:00Z",
+        }
+        assert result.checkpoint.verified
+        event_types = [event.event_type for event in runtime.journals[result.run_id].events()]
+        assert event_types[0] == "replay_started"
+        assert event_types[-1] == "checkpoint_verified"
+        assert runtime.live_drivers == {}
+    finally:
+        runtime.close()
