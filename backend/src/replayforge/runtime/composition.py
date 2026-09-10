@@ -40,6 +40,7 @@ from replayforge.runs.results import (
     RunResult,
 )
 from replayforge.runs.service import ReplayApplicationService, ReplayExecutor
+from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
@@ -91,23 +92,35 @@ def effective_replay_policy(record: CapabilityVersionRecord, origin: str) -> Eff
 
 
 @dataclass(slots=True)
+class LiveBrowserSession:
+    worker: SerialSessionWorker
+    driver: PlaywrightSurfaceDriver
+
+    def close(self) -> None:
+        self.worker.close(self.driver.close)
+
+
+@dataclass(slots=True)
 class ManagedReplayExecutor:
     engine: ReplayEngine
     driver: PlaywrightSurfaceDriver
-    live_drivers: dict[str, PlaywrightSurfaceDriver]
+    worker: SerialSessionWorker
+    live_sessions: dict[str, LiveBrowserSession]
     lock: Lock
 
     def execute(self, request: ReplayRequest) -> RunResult:
         try:
-            result = self.engine.execute(request)
+            result = self.worker.call(lambda: self.engine.execute(request))
         except BaseException:
-            self.driver.close()
+            self.worker.close(self.driver.close)
             raise
         if isinstance(result, InterventionRequiredResult):
             with self.lock:
-                self.live_drivers[result.intervention_id] = self.driver
+                self.live_sessions[result.intervention_id] = LiveBrowserSession(
+                    self.worker, self.driver
+                )
         else:
-            self.driver.close()
+            self.worker.close(self.driver.close)
         return result
 
 
@@ -115,27 +128,30 @@ class ManagedReplayExecutor:
 class ManagedDiscoveryExecutor:
     engine: DiscoveryEngine
     driver: PlaywrightSurfaceDriver
-    live_drivers: dict[str, PlaywrightSurfaceDriver]
+    worker: SerialSessionWorker
+    live_sessions: dict[str, LiveBrowserSession]
     lock: Lock
 
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
         try:
-            result = self.engine.execute(request)
+            result = self.worker.call(lambda: self.engine.execute(request))
         except BaseException:
-            self.driver.close()
+            self.worker.close(self.driver.close)
             raise
         if isinstance(result, InterventionRequiredResult):
             with self.lock:
-                self.live_drivers[result.intervention_id] = self.driver
+                self.live_sessions[result.intervention_id] = LiveBrowserSession(
+                    self.worker, self.driver
+                )
         else:
-            self.driver.close()
+            self.worker.close(self.driver.close)
         return result
 
 
 @dataclass(slots=True)
 class RuntimeInterventionService:
     coordinator: InterventionCoordinator
-    live_drivers: dict[str, PlaywrightSurfaceDriver]
+    live_sessions: dict[str, LiveBrowserSession]
     lock: Lock
 
     def get(self, intervention_id: str) -> InterventionTransition:
@@ -167,9 +183,9 @@ class RuntimeInterventionService:
             intervention_id, expected_lease_version, operator_id, resolution
         )
         with self.lock:
-            driver = self.live_drivers.pop(intervention_id, None)
-        if driver is not None:
-            driver.close()
+            session = self.live_sessions.pop(intervention_id, None)
+        if session is not None:
+            session.close()
         return transition
 
 
@@ -180,7 +196,7 @@ class LocalRuntime:
     intervention_service: RuntimeInterventionService
     journals: dict[str, InMemoryRunJournal]
     interventions: InMemoryInterventionRouter
-    live_drivers: dict[str, PlaywrightSurfaceDriver]
+    live_sessions: dict[str, LiveBrowserSession]
     _lock: Lock = field(repr=False)
 
     @property
@@ -189,10 +205,10 @@ class LocalRuntime:
 
     def close(self) -> None:
         with self._lock:
-            drivers = tuple(self.live_drivers.values())
-            self.live_drivers.clear()
-        for driver in drivers:
-            driver.close()
+            sessions = tuple(self.live_sessions.values())
+            self.live_sessions.clear()
+        for session in sessions:
+            session.close()
 
 
 def build_runtime(settings: object) -> LocalRuntime:
@@ -210,7 +226,7 @@ def build_runtime(settings: object) -> LocalRuntime:
     interventions = InMemoryInterventionRouter(clock)
     journals: dict[str, InMemoryRunJournal] = {}
     result_classifications: dict[str, dict[str, DataClassification]] = {}
-    live_drivers: dict[str, PlaywrightSurfaceDriver] = {}
+    live_sessions: dict[str, LiveBrowserSession] = {}
     lock = Lock()
 
     def executor_factory(run_id: str, record: CapabilityVersionRecord) -> ReplayExecutor:
@@ -231,6 +247,7 @@ def build_runtime(settings: object) -> LocalRuntime:
                 "observed": DataClassification.PERSONAL,
             }
         driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
+        worker = SerialSessionWorker(run_id)
         engine = ReplayEngine(
             driver,
             PolicyEvaluator(clock),
@@ -239,7 +256,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             journal,
             interventions,
         )
-        return ManagedReplayExecutor(engine, driver, live_drivers, lock)
+        return ManagedReplayExecutor(engine, driver, worker, live_sessions, lock)
 
     def target_ready() -> bool:
         try:
@@ -284,6 +301,7 @@ def build_runtime(settings: object) -> LocalRuntime:
                 "observed": DataClassification.PERSONAL,
             }
         driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
+        worker = SerialSessionWorker(run_id)
         engine = DiscoveryEngine(
             driver,
             provider,
@@ -310,7 +328,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             interventions,
             clock,
         )
-        return ManagedDiscoveryExecutor(engine, driver, live_drivers, lock)
+        return ManagedDiscoveryExecutor(engine, driver, worker, live_sessions, lock)
 
     def finalize_discovery(result: DiscoveryResult) -> DiscoveryResult:
         if isinstance(result, InterventionRequiredResult):
@@ -343,7 +361,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         finalize_discovery,
     )
     intervention_service = RuntimeInterventionService(
-        InterventionCoordinator(interventions, lease_service), live_drivers, lock
+        InterventionCoordinator(interventions, lease_service), live_sessions, lock
     )
     return LocalRuntime(
         service,
@@ -351,6 +369,6 @@ def build_runtime(settings: object) -> LocalRuntime:
         intervention_service,
         journals,
         interventions,
-        live_drivers,
+        live_sessions,
         lock,
     )

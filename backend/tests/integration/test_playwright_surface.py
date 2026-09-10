@@ -225,7 +225,7 @@ def test_registered_artifact_replays_end_to_end(demo_bank: str, tmp_path: Path) 
             result.evidence_manifest,
         )
         assert verification.terminal_result_verified
-        assert runtime.live_drivers == {}
+        assert runtime.live_sessions == {}
     finally:
         runtime.close()
 
