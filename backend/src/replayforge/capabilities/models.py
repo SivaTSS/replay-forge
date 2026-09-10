@@ -13,6 +13,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from replayforge.policy.types import RISK_RANK, DataClassification, Risk
+
 
 class ArtifactModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
@@ -21,26 +23,6 @@ class ArtifactModel(BaseModel):
 class SurfaceKind(StrEnum):
     WEB = "web"
     DESKTOP = "desktop"
-
-
-class Risk(StrEnum):
-    READ_ONLY = "read_only"
-    REVERSIBLE = "reversible"
-    SENSITIVE = "sensitive"
-    IRREVERSIBLE = "irreversible"
-
-
-RISK_RANK = {risk: rank for rank, risk in enumerate(Risk)}
-
-
-class DataClassification(StrEnum):
-    PUBLIC = "public"
-    OPERATIONAL = "operational"
-    CUSTOMER_IDENTIFIER = "customer_identifier"
-    PERSONAL = "personal"
-    FINANCIAL = "financial"
-    CREDENTIAL = "credential"
-    SECRET = "secret"
 
 
 class PersistenceMode(StrEnum):

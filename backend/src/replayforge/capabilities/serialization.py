@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime
+from enum import Enum
 from typing import Any
 
 import yaml
@@ -31,11 +33,26 @@ def dump_artifact_yaml(artifact: CapabilityArtifact) -> str:
 
 
 def canonical_artifact_json(artifact: CapabilityArtifact) -> bytes:
-    payload = artifact.model_dump(mode="json", exclude_none=True)
+    payload = _canonicalize(artifact.model_dump(mode="python", exclude_none=True))
     provenance = payload.get("provenance")
     if isinstance(provenance, dict):
         provenance.pop("artifact_content_hash", None)
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def _canonicalize(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _canonicalize(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_canonicalize(item) for item in value]
+    if isinstance(value, set | frozenset):
+        normalized = [_canonicalize(item) for item in value]
+        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True))
+    if isinstance(value, datetime):
+        return value.isoformat().replace("+00:00", "Z")
+    if isinstance(value, Enum):
+        return value.value
+    return value
 
 
 def artifact_content_hash(artifact: CapabilityArtifact) -> str:
