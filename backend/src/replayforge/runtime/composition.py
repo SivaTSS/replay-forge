@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from threading import Lock
+from typing import Protocol
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -25,8 +26,13 @@ from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
 )
+from replayforge.interventions.models import ControlOwner, InterventionStatus, OwnerKind
 from replayforge.interventions.router import InMemoryInterventionRouter
-from replayforge.interventions.service import InterventionCoordinator, InterventionTransition
+from replayforge.interventions.service import (
+    InterventionAuthorizationError,
+    InterventionCoordinator,
+    InterventionTransition,
+)
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import DataClassification, Risk
@@ -91,13 +97,22 @@ def effective_replay_policy(record: CapabilityVersionRecord, origin: str) -> Eff
     return EffectivePolicy.intersect(*layers)
 
 
+class RetainedSurfaceDriver(Protocol):
+    def close(self) -> None: ...
+
+    def capture_active_frame(self) -> bytes: ...
+
+
 @dataclass(slots=True)
 class LiveBrowserSession:
     worker: SerialSessionWorker
-    driver: PlaywrightSurfaceDriver
+    driver: RetainedSurfaceDriver
 
     def close(self) -> None:
         self.worker.close(self.driver.close)
+
+    def capture_frame(self) -> bytes:
+        return self.worker.call(self.driver.capture_active_frame)
 
 
 @dataclass(slots=True)
@@ -160,17 +175,45 @@ class RuntimeInterventionService:
     def claim(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
-        return self.coordinator.claim(intervention_id, expected_lease_version, operator_id)
+        with self.lock:
+            return self.coordinator.claim(intervention_id, expected_lease_version, operator_id)
 
     def release(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
-        return self.coordinator.release(intervention_id, expected_lease_version, operator_id)
+        with self.lock:
+            return self.coordinator.release(intervention_id, expected_lease_version, operator_id)
 
     def begin_resume(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
-        return self.coordinator.begin_resume(intervention_id, expected_lease_version, operator_id)
+        with self.lock:
+            return self.coordinator.begin_resume(
+                intervention_id, expected_lease_version, operator_id
+            )
+
+    def viewport(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> bytes:
+        with self.lock:
+            transition = self.coordinator.get(intervention_id)
+            if (
+                transition.intervention.status is not InterventionStatus.CLAIMED
+                or transition.intervention.operator_id != operator_id
+            ):
+                raise InterventionAuthorizationError("operator does not own this intervention")
+            self.coordinator.leases.assert_can_act(
+                str(transition.intervention.session_id),
+                expected_lease_version,
+                ControlOwner(OwnerKind.HUMAN, operator_id),
+            )
+            session = self.live_sessions.get(intervention_id)
+            if session is None:
+                raise InterventionAuthorizationError("live intervention session is unavailable")
+            frame = session.capture_frame()
+        if len(frame) > 5 * 1024 * 1024 or not frame.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise RuntimeError("live viewport frame violates its media contract")
+        return frame
 
     def terminate(
         self,
@@ -179,10 +222,10 @@ class RuntimeInterventionService:
         operator_id: str | None,
         resolution: str,
     ) -> InterventionTransition:
-        transition = self.coordinator.terminate(
-            intervention_id, expected_lease_version, operator_id, resolution
-        )
         with self.lock:
+            transition = self.coordinator.terminate(
+                intervention_id, expected_lease_version, operator_id, resolution
+            )
             session = self.live_sessions.pop(intervention_id, None)
         if session is not None:
             session.close()

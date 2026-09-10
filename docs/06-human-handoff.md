@@ -140,6 +140,8 @@ Concurrent claims return a conflict containing only the current owner display na
 - Old frames may be dropped; control and audit events may not.
 - Screenshot polling is an adapter fallback, not a separate product behavior.
 
+The current local vertical slice implements that fallback as a lease-guarded PNG endpoint. Browser creation, frame capture, and teardown all execute on the same session-owner thread; continuous CDP screencasting remains a production transport follow-on.
+
 ### Human input
 
 Supported input:

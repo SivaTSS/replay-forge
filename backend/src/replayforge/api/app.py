@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -228,6 +228,31 @@ def create_app(services: ApiServices) -> FastAPI:
             return invoker
         return _transition_response(
             invoker.begin_resume(intervention_id, body.expected_lease_version, body.operator_id)
+        )
+
+    @app.get(
+        "/api/v1/interventions/{intervention_id}/viewport",
+        response_class=Response,
+        responses={200: {"content": {"image/png": {}}}},
+    )
+    def intervention_viewport(
+        request: Request,
+        intervention_id: str,
+        expected_lease_version: Annotated[int, Query(ge=1)],
+        operator_id: Annotated[str, Query(pattern=r"^[A-Za-z0-9_.@-]{2,100}$")],
+    ) -> Response:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        frame = invoker.viewport(intervention_id, expected_lease_version, operator_id)
+        return Response(
+            frame,
+            media_type="image/png",
+            headers={
+                "cache-control": "no-store, max-age=0",
+                "content-security-policy": "default-src 'none'; sandbox",
+                "x-content-type-options": "nosniff",
+            },
         )
 
     @app.post(

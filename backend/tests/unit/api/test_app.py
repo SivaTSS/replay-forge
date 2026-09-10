@@ -76,6 +76,7 @@ class FakeDiscoveryInvoker:
 @dataclass
 class FakeInterventionInvoker:
     transition: InterventionTransition
+    frame: bytes = b"\x89PNG\r\n\x1a\nframe"
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.transition
@@ -94,6 +95,11 @@ class FakeInterventionInvoker:
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
         return self.transition
+
+    def viewport(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> bytes:
+        return self.frame
 
     def terminate(
         self,
@@ -303,6 +309,29 @@ def test_intervention_claim_returns_new_owner_and_lease_version() -> None:
     assert response.status_code == 200
     assert response.json()["control_owner"] == "human:operator-7"
     assert response.json()["lease_version"] == 3
+
+
+def test_intervention_viewport_is_non_cacheable_png() -> None:
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    )
+
+    response = api.get(
+        f"/api/v1/interventions/{transition.intervention.id}/viewport",
+        params={"expected_lease_version": 3, "operator_id": "operator-7"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["cache-control"] == "no-store, max-age=0"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_intervention_runtime_absence_is_retryable() -> None:

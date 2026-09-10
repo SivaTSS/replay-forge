@@ -100,4 +100,4 @@ The [evidence index](evidence/README.md) separates genuine captured scenarios fr
 
 ## Current boundaries
 
-Run evidence is written atomically to the configured local evidence directory; registry, lease, and intervention metadata remain thread-safe and in-memory, with PostgreSQL repository contracts specified but not yet implemented. Same-session preservation, leases, and intervention HTTP operations are implemented; live frame/input streaming and the operator control plane remain follow-on work. These limits are explicit so a reviewer cannot mistake a mock or UI-only path for a completed safety control.
+Run evidence is written atomically to the configured local evidence directory; registry, lease, and intervention metadata remain thread-safe and in-memory, with PostgreSQL repository contracts specified but not yet implemented. Same-session preservation, leases, intervention transitions, and lease-guarded viewport polling are implemented; continuous screencasting, input forwarding, and the operator UI remain follow-on work. These limits are explicit so a reviewer cannot mistake a partial control plane for a completed safety control.

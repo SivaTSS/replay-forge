@@ -75,6 +75,7 @@ class PlaywrightSurfaceDriver:
     headless: bool = True
     browser: Browser | None = field(default=None, init=False)
     playwright: Playwright | None = field(default=None, init=False)
+    active_session: PlaywrightSurfaceSession | None = field(default=None, init=False)
 
     def open(
         self, application_family: str, tenant: str, entry_point: str
@@ -105,13 +106,20 @@ class PlaywrightSurfaceDriver:
                 recoverable=True,
                 effect_absent=True,
             ) from exc
-        return PlaywrightSurfaceSession(
+        session = PlaywrightSurfaceSession(
             context=context,
             page=page,
             application_family=application_family,
             tenant=tenant,
             entry_points={"member_search": destination},
         )
+        self.active_session = session
+        return session
+
+    def capture_active_frame(self) -> bytes:
+        if self.active_session is None:
+            raise SurfaceError("session_missing", "No active surface session is available.")
+        return self.active_session.capture_provider_frame()
 
     def close(self) -> None:
         if self.browser is not None:
@@ -120,6 +128,7 @@ class PlaywrightSurfaceDriver:
         if self.playwright is not None:
             self.playwright.stop()
             self.playwright = None
+        self.active_session = None
 
 
 @dataclass(slots=True)

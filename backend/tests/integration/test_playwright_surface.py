@@ -93,6 +93,7 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
     try:
         assert session.observe().route == "/members/search"
         assert session.capture_provider_frame().startswith(b"\x89PNG\r\n\x1a\n")
+        assert driver.capture_active_frame().startswith(b"\x89PNG\r\n\x1a\n")
         member_field = in_member_frame(
             LocatorBundle(
                 description="Member ID field",

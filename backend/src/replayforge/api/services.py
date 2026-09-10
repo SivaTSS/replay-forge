@@ -53,6 +53,10 @@ class InterventionInvoker(Protocol):
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition: ...
 
+    def viewport(
+        self, intervention_id: str, expected_lease_version: int, operator_id: str
+    ) -> bytes: ...
+
     def terminate(
         self,
         intervention_id: str,
