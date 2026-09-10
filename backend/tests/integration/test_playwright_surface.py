@@ -24,10 +24,13 @@ from replayforge.capabilities.models import (
     RouteCondition,
     TypeAction,
 )
+from replayforge.evidence.integrity import verify_run_manifest
+from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.policy.types import Risk
 from replayforge.runs.results import SuccessResult
 from replayforge.runtime.composition import build_runtime
 from replayforge.runtime.settings import RuntimeSettings
+from replayforge.shared.clock import SystemClock
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
@@ -205,6 +208,23 @@ def test_registered_artifact_replays_end_to_end(demo_bank: str, tmp_path: Path) 
         manifest = json.loads(manifest_path.read_text())
         assert manifest["run_id"] == result.run_id
         assert len(manifest["events"]) == len(event_types)
+        terminal_path = (
+            tmp_path / "evidence" / manifest["terminal_result"]["key"].removeprefix("evidence://")
+        )
+        terminal = json.loads(terminal_path.read_text())
+        assert terminal["status"] == "success"
+        assert terminal["outputs"]["member_id"].startswith("customer_")
+        assert {key: value for key, value in terminal["outputs"].items() if key != "member_id"} == {
+            "account_type": "[REDACTED_FINANCIAL]",
+            "as_of": "2026-09-10T12:30:00Z",
+            "available_balance": "[REDACTED_FINANCIAL]",
+            "currency": "[REDACTED_FINANCIAL]",
+        }
+        verification = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
+            result.evidence_manifest,
+        )
+        assert verification.terminal_result_verified
         assert runtime.live_drivers == {}
     finally:
         runtime.close()

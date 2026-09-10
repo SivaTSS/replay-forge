@@ -18,6 +18,7 @@ class DiscoveryExecutor(Protocol):
 
 
 DiscoveryExecutorFactory = Callable[[str], DiscoveryExecutor]
+DiscoveryResultFinalizer = Callable[[DiscoveryResult], DiscoveryResult]
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,7 @@ class DiscoveryApplicationService:
     registry: CapabilityRegistry
     executor_factory: DiscoveryExecutorFactory
     provider_ready: Callable[[], bool]
+    result_finalizer: DiscoveryResultFinalizer | None = None
 
     def ready(self) -> bool:
         try:
@@ -58,10 +60,10 @@ class DiscoveryApplicationService:
         )
         if isinstance(result, DiscoverySuccess):
             published = self.registry.publish_next(result.artifact)
-            return DiscoverySuccess(
+            result = DiscoverySuccess(
                 status="success",
                 run_id=result.run_id,
                 artifact=published.artifact,
                 evidence_manifest=result.evidence_manifest,
             )
-        return result
+        return self.result_finalizer(result) if self.result_finalizer is not None else result

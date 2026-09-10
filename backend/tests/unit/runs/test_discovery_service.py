@@ -76,3 +76,36 @@ def test_failed_discovery_is_not_published(valid_artifact_data: dict[str, Any]) 
 
     assert isinstance(result, FailureResult)
     assert not service.ready()
+
+
+def test_success_is_finalized_after_publishing_next_version(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
+    registry.publish(artifact)
+    finalized_versions: list[str] = []
+
+    def finalizer(result: DiscoveryResult) -> DiscoveryResult:
+        assert isinstance(result, DiscoverySuccess)
+        finalized_versions.append(result.artifact.capability.version)
+        return result
+
+    service = DiscoveryApplicationService(
+        registry,
+        lambda run_id: Executor(artifact, True),
+        lambda: True,
+        finalizer,
+    )
+
+    service.invoke(
+        goal="Look up the current savings balance",
+        application_family="northstar_member_service",
+        tenant="harbor_credit_union",
+        entry_point="member_search",
+        inputs={},
+        max_steps=10,
+        timeout_seconds=60,
+    )
+
+    assert finalized_versions == ["1.0.1"]

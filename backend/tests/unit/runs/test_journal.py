@@ -10,6 +10,7 @@ import pytest
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
+from replayforge.policy.types import DataClassification
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
@@ -123,3 +124,53 @@ def test_journal_does_not_retain_event_when_evidence_write_fails() -> None:
         recorder.record("replay_started", recorder.run_id)
 
     assert recorder.events() == ()
+
+
+def test_journal_finalizes_once_and_redacts_terminal_result(tmp_path: Path) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "evidence", clock)
+    recorder = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+    recorder.record("checkpoint_verified", recorder.run_id)
+
+    manifest_key = recorder.finalize(
+        {
+            "status": "success",
+            "run_id": recorder.run_id,
+            "outputs": {"member_id": "12345", "balance": "1420.57"},
+        },
+        {
+            "outputs.member_id": DataClassification.CUSTOMER_IDENTIFIER,
+            "outputs.balance": DataClassification.FINANCIAL,
+        },
+    )
+
+    manifest = json.loads(store.read(manifest_key))
+    terminal = manifest["terminal_result"]
+    result = json.loads(store.read(terminal["key"]))
+    assert result["outputs"]["member_id"].startswith("customer_")
+    assert result["outputs"]["balance"] == "[REDACTED_FINANCIAL]"
+    assert terminal["redaction_directives"] == [
+        "redact:outputs.balance",
+        "tokenize:outputs.member_id",
+    ]
+
+    with pytest.raises(RuntimeError, match="already been finalized"):
+        recorder.finalize({"status": "success", "run_id": recorder.run_id})
+    with pytest.raises(RuntimeError, match="after run finalization"):
+        recorder.record("action_result", recorder.run_id)
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"status": "success", "run_id": "wrong"},
+        {"status": "intervention_required"},
+    ],
+)
+def test_journal_rejects_invalid_terminal_result(result: dict[str, object]) -> None:
+    recorder = journal()
+    if "run_id" not in result:
+        result["run_id"] = recorder.run_id
+
+    with pytest.raises(ValueError):
+        recorder.finalize(result)

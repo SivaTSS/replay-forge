@@ -13,7 +13,11 @@ from replayforge.capabilities.registry import (
 )
 from replayforge.replay.engine import ReplayRequest
 from replayforge.runs.results import FailureResult, RunResult
-from replayforge.runs.service import ReadinessProbe, ReplayApplicationService
+from replayforge.runs.service import (
+    ReadinessProbe,
+    ReplayApplicationService,
+    ReplayResultFinalizer,
+)
 from replayforge.shared.clock import FrozenClock
 
 
@@ -37,6 +41,7 @@ def _service(
     artifact_data: dict[str, Any],
     *,
     probes: tuple[ReadinessProbe, ...] = (),
+    finalizer: ReplayResultFinalizer | None = None,
 ) -> tuple[ReplayApplicationService, list[RecordingExecutor]]:
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime(2026, 9, 10, tzinfo=UTC)))
     registry.publish(CapabilityArtifact.model_validate(artifact_data))
@@ -49,7 +54,7 @@ def _service(
         executors.append(executor)
         return executor
 
-    return ReplayApplicationService(registry, factory, probes), executors
+    return ReplayApplicationService(registry, factory, probes, finalizer), executors
 
 
 @pytest.mark.parametrize("version", ["1.0.0", None])
@@ -102,3 +107,19 @@ def test_readiness_fails_closed_when_probe_raises(valid_artifact_data: dict[str,
     service, _ = _service(valid_artifact_data, probes=(broken_probe,))
 
     assert not service.ready()
+
+
+def test_terminal_result_is_finalized_after_execution(valid_artifact_data: dict[str, Any]) -> None:
+    finalized: list[str] = []
+
+    def finalizer(result: RunResult) -> RunResult:
+        finalized.append(result.run_id)
+        return result.model_copy(update={"evidence_manifest": "evidence://final/manifest"})
+
+    service, _ = _service(valid_artifact_data, finalizer=finalizer)
+
+    result = service.invoke("member.lookup_savings_balance", "1.0.0", "harbor_credit_union", {})
+
+    assert isinstance(result, FailureResult)
+    assert finalized == [result.run_id]
+    assert result.evidence_manifest == "evidence://final/manifest"

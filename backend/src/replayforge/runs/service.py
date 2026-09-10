@@ -18,6 +18,7 @@ class ReplayExecutor(Protocol):
 
 ReplayExecutorFactory = Callable[[str, CapabilityVersionRecord], ReplayExecutor]
 ReadinessProbe = Callable[[], bool]
+ReplayResultFinalizer = Callable[[RunResult], RunResult]
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,7 @@ class ReplayApplicationService:
     registry: CapabilityRegistry
     executor_factory: ReplayExecutorFactory
     readiness_probes: tuple[ReadinessProbe, ...] = ()
+    result_finalizer: ReplayResultFinalizer | None = None
 
     def ready(self) -> bool:
         try:
@@ -48,7 +50,7 @@ class ReplayApplicationService:
         )
         run_id = str(new_id(EntityKind.RUN))
         executor = self.executor_factory(run_id, record)
-        return executor.execute(
+        result = executor.execute(
             ReplayRequest(
                 run_id=run_id,
                 artifact=record.artifact,
@@ -56,3 +58,4 @@ class ReplayApplicationService:
                 inputs=inputs,
             )
         )
+        return self.result_finalizer(result) if self.result_finalizer is not None else result

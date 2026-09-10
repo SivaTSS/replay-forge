@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from threading import Lock
 from urllib.error import URLError
@@ -17,7 +18,7 @@ from replayforge.capabilities.registry import (
 from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.compiler import SavingsBalanceCompiler
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
-from replayforge.discovery.models import DiscoveryResult
+from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.interventions.leases import (
@@ -28,12 +29,16 @@ from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.interventions.service import InterventionCoordinator, InterventionTransition
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
-from replayforge.policy.types import Risk
+from replayforge.policy.types import DataClassification, Risk
 from replayforge.providers.openai import OpenAIModelProvider
 from replayforge.replay.engine import ReplayEngine, ReplayRequest
 from replayforge.runs.discovery_service import DiscoveryApplicationService, DiscoveryExecutor
 from replayforge.runs.journal import InMemoryRunJournal
-from replayforge.runs.results import InterventionRequiredResult, RunResult
+from replayforge.runs.results import (
+    FailureResult,
+    InterventionRequiredResult,
+    RunResult,
+)
 from replayforge.runs.service import ReplayApplicationService, ReplayExecutor
 from replayforge.shared.clock import SystemClock
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
@@ -204,6 +209,7 @@ def build_runtime(settings: object) -> LocalRuntime:
     lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
     interventions = InMemoryInterventionRouter(clock)
     journals: dict[str, InMemoryRunJournal] = {}
+    result_classifications: dict[str, dict[str, DataClassification]] = {}
     live_drivers: dict[str, PlaywrightSurfaceDriver] = {}
     lock = Lock()
 
@@ -216,6 +222,14 @@ def build_runtime(settings: object) -> LocalRuntime:
         )
         with lock:
             journals[run_id] = journal
+            result_classifications[run_id] = {
+                **{
+                    f"outputs.{name}": schema.data_classification
+                    for name, schema in record.artifact.outputs.properties.items()
+                },
+                "expected": DataClassification.PERSONAL,
+                "observed": DataClassification.PERSONAL,
+            }
         driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
         engine = ReplayEngine(
             driver,
@@ -234,7 +248,18 @@ def build_runtime(settings: object) -> LocalRuntime:
         except (OSError, URLError):
             return False
 
-    service = ReplayApplicationService(registry, executor_factory, (target_ready,))
+    def finalize_replay(result: RunResult) -> RunResult:
+        if isinstance(result, InterventionRequiredResult):
+            return result
+        with lock:
+            journal = journals[result.run_id]
+            classifications = result_classifications[result.run_id]
+        manifest_key = journal.finalize(result.model_dump(mode="json"), classifications)
+        with lock:
+            result_classifications.pop(result.run_id, None)
+        return result.model_copy(update={"evidence_manifest": manifest_key})
+
+    service = ReplayApplicationService(registry, executor_factory, (target_ready,), finalize_replay)
     provider = (
         OpenAIModelProvider.from_api_key(
             settings.openai_api_key.get_secret_value(), settings.openai_model
@@ -254,6 +279,10 @@ def build_runtime(settings: object) -> LocalRuntime:
         )
         with lock:
             journals[run_id] = journal
+            result_classifications[run_id] = {
+                "expected": DataClassification.PERSONAL,
+                "observed": DataClassification.PERSONAL,
+            }
         driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
         engine = DiscoveryEngine(
             driver,
@@ -283,10 +312,35 @@ def build_runtime(settings: object) -> LocalRuntime:
         )
         return ManagedDiscoveryExecutor(engine, driver, live_drivers, lock)
 
+    def finalize_discovery(result: DiscoveryResult) -> DiscoveryResult:
+        if isinstance(result, InterventionRequiredResult):
+            return result
+        with lock:
+            journal = journals[result.run_id]
+            classifications = result_classifications[result.run_id]
+        if isinstance(result, DiscoverySuccess):
+            payload: dict[str, object] = {
+                "artifact": result.artifact.model_dump(mode="json"),
+                "evidence_manifest": result.evidence_manifest,
+                "run_id": result.run_id,
+                "status": result.status,
+            }
+            manifest_key = journal.finalize(payload, classifications)
+            with lock:
+                result_classifications.pop(result.run_id, None)
+            return dataclass_replace(result, evidence_manifest=manifest_key)
+        if not isinstance(result, FailureResult):
+            raise TypeError("unsupported completed discovery result")
+        manifest_key = journal.finalize(result.model_dump(mode="json"), classifications)
+        with lock:
+            result_classifications.pop(result.run_id, None)
+        return result.model_copy(update={"evidence_manifest": manifest_key})
+
     discovery_service = DiscoveryApplicationService(
         registry,
         discovery_factory,
         lambda: provider is not None and target_ready(),
+        finalize_discovery,
     )
     intervention_service = RuntimeInterventionService(
         InterventionCoordinator(interventions, lease_service), live_drivers, lock

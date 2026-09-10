@@ -48,6 +48,7 @@ class RunEvidenceManifest(_StrictModel):
     run_id: str
     generated_at: datetime
     events: tuple[ManifestEntry, ...] = Field(min_length=1, max_length=10_000)
+    terminal_result: ManifestEntry | None = None
 
     @field_validator("run_id")
     @classmethod
@@ -92,15 +93,31 @@ class EventEvidence(_StrictModel):
         return value
 
 
+class TerminalResultEvidence(BaseModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    status: Literal["success", "business_outcome", "failure"]
+    run_id: str
+
+    @field_validator("run_id")
+    @classmethod
+    def validate_run_id(cls, value: str) -> str:
+        parse_id(value, EntityKind.RUN)
+        return value
+
+
 @dataclass(frozen=True, slots=True)
 class EvidenceVerification:
     manifest_key: str
     manifest_hash: str
     run_id: str
     event_count: int
+    terminal_result_verified: bool
 
 
-def verify_run_manifest(store: EvidenceStore, manifest_key: str) -> EvidenceVerification:
+def verify_run_manifest(
+    store: EvidenceStore, manifest_key: str, *, require_terminal: bool = True
+) -> EvidenceVerification:
     """Verify the manifest schema and every referenced event payload."""
 
     manifest_content = store.read(manifest_key)
@@ -118,25 +135,50 @@ def verify_run_manifest(store: EvidenceStore, manifest_key: str) -> EvidenceVeri
         seen_keys.add(entry.key)
         if not entry.key.startswith(expected_prefix):
             raise EvidenceIntegrityError("evidence entry belongs to a different run")
-        parse_id(entry.evidence_id, EntityKind.EVIDENCE)
-        content = store.read(entry.key)
-        if len(content) != entry.size_bytes:
-            raise EvidenceIntegrityError("evidence size does not match its manifest entry")
-        digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
-        if digest != entry.content_hash:
-            raise EvidenceIntegrityError("evidence hash does not match its manifest entry")
+        content = _verified_content(store, entry)
         event = _parse_event(content)
         if event.run_id != manifest.run_id:
             raise EvidenceIntegrityError("event payload belongs to a different run")
         if event.sequence != expected_sequence:
             raise EvidenceIntegrityError("event sequence is not contiguous and ordered")
 
+    terminal_verified = manifest.terminal_result is not None
+    if manifest.terminal_result is None:
+        if require_terminal:
+            raise EvidenceIntegrityError("completed-run manifest has no terminal result")
+    else:
+        terminal = manifest.terminal_result
+        if terminal.key in seen_keys:
+            raise EvidenceIntegrityError("terminal result duplicates an event key")
+        if not terminal.key.startswith(expected_prefix):
+            raise EvidenceIntegrityError("terminal result belongs to a different run")
+        result = _parse_terminal_result(_verified_content(store, terminal))
+        if result.run_id != manifest.run_id:
+            raise EvidenceIntegrityError("terminal result payload belongs to a different run")
+        expected_retention = (
+            RetentionClass.FAILURE if result.status == "failure" else RetentionClass.OPERATIONAL
+        )
+        if terminal.retention_class is not expected_retention:
+            raise EvidenceIntegrityError("terminal result has the wrong retention class")
+
     return EvidenceVerification(
         manifest_key=manifest_key,
         manifest_hash=f"sha256:{hashlib.sha256(manifest_content).hexdigest()}",
         run_id=manifest.run_id,
         event_count=len(manifest.events),
+        terminal_result_verified=terminal_verified,
     )
+
+
+def _verified_content(store: EvidenceStore, entry: ManifestEntry) -> bytes:
+    parse_id(entry.evidence_id, EntityKind.EVIDENCE)
+    content = store.read(entry.key)
+    if len(content) != entry.size_bytes:
+        raise EvidenceIntegrityError("evidence size does not match its manifest entry")
+    digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
+    if digest != entry.content_hash:
+        raise EvidenceIntegrityError("evidence hash does not match its manifest entry")
+    return content
 
 
 def _parse_manifest(content: bytes) -> RunEvidenceManifest:
@@ -153,3 +195,12 @@ def _parse_event(content: bytes) -> EventEvidence:
         return EventEvidence.model_validate_json(content)
     except ValidationError as error:
         raise EvidenceIntegrityError("event evidence violates its schema") from error
+
+
+def _parse_terminal_result(content: bytes) -> TerminalResultEvidence:
+    if len(content) > _MAX_EVENT_BYTES:
+        raise EvidenceIntegrityError("terminal result evidence exceeds the verification limit")
+    try:
+        return TerminalResultEvidence.model_validate_json(content)
+    except ValidationError as error:
+        raise EvidenceIntegrityError("terminal result evidence violates its schema") from error

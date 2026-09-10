@@ -41,7 +41,7 @@ curl --fail-with-body --silent --show-error -H 'content-type: application/json' 
 
 Expected status is `success`, with five outputs and a verified checkpoint. Use member `99999` for the typed `member_not_found` outcome. Change `harbor` to `summit` to replay the same artifact against the second tenant.
 
-Verify the returned `evidence_manifest` and every referenced event independently:
+Verify the returned `evidence_manifest`, ordered events, hashes, and exactly-one terminal result independently:
 
 ```bash
 UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence.py \

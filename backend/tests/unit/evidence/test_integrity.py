@@ -19,6 +19,13 @@ def retained_run(tmp_path: Path) -> tuple[LocalEvidenceStore, InMemoryRunJournal
     journal = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
     journal.record("replay_started", journal.run_id)
     journal.record("checkpoint_verified", journal.run_id)
+    journal.finalize(
+        {
+            "status": "success",
+            "run_id": journal.run_id,
+            "outputs": {"balance": "[REDACTED_FINANCIAL]"},
+        }
+    )
     return store, journal
 
 
@@ -31,6 +38,7 @@ def test_verifier_proves_manifest_and_all_event_hashes(
 
     assert verification.run_id == journal.run_id
     assert verification.event_count == 2
+    assert verification.terminal_result_verified
     assert verification.manifest_hash.startswith("sha256:")
 
 
