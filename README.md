@@ -96,6 +96,7 @@ This runs formatting, lint, strict typing, the 90% branch-coverage gate, fronten
 - `REPORT.md` — assignment report and deliberate cuts
 
 Start with [the documentation index](docs/README.md) and [requirement traceability](docs/11-requirement-traceability.md).
+The [evidence index](evidence/README.md) separates genuine captured scenarios from outstanding evidence.
 
 ## Current boundaries
 

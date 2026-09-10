@@ -26,7 +26,7 @@ Permission is the intersection of platform, application, tenant, capability, and
 
 ## 7. Evidence and verification
 
-Gates enforce Ruff, strict mypy, 90% branch coverage, structural model-free replay, artifact hash integrity, lease races, and real Chromium. Composed integration loads YAML, executes eight steps, returns five outputs, verifies identity/checkpoint, persists redacted events and exactly one terminal result with SHA-256 manifest entries, independently verifies that manifest, and closes resources. Commands are in [README](README.md); strategy is in [Testing](docs/09-testing-and-evidence.md).
+Gates enforce Ruff, strict mypy, 90% branch coverage, structural model-free replay, artifact hash integrity, lease races, and real Chromium. Composed integration loads YAML, executes eight steps, returns five outputs, verifies identity/checkpoint, persists redacted events and exactly one terminal result with SHA-256 manifest entries, independently verifies that manifest, and closes resources. Genuine bundles cover success, member-not-found, and second-tenant reuse; outstanding scenarios are explicit in the [evidence index](evidence/README.md). Commands are in [README](README.md); strategy is in [Testing](docs/09-testing-and-evidence.md).
 
 ## 8. Cuts and remaining work
 
