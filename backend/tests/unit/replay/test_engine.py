@@ -42,6 +42,7 @@ from replayforge.surfaces.models import (
 @dataclass
 class FakeSurfaceSession:
     member_not_found: bool = False
+    member_not_found_after_wait: bool = False
     checkpoint_valid: bool = True
     extraction: str = "$1,420.57"
     resolve_error: SurfaceError | None = None
@@ -119,7 +120,10 @@ class FakeSurfaceSession:
         inputs: dict[str, Any],
         timeout_ms: int,
     ) -> bool:
-        return self.evaluate(condition, outputs, inputs)
+        satisfied = self.evaluate(condition, outputs, inputs)
+        if self.member_not_found_after_wait:
+            self.member_not_found = True
+        return satisfied
 
     def close(self) -> None:
         self.closed = True
@@ -235,6 +239,22 @@ def test_known_not_found_is_business_outcome_before_missing_happy_path(
     assert result.code == "member_not_found"
     assert result.details == {"member_id": "***6789"}
     assert session.closed is True
+
+
+def test_known_outcome_is_rechecked_after_waiting_for_ui_transition(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["steps"][1]["postconditions"] = [
+        {"kind": "text", "value": "Member Results", "match": "exact"}
+    ]
+    session = FakeSurfaceSession(member_not_found_after_wait=True)
+    engine, _, _ = build_engine(session)
+
+    result = engine.execute(request_for(valid_artifact_data, "123456789"))
+
+    assert isinstance(result, BusinessOutcomeResult)
+    assert result.code == "member_not_found"
+    assert result.details == {"member_id": "***6789"}
 
 
 def test_invalid_input_fails_before_opening_surface(

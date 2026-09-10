@@ -212,6 +212,9 @@ class ReplayEngine:
                         False,
                         step.id,
                     )
+                outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
+                if outcome is not None:
+                    return self._business_outcome(request, outcome, inputs)
             return None
         except SurfaceError as error:
             can_retry = (

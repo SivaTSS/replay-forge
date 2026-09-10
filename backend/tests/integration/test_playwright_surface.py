@@ -27,7 +27,7 @@ from replayforge.capabilities.models import (
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.policy.types import Risk
-from replayforge.runs.results import SuccessResult
+from replayforge.runs.results import BusinessOutcomeResult, SuccessResult
 from replayforge.runtime.composition import build_runtime
 from replayforge.runtime.settings import RuntimeSettings
 from replayforge.shared.clock import SystemClock
@@ -226,5 +226,36 @@ def test_registered_artifact_replays_end_to_end(demo_bank: str, tmp_path: Path) 
         )
         assert verification.terminal_result_verified
         assert runtime.live_drivers == {}
+    finally:
+        runtime.close()
+
+
+def test_registered_artifact_returns_real_member_not_found_outcome(
+    demo_bank: str, tmp_path: Path
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=repository / "capabilities",
+            evidence_directory=tmp_path / "evidence",
+            demo_base_url=demo_bank,
+        )
+    )
+    try:
+        result = runtime.service.invoke(
+            "member.lookup_savings_balance",
+            "1.0.0",
+            "harbor",
+            {"member_id": "99999"},
+        )
+
+        assert isinstance(result, BusinessOutcomeResult)
+        assert result.code == "member_not_found"
+        assert result.details == {"member_id": "***9999"}
+        verification = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
+            result.evidence_manifest,
+        )
+        assert verification.terminal_result_verified
     finally:
         runtime.close()
