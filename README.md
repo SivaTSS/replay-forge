@@ -1,25 +1,84 @@
 # ReplayForge
 
-A focused implementation of a computer-use system that uses an LLM to discover a workflow on a real UI, saves that workflow as a typed and reviewable capability, and replays it deterministically without an LLM in the decision loop.
+ReplayForge discovers a workflow through a rendered UI, compiles the verified interaction into a typed YAML capability, and replays later invocations deterministically without a model in the replay decision loop.
 
-## Project status
+The implemented vertical slice looks up a synthetic member's savings balance in a multi-tenant legacy-style banking application. It covers iframe targeting, controlled faults, five-layer policy intersection, immutable versions, typed business outcomes, redaction-first events, and exclusive intervention leases.
 
-Initial repository setup. The implementation will provide one complete vertical slice:
+## Prerequisites and bootstrap
 
-1. Accept a natural-language goal and target application.
-2. Run an LLM-driven observe-decide-act discovery loop against the live UI.
-3. Save a versioned, parameterized capability artifact.
-4. Replay that artifact deterministically with typed outcomes and evidence.
-5. Pause and transfer the same live session to a human operator when intervention is required.
+Requires Python 3.12, `uv`, Node.js 22+, and pnpm 10.15.1. Replay needs no credential; live discovery also requires an OpenAI API key and explicitly selected model.
 
-The design prioritizes robust control targeting, explicit runtime-error handling, allowlisted actions, redaction of sensitive values, and a clean surface-adapter seam for legacy web and desktop applications.
+```bash
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv sync --extra dev
+npm_config_cache=/tmp/replayforge-npm-cache npx --yes pnpm@10.15.1 install --frozen-lockfile
+PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run playwright install chromium
+cp .env.example .env
+```
 
-## Setup and usage
+The example environment contains no secret. Leave its commented OpenAI settings disabled for replay-only operation.
 
-Setup instructions, configuration, offline mode, and the exact discovery and replay demo commands will be added with the implementation.
+## Run the vertical slice
 
-## Deliverables
+Terminal 1 — synthetic target:
 
-- Source code and tests
-- [`REPORT.md`](REPORT.md), covering the required design decisions and trade-offs
-- `evidence/`, containing a saved capability and logs from genuine discovery and replay runs
+```bash
+npm_config_cache=/tmp/replayforge-npm-cache npx --yes pnpm@10.15.1 --filter @replayforge/demo-bank dev --hostname 127.0.0.1 --port 3001
+```
+
+Terminal 2 — API:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run uvicorn replayforge.main:app --host 127.0.0.1 --port 8000
+```
+
+Terminal 3 — deterministic invocation:
+
+```bash
+curl --fail-with-body --silent --show-error -H 'content-type: application/json' \
+  -d '{"tenant":"harbor","version":"1.0.0","inputs":{"member_id":"12345"}}' \
+  http://127.0.0.1:8000/api/v1/capabilities/member.lookup_savings_balance/invoke
+```
+
+Expected status is `success`, with five outputs and a verified checkpoint. Use member `99999` for the typed `member_not_found` outcome. Change `harbor` to `summit` to replay the same artifact against the second tenant.
+
+## Live model-driven discovery
+
+Set both values only in the ignored local `.env`:
+
+```dotenv
+REPLAYFORGE_OPENAI_API_KEY=<runtime credential>
+REPLAYFORGE_OPENAI_MODEL=<structured-output-capable model ID>
+```
+
+Restart the API, then submit:
+
+```bash
+curl --fail-with-body --silent --show-error -H 'content-type: application/json' \
+  -d '{"goal":"Look up the synthetic member and return the current savings balance.","application_family":"northstar_member_service","tenant":"harbor","entry_point":"member_search","inputs":{"member_id":"12345"},"max_steps":20,"timeout_seconds":120}' \
+  http://127.0.0.1:8000/api/v1/discoveries
+```
+
+Discovery sends ephemeral rendered PNG frames and normalized state. Customer input values are excluded from the model instruction payload. Responses use strict structured output, bounded token/time budgets, no tools, and `store=false`. A successful trace is checkpoint-verified and atomically published as the next immutable patch version.
+
+## Verification
+
+```bash
+bash scripts/verify.sh
+```
+
+This runs formatting, lint, strict typing, the 90% branch-coverage gate, frontend checks/build, artifact validation, and real Chromium integrations.
+
+## Repository map
+
+- `backend/src/replayforge/` — domain, services, adapters, and ASGI composition
+- `apps/demo-bank/` — two-tenant synthetic target with controlled faults
+- `capabilities/` — reviewed immutable YAML versions
+- `schemas/` — artifact JSON Schema
+- `docs/` — architecture, safety, handoff, API, testing, and traceability specifications
+- `REPORT.md` — assignment report and deliberate cuts
+
+Start with [the documentation index](docs/README.md) and [requirement traceability](docs/11-requirement-traceability.md).
+
+## Current boundaries
+
+The local runtime currently uses thread-safe in-memory metadata adapters; PostgreSQL repository contracts are specified but not yet implemented. Same-session preservation, leases, and intervention HTTP operations are implemented; live frame/input streaming and the operator control plane remain follow-on work. These limits are explicit so a reviewer cannot mistake a mock or UI-only path for a completed safety control.
