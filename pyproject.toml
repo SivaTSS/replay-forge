@@ -12,6 +12,7 @@ license = { text = "Proprietary" }
 authors = [{ name = "ReplayForge contributors" }]
 dependencies = [
   "fastapi==0.141.1",
+  "openai==3.11.0",
   "playwright==1.62.0",
   "pydantic==2.13.4",
   "pydantic-settings==2.15.0",

@@ -13,6 +13,15 @@ from replayforge.discovery.models import (
 from replayforge.surfaces.models import NormalizedObservation
 
 
+class ModelProviderError(RuntimeError):
+    """A provider failed without exposing raw provider content to callers."""
+
+    def __init__(self, code: str, safe_message: str) -> None:
+        super().__init__(safe_message)
+        self.code = code
+        self.safe_message = safe_message
+
+
 class ModelProvider(Protocol):
     @property
     def provider_name(self) -> str: ...

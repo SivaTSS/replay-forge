@@ -18,7 +18,7 @@ from replayforge.discovery.models import (
     ProviderContext,
     RecordedDiscoveryStep,
 )
-from replayforge.discovery.ports import ArtifactCompiler, ModelProvider
+from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelProviderError
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import AUTOMATION_OWNER
 from replayforge.policy.evaluator import PolicyEvaluator
@@ -215,6 +215,8 @@ class DiscoveryEngine:
                 history.append(history_item)
 
             return self._failure(request, "max_steps_exceeded", "Discovery step budget exhausted.")
+        except ModelProviderError as error:
+            return self._failure(request, error.code, error.safe_message)
         except SurfaceError as error:
             return self._failure(request, error.code, error.safe_message)
         finally:

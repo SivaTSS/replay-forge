@@ -15,6 +15,7 @@ from replayforge.discovery.models import (
     ProviderContext,
     RecordedDiscoveryStep,
 )
+from replayforge.discovery.ports import ModelProviderError
 from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
@@ -44,6 +45,13 @@ class QueueModelProvider:
     def decide(self, context: ProviderContext) -> DiscoveryProposal:
         self.calls.append(context)
         return self.proposals.pop(0)
+
+
+@dataclass
+class FailingModelProvider(QueueModelProvider):
+    def decide(self, context: ProviderContext) -> DiscoveryProposal:
+        del context
+        raise ModelProviderError("provider_unavailable", "Provider is temporarily unavailable.")
 
 
 @dataclass
@@ -264,3 +272,18 @@ def test_unverified_completion_is_failure(
 
     assert isinstance(result, FailureResult)
     assert result.code == "completion_not_verified"
+
+
+def test_provider_failure_becomes_safe_terminal_result(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, FailingModelProvider([]), artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "provider_unavailable"
+    assert result.message == "Provider is temporarily unavailable."
+    assert session.closed is True
