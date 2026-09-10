@@ -80,7 +80,7 @@ class ReplayEngine:
             self.recorder.record("replay_started", request.run_id)
             outputs: dict[str, Any] = {}
             for condition in request.artifact.preconditions:
-                if not session.evaluate(condition, outputs):
+                if not session.evaluate(condition, outputs, inputs):
                     return self._failure(
                         request,
                         "precondition_mismatch",
@@ -94,7 +94,9 @@ class ReplayEngine:
                     preserve_session = isinstance(result, InterventionRequiredResult)
                     return result
 
-            if not session.evaluate(request.artifact.checkpoint.condition, outputs):
+            if not session.wait_until(
+                request.artifact.checkpoint.condition, outputs, inputs, 10_000
+            ):
                 return self._failure(
                     request,
                     "checkpoint_mismatch",
@@ -138,7 +140,7 @@ class ReplayEngine:
         try:
             self.lease_service.assert_can_act(session.session_id, lease_version, AUTOMATION_OWNER)
             for condition in step.preconditions:
-                if not session.evaluate(condition, outputs):
+                if not session.evaluate(condition, outputs, inputs):
                     return self._failure(
                         request,
                         "step_precondition_mismatch",
@@ -198,11 +200,11 @@ class ReplayEngine:
                     )
             self.recorder.record("action_result", request.run_id, step_id=step.id)
 
-            outcome = self._detect_outcome(request.artifact, step, session, outputs)
+            outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
             if outcome is not None:
                 return self._business_outcome(request, outcome, inputs)
             for condition in step.postconditions:
-                if not session.evaluate(condition, outputs):
+                if not session.wait_until(condition, outputs, inputs, step.timeout_ms):
                     return self._failure(
                         request,
                         "postcondition_mismatch",
@@ -249,11 +251,12 @@ class ReplayEngine:
         step: Step,
         session: SurfaceSession,
         outputs: dict[str, Any],
+        inputs: dict[str, Any],
     ) -> BusinessOutcome | None:
         indexed = {outcome.code: outcome for outcome in artifact.outcomes}
         for code in step.outcome_refs:
             outcome = indexed[code]
-            if session.evaluate(outcome.detect, outputs):
+            if session.evaluate(outcome.detect, outputs, inputs):
                 return outcome
         return None
 

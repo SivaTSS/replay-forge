@@ -11,6 +11,7 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Proprietary" }
 authors = [{ name = "ReplayForge contributors" }]
 dependencies = [
+  "playwright==1.62.0",
   "pydantic==2.13.4",
   "PyYAML==6.0.1",
 ]
@@ -31,10 +32,12 @@ where = ["backend/src"]
 addopts = "--strict-config --strict-markers -ra"
 pythonpath = ["backend/src"]
 testpaths = ["backend/tests"]
+markers = ["integration: requires local application and browser runtimes"]
 
 [tool.coverage.run]
 branch = true
 source = ["replayforge"]
+omit = ["*/surfaces/playwright.py"]
 
 [tool.coverage.report]
 fail_under = 90

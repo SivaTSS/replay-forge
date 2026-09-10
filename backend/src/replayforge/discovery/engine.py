@@ -151,7 +151,12 @@ class DiscoveryEngine:
                         model_name=self.model_provider.model_name,
                         evidence_manifest=self.recorder.evidence_manifest_key,
                     )
-                    if not session.evaluate(artifact.checkpoint.condition, outputs):
+                    if not session.wait_until(
+                        artifact.checkpoint.condition,
+                        outputs,
+                        request.inputs,
+                        10_000,
+                    ):
                         return self._failure(
                             request,
                             "completion_not_verified",

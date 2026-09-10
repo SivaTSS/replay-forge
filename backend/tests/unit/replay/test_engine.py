@@ -89,14 +89,16 @@ class FakeSurfaceSession:
         now = datetime(2026, 9, 10, 12, 30, tzinfo=UTC)
         return ActionReceipt(ActionStatus.COMPLETED, now, now, "visible state changed")
 
-    def evaluate(self, condition: Condition, outputs: dict[str, Any]) -> bool:
+    def evaluate(
+        self, condition: Condition, outputs: dict[str, Any], inputs: dict[str, Any]
+    ) -> bool:
         if isinstance(condition, AllCondition):
             is_final_checkpoint = any(
                 isinstance(item, RouteCondition) and item.pattern == "/accounts/*/details"
                 for item in condition.conditions
             )
             return (not is_final_checkpoint or self.checkpoint_valid) and all(
-                self.evaluate(item, outputs) for item in condition.conditions
+                self.evaluate(item, outputs, inputs) for item in condition.conditions
             )
         if isinstance(condition, OutputValidCondition):
             return condition.output in outputs
@@ -106,6 +108,15 @@ class FakeSurfaceSession:
 
     def extract(self, target: ResolvedTarget) -> str:
         return self.extraction
+
+    def wait_until(
+        self,
+        condition: Condition,
+        outputs: dict[str, Any],
+        inputs: dict[str, Any],
+        timeout_ms: int,
+    ) -> bool:
+        return self.evaluate(condition, outputs, inputs)
 
     def close(self) -> None:
         self.closed = True

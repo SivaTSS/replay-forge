@@ -25,7 +25,20 @@ class SurfaceSession(Protocol):
         self, action: Action, target: ResolvedTarget | None, inputs: dict[str, Any]
     ) -> ActionReceipt: ...
 
-    def evaluate(self, condition: Condition, outputs: dict[str, Any]) -> bool: ...
+    def evaluate(
+        self,
+        condition: Condition,
+        outputs: dict[str, Any],
+        inputs: dict[str, Any],
+    ) -> bool: ...
+
+    def wait_until(
+        self,
+        condition: Condition,
+        outputs: dict[str, Any],
+        inputs: dict[str, Any],
+        timeout_ms: int,
+    ) -> bool: ...
 
     def extract(self, target: ResolvedTarget) -> str: ...
 
