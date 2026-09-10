@@ -48,6 +48,16 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence.py 
   --root evidence/runtime 'evidence://<run_id>/<manifest_file>'
 ```
 
+To publish a stable reviewer bundle, replace the placeholders with the returned key and current 7–40 character commit SHA:
+
+```bash
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/export_evidence.py \
+  'evidence://<run_id>/<manifest_file>' evidence/replay-success \
+  --root evidence/runtime --scenario replay-success \
+  --artifact capabilities/member.lookup_savings_balance/1.0.0.yaml \
+  --commit-sha '<commit_sha>' --command '<exact replay command>'
+```
+
 ## Live model-driven discovery
 
 Set both values only in the ignored local `.env`:
