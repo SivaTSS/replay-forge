@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,9 @@ from playwright.sync_api import (
     Page,
     Playwright,
     sync_playwright,
+)
+from playwright.sync_api import (
+    Error as PlaywrightError,
 )
 from playwright.sync_api import (
     TimeoutError as PlaywrightTimeoutError,
@@ -72,6 +76,17 @@ from replayforge.surfaces.models import (
 )
 
 QueryRoot = Page | FrameLocator | Locator
+_OBSERVATION_ATTEMPTS = 3
+_NAVIGATION_RACE_MARKERS = (
+    "execution context was destroyed",
+    "cannot find context with specified id",
+    "frame was detached",
+)
+
+
+def _is_navigation_race(error: PlaywrightError) -> bool:
+    message = str(error).lower()
+    return any(marker in message for marker in _NAVIGATION_RACE_MARKERS)
 
 
 @dataclass(slots=True)
@@ -159,24 +174,19 @@ class PlaywrightSurfaceSession:
         return f"{parsed.scheme}://{parsed.hostname}{port}"
 
     def observe(self) -> NormalizedObservation:
-        frame = self._application_frame()
-        raw_route = urlsplit(frame.url if frame is not None else self.page.url).path
-        route = self._normalize_route(raw_route)
-        root: Page | Frame = frame or self.page
-        try:
-            landmarks = tuple(
-                text.strip()
-                for text in root.locator("h1,h2,h3,label,th").all_inner_texts()
-                if text.strip()
-            )[:40]
-            active = root.evaluate(
-                "() => document.activeElement?.getAttribute('aria-label') || "
-                "document.activeElement?.getAttribute('name') || document.activeElement?.tagName"
-            )
-        except Exception as exc:
-            raise SurfaceError(
-                "observation_failed", "The current UI state could not be observed."
-            ) from exc
+        for attempt in range(_OBSERVATION_ATTEMPTS):
+            try:
+                route, landmarks, active = self._read_observation_state()
+                break
+            except PlaywrightError as exc:
+                if attempt == _OBSERVATION_ATTEMPTS - 1 or not _is_navigation_race(exc):
+                    raise SurfaceError(
+                        "observation_failed", "The current UI state could not be observed."
+                    ) from exc
+                with suppress(PlaywrightError):
+                    self.page.wait_for_load_state("domcontentloaded", timeout=2_000)
+        else:  # pragma: no cover - the bounded loop always returns or raises
+            raise AssertionError("observation retry loop exhausted without a result")
         dialog_text = None
         fingerprint_source = "|".join((route, *landmarks, str(active or "")))
         fingerprint = hashlib.sha256(fingerprint_source.encode()).hexdigest()
@@ -192,6 +202,22 @@ class PlaywrightSurfaceSession:
             active_element=str(active) if active else None,
             dialog_text=dialog_text,
         )
+
+    def _read_observation_state(self) -> tuple[str, tuple[str, ...], object]:
+        frame = self._application_frame()
+        raw_route = urlsplit(frame.url if frame is not None else self.page.url).path
+        route = self._normalize_route(raw_route)
+        root: Page | Frame = frame or self.page
+        landmarks = tuple(
+            text.strip()
+            for text in root.locator("h1,h2,h3,label,th").all_inner_texts()
+            if text.strip()
+        )[:40]
+        active = root.evaluate(
+            "() => document.activeElement?.getAttribute('aria-label') || "
+            "document.activeElement?.getAttribute('name') || document.activeElement?.tagName"
+        )
+        return route, landmarks, active
 
     def capture_provider_frame(self) -> bytes:
         try:
