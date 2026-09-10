@@ -14,6 +14,7 @@ class RuntimeSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="REPLAYFORGE_", env_file=".env", extra="ignore")
 
     artifact_directory: Path = Path("capabilities")
+    evidence_directory: Path = Path("evidence/runtime")
     demo_base_url: str = "http://127.0.0.1:3001"
     browser_headless: bool = True
     openai_api_key: SecretStr | None = None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import time
@@ -171,11 +172,12 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
         driver.close()
 
 
-def test_registered_artifact_replays_end_to_end(demo_bank: str) -> None:
+def test_registered_artifact_replays_end_to_end(demo_bank: str, tmp_path: Path) -> None:
     repository = Path(__file__).resolve().parents[3]
     runtime = build_runtime(
         RuntimeSettings(
             artifact_directory=repository / "capabilities",
+            evidence_directory=tmp_path / "evidence",
             demo_base_url=demo_bank,
         )
     )
@@ -199,6 +201,10 @@ def test_registered_artifact_replays_end_to_end(demo_bank: str) -> None:
         event_types = [event.event_type for event in runtime.journals[result.run_id].events()]
         assert event_types[0] == "replay_started"
         assert event_types[-1] == "checkpoint_verified"
+        manifest_path = tmp_path / "evidence" / result.evidence_manifest.removeprefix("evidence://")
+        manifest = json.loads(manifest_path.read_text())
+        assert manifest["run_id"] == result.run_id
+        assert len(manifest["events"]) == len(event_types)
         assert runtime.live_drivers == {}
     finally:
         runtime.close()

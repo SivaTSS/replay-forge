@@ -73,6 +73,7 @@ This runs formatting, lint, strict typing, the 90% branch-coverage gate, fronten
 - `backend/src/replayforge/` — domain, services, adapters, and ASGI composition
 - `apps/demo-bank/` — two-tenant synthetic target with controlled faults
 - `capabilities/` — reviewed immutable YAML versions
+- `evidence/` — local redacted event blobs and immutable hash manifests produced at runtime
 - `schemas/` — artifact JSON Schema
 - `docs/` — architecture, safety, handoff, API, testing, and traceability specifications
 - `REPORT.md` — assignment report and deliberate cuts
@@ -81,4 +82,4 @@ Start with [the documentation index](docs/README.md) and [requirement traceabili
 
 ## Current boundaries
 
-The local runtime currently uses thread-safe in-memory metadata adapters; PostgreSQL repository contracts are specified but not yet implemented. Same-session preservation, leases, and intervention HTTP operations are implemented; live frame/input streaming and the operator control plane remain follow-on work. These limits are explicit so a reviewer cannot mistake a mock or UI-only path for a completed safety control.
+Run evidence is written atomically to the configured local evidence directory; registry, lease, and intervention metadata remain thread-safe and in-memory, with PostgreSQL repository contracts specified but not yet implemented. Same-session preservation, leases, and intervention HTTP operations are implemented; live frame/input streaming and the operator control plane remain follow-on work. These limits are explicit so a reviewer cannot mistake a mock or UI-only path for a completed safety control.

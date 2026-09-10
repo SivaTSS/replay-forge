@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
+from replayforge.evidence.local_store import LocalEvidenceStore
+from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.shared.clock import FrozenClock
@@ -64,3 +69,57 @@ def test_journal_rejects_cross_run_event() -> None:
 
     with pytest.raises(ValueError, match="different run"):
         recorder.record("replay_started", str(new_id(EntityKind.RUN)))
+
+
+def test_journal_persists_redacted_events_and_latest_manifest(tmp_path: Path) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "evidence", clock)
+    recorder = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+
+    recorder.record(
+        "policy_evaluated",
+        recorder.run_id,
+        details={"decision": "allow", "authorization_token": "must-not-survive"},
+    )
+    recorder.record("replay_failed", recorder.run_id, details={"code": "target_missing"})
+
+    manifest = json.loads(store.read(recorder.evidence_manifest_key))
+    assert manifest["schema_version"] == "1.0"
+    assert manifest["run_id"] == recorder.run_id
+    assert [entry["retention_class"] for entry in manifest["events"]] == [
+        "operational",
+        "failure",
+    ]
+    assert manifest["events"][0]["redaction_directives"] == ["drop:authorization_token"]
+    assert [entry["key"] for entry in manifest["events"]] != [recorder.evidence_manifest_key]
+    for sequence, entry in enumerate(manifest["events"], start=1):
+        content = store.read(entry["key"])
+        event = json.loads(content)
+        assert event["sequence"] == sequence
+        assert entry["content_hash"] == f"sha256:{hashlib.sha256(content).hexdigest()}"
+        assert "must-not-survive" not in content.decode()
+
+
+class FailingEvidenceStore:
+    def write(
+        self,
+        run_id: str,
+        kind: str,
+        payload: SanitizedEvidence,
+        retention_class: RetentionClass,
+    ) -> EvidenceRecord:
+        del run_id, kind, payload, retention_class
+        raise OSError("evidence volume unavailable")
+
+    def read(self, _key: str) -> bytes:
+        raise AssertionError("not used")
+
+
+def test_journal_does_not_retain_event_when_evidence_write_fails() -> None:
+    recorder = journal()
+    recorder.evidence_store = FailingEvidenceStore()
+
+    with pytest.raises(OSError, match="unavailable"):
+        recorder.record("replay_started", recorder.run_id)
+
+    assert recorder.events() == ()

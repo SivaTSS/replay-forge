@@ -18,6 +18,8 @@ from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.compiler import SavingsBalanceCompiler
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult
+from replayforge.evidence.local_store import LocalEvidenceStore
+from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
@@ -195,6 +197,10 @@ def build_runtime(settings: object) -> LocalRuntime:
         raise TypeError("settings must be RuntimeSettings")
     clock = SystemClock()
     registry = load_registry(settings.artifact_directory)
+    evidence_store = LocalEvidenceStore(settings.evidence_directory, clock)
+    configured_secrets = (
+        (settings.openai_api_key.get_secret_value(),) if settings.openai_api_key is not None else ()
+    )
     lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
     interventions = InMemoryInterventionRouter(clock)
     journals: dict[str, InMemoryRunJournal] = {}
@@ -202,7 +208,12 @@ def build_runtime(settings: object) -> LocalRuntime:
     lock = Lock()
 
     def executor_factory(run_id: str, record: CapabilityVersionRecord) -> ReplayExecutor:
-        journal = InMemoryRunJournal(run_id, clock)
+        journal = InMemoryRunJournal(
+            run_id,
+            clock,
+            StructuredRedactor(configured_secrets=configured_secrets),
+            evidence_store,
+        )
         with lock:
             journals[run_id] = journal
         driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
@@ -235,7 +246,12 @@ def build_runtime(settings: object) -> LocalRuntime:
     def discovery_factory(run_id: str) -> DiscoveryExecutor:
         if provider is None:
             raise RuntimeError("discovery provider is not configured")
-        journal = InMemoryRunJournal(run_id, clock)
+        journal = InMemoryRunJournal(
+            run_id,
+            clock,
+            StructuredRedactor(configured_secrets=configured_secrets),
+            evidence_store,
+        )
         with lock:
             journals[run_id] = journal
         driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
