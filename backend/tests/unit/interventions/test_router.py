@@ -88,3 +88,46 @@ def test_unknown_intervention_is_not_found() -> None:
         router.get(unknown)
     with pytest.raises(InterventionNotFoundError):
         router.observation(unknown)
+
+
+def test_compare_and_swap_rejects_stale_status_and_identity_change() -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    router = InMemoryInterventionRouter(clock)
+    intervention_id = str(new_id(EntityKind.INTERVENTION))
+    run_id = str(new_id(EntityKind.RUN))
+    session_id = new_id(EntityKind.SESSION)
+    observation = NormalizedObservation(
+        id=new_id(EntityKind.EVENT),
+        session_id=session_id,
+        captured_at=clock.now(),
+        route="/members/search",
+        viewport=Viewport(1280, 800),
+        fingerprint="state",
+        landmarks=(),
+    )
+    router.create(
+        intervention_id=intervention_id,
+        run_id=run_id,
+        session_id=str(session_id),
+        code="stuck",
+        step_id=None,
+        observation=observation,
+    )
+    current = router.get(intervention_id)
+
+    with pytest.raises(InterventionConflictError, match="stale"):
+        router.compare_and_swap(intervention_id, InterventionStatus.CLAIMED, current)
+    with pytest.raises(ValueError, match="immutable"):
+        router.compare_and_swap(
+            intervention_id,
+            InterventionStatus.OPEN,
+            current.__class__(
+                id=new_id(EntityKind.INTERVENTION),
+                run_id=current.run_id,
+                session_id=current.session_id,
+                trigger_code=current.trigger_code,
+                explanation=current.explanation,
+                status=current.status,
+                created_at=current.created_at,
+            ),
+        )

@@ -81,3 +81,25 @@ class InMemoryInterventionRouter:
                 for intervention in self._interventions.values()
                 if intervention.status is InterventionStatus.OPEN
             )
+
+    def compare_and_swap(
+        self,
+        intervention_id: str,
+        expected_status: InterventionStatus,
+        replacement: Intervention,
+    ) -> Intervention:
+        with self._lock:
+            current = self._interventions.get(intervention_id)
+            if current is None:
+                raise InterventionNotFoundError(intervention_id)
+            if current.status is not expected_status:
+                raise InterventionConflictError("intervention status is stale")
+            if (
+                replacement.id != current.id
+                or replacement.run_id != current.run_id
+                or replacement.session_id != current.session_id
+                or replacement.created_at != current.created_at
+            ):
+                raise ValueError("intervention replacement cannot change immutable identity")
+            self._interventions[intervention_id] = replacement
+            return replacement
