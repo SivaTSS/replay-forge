@@ -22,7 +22,7 @@ from replayforge.interventions.models import (
     OwnerKind,
 )
 from replayforge.interventions.router import InterventionNotFoundError
-from replayforge.interventions.service import InterventionTransition
+from replayforge.interventions.service import InterventionResume, InterventionTransition
 from replayforge.runs.results import (
     CapabilityReference,
     RunResult,
@@ -81,6 +81,7 @@ class FakeDiscoveryInvoker:
 class FakeInterventionInvoker:
     transition: InterventionTransition
     frame: bytes = b"\x89PNG\r\n\x1a\nframe"
+    resume_result: RunResult | None = None
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.transition
@@ -97,8 +98,8 @@ class FakeInterventionInvoker:
 
     def begin_resume(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
-    ) -> InterventionTransition:
-        return self.transition
+    ) -> InterventionResume:
+        return InterventionResume(self.transition, self.resume_result)
 
     def viewport(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
@@ -374,6 +375,35 @@ def test_intervention_heartbeat_returns_rotated_lease() -> None:
 
     assert response.status_code == 200
     assert response.json()["lease_version"] == transition.lease.version
+
+
+def test_intervention_resume_returns_typed_terminal_result() -> None:
+    transition = intervention_transition()
+    result = SuccessResult(
+        status="success",
+        run_id=str(transition.intervention.run_id),
+        capability=CapabilityReference(id="member.lookup", version="1.0.0"),
+        outputs={"balance": "1420.57"},
+        checkpoint=VerifiedCheckpoint(id="balance_verified", verified=True),
+        evidence_manifest="evidence://test/manifest.json",
+    )
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition, resume_result=result),
+            )
+        )
+    )
+
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/resume",
+        json={"expected_lease_version": 3, "operator_id": "operator-7"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["result"]["status"] == "success"
+    assert response.json()["result"]["checkpoint"]["verified"] is True
 
 
 def test_intervention_input_accepts_frame_bound_pointer_command() -> None:

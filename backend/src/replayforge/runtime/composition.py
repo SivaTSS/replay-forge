@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
 from pathlib import Path
@@ -11,6 +12,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 from replayforge.api.services import ApiServices
+from replayforge.capabilities.models import BusinessOutcome
 from replayforge.capabilities.registry import (
     CapabilityRegistry,
     CapabilityVersionRecord,
@@ -39,13 +41,19 @@ from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.interventions.service import (
     InterventionAuthorizationError,
     InterventionCoordinator,
+    InterventionResume,
     InterventionTransition,
 )
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import DataClassification, Risk
 from replayforge.providers.openai import OpenAIModelProvider
-from replayforge.replay.engine import ReplayEngine, ReplayRequest
+from replayforge.replay.engine import (
+    ReplayContinuation,
+    ReplayEngine,
+    ReplayRequest,
+    ResumeValidationError,
+)
 from replayforge.runs.discovery_service import DiscoveryApplicationService, DiscoveryExecutor
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.runs.results import (
@@ -155,6 +163,12 @@ class LiveBrowserSession:
         return HumanInputReceipt(command.client_sequence, command.source_frame_sequence)
 
 
+@dataclass(frozen=True, slots=True)
+class ManagedReplayContinuation:
+    validate: Callable[[], BusinessOutcome | None]
+    resume: Callable[[int, BusinessOutcome | None], RunResult]
+
+
 @dataclass(slots=True)
 class ManagedReplayExecutor:
     engine: ReplayEngine
@@ -209,6 +223,8 @@ class RuntimeInterventionService:
     live_sessions: dict[str, LiveBrowserSession]
     journals: dict[str, InMemoryRunJournal]
     lock: Lock
+    replay_continuations: dict[str, ManagedReplayContinuation] = field(default_factory=dict)
+    replay_result_finalizer: Callable[[RunResult], RunResult] | None = None
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.coordinator.get(intervention_id)
@@ -235,13 +251,99 @@ class RuntimeInterventionService:
 
     def begin_resume(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
-    ) -> InterventionTransition:
+    ) -> InterventionResume:
         with self.lock:
-            transition = self.coordinator.begin_resume(
+            started = self.coordinator.begin_resume(
                 intervention_id, expected_lease_version, operator_id
             )
             self._invalidate_frame(intervention_id)
-            return transition
+            session = self.live_sessions.get(intervention_id)
+            managed = self.replay_continuations.get(intervention_id)
+            journal = self.journals.get(str(started.intervention.run_id))
+        if session is None or journal is None:
+            with self.lock:
+                reopened = self.coordinator.reopen(
+                    intervention_id,
+                    "The retained session or run journal is unavailable.",
+                )
+            return InterventionResume(reopened)
+        if managed is None:
+            journal.record(
+                "resume_rejected",
+                str(started.intervention.run_id),
+                details={"code": "continuation_unavailable"},
+            )
+            with self.lock:
+                reopened = self.coordinator.reopen(
+                    intervention_id,
+                    "A deterministic continuation is unavailable for this intervention.",
+                )
+            return InterventionResume(reopened)
+        try:
+            outcome = session.worker.call(managed.validate)
+        except ResumeValidationError as error:
+            journal.record(
+                "resume_rejected",
+                str(started.intervention.run_id),
+                details={"code": error.code},
+            )
+            with self.lock:
+                reopened = self.coordinator.reopen(intervention_id, error.safe_message)
+            return InterventionResume(reopened)
+
+        with self.lock:
+            resumed = self.coordinator.complete_resume(
+                intervention_id,
+                started.lease.version,
+                "Fresh state satisfied the interrupted step contract.",
+            )
+            self.replay_continuations.pop(intervention_id, None)
+        journal.record(
+            "automation_resumed",
+            str(started.intervention.run_id),
+            details={"lease_version": resumed.lease.version},
+        )
+        try:
+            result = session.worker.call(lambda: managed.resume(resumed.lease.version, outcome))
+        except BaseException:
+            journal.record(
+                "resume_failed",
+                str(started.intervention.run_id),
+                details={"code": "resume_execution_failed"},
+            )
+            result = FailureResult(
+                status="failure",
+                run_id=str(started.intervention.run_id),
+                code="resume_execution_failed",
+                message="Automation could not continue after validated human handoff.",
+                recoverable=False,
+                evidence_manifest=journal.evidence_manifest_key,
+            )
+        if isinstance(result, InterventionRequiredResult):
+            with self.lock:
+                retained = self.live_sessions.pop(intervention_id)
+                self.live_sessions[result.intervention_id] = retained
+            return InterventionResume(resumed, result)
+
+        try:
+            finalized = (
+                self.replay_result_finalizer(result)
+                if self.replay_result_finalizer is not None
+                else result
+            )
+        except BaseException:
+            self._close_session(intervention_id)
+            raise
+        self._close_session(intervention_id)
+        return InterventionResume(resumed, finalized)
+
+    def _close_session(self, intervention_id: str) -> None:
+        with self.lock:
+            completed_session = self.live_sessions.get(intervention_id)
+            if completed_session is not None:
+                del self.live_sessions[intervention_id]
+        if completed_session is not None:
+            completed_session.close()
 
     def viewport(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
@@ -391,6 +493,7 @@ def build_runtime(settings: object) -> LocalRuntime:
     journals: dict[str, InMemoryRunJournal] = {}
     result_classifications: dict[str, dict[str, DataClassification]] = {}
     live_sessions: dict[str, LiveBrowserSession] = {}
+    replay_continuations: dict[str, ManagedReplayContinuation] = {}
     lock = Lock()
 
     def executor_factory(run_id: str, record: CapabilityVersionRecord) -> ReplayExecutor:
@@ -412,6 +515,17 @@ def build_runtime(settings: object) -> LocalRuntime:
             }
         driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
         worker = SerialSessionWorker(run_id)
+        engine: ReplayEngine
+
+        def retain_continuation(continuation: ReplayContinuation) -> None:
+            with lock:
+                replay_continuations[continuation.intervention_id] = ManagedReplayContinuation(
+                    validate=lambda: engine.validate_resume(continuation),
+                    resume=lambda lease_version, outcome: engine.resume(
+                        continuation, lease_version, outcome
+                    ),
+                )
+
         engine = ReplayEngine(
             driver,
             PolicyEvaluator(clock),
@@ -419,6 +533,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             lease_service,
             journal,
             interventions,
+            continuation_sink=retain_continuation,
         )
         return ManagedReplayExecutor(engine, driver, worker, live_sessions, lock)
 
@@ -525,7 +640,12 @@ def build_runtime(settings: object) -> LocalRuntime:
         finalize_discovery,
     )
     intervention_service = RuntimeInterventionService(
-        InterventionCoordinator(interventions, lease_service), live_sessions, journals, lock
+        InterventionCoordinator(interventions, lease_service),
+        live_sessions,
+        journals,
+        lock,
+        replay_continuations,
+        finalize_replay,
     )
     return LocalRuntime(
         service,

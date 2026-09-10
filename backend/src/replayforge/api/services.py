@@ -11,7 +11,7 @@ from replayforge.interventions.models import (
     HumanInputReceipt,
     InterventionFrame,
 )
-from replayforge.interventions.service import InterventionTransition
+from replayforge.interventions.service import InterventionResume, InterventionTransition
 from replayforge.runs.results import RunResult
 
 
@@ -56,7 +56,7 @@ class InterventionInvoker(Protocol):
 
     def begin_resume(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
-    ) -> InterventionTransition: ...
+    ) -> InterventionResume: ...
 
     def viewport(
         self, intervention_id: str, expected_lease_version: int, operator_id: str

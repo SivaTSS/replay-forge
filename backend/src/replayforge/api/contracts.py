@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from replayforge.runs.results import RunResult
+
 
 class ApiModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -71,6 +73,10 @@ class InterventionTransitionResponse(ApiModel):
     control_owner: str
     lease_version: int
     lease_expires_at: str
+
+
+class ResumeInterventionResponse(InterventionTransitionResponse):
+    result: RunResult | None = None
 
 
 class PointerInputPayload(ApiModel):

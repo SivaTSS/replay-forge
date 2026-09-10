@@ -22,6 +22,7 @@ from replayforge.api.contracts import (
     KeyInputPayload,
     LeaseTransitionRequest,
     ReplayInvocation,
+    ResumeInterventionResponse,
     TerminateInterventionRequest,
     TextInputPayload,
 )
@@ -235,16 +236,21 @@ def create_app(services: ApiServices) -> FastAPI:
 
     @app.post(
         "/api/v1/interventions/{intervention_id}/resume",
-        response_model=InterventionTransitionResponse,
+        response_model=ResumeInterventionResponse,
     )
     def resume_intervention(
         request: Request, intervention_id: str, body: LeaseTransitionRequest
-    ) -> InterventionTransitionResponse | JSONResponse:
+    ) -> ResumeInterventionResponse | JSONResponse:
         invoker = _intervention_invoker(request, services)
         if isinstance(invoker, JSONResponse):
             return invoker
-        return _transition_response(
-            invoker.begin_resume(intervention_id, body.expected_lease_version, body.operator_id)
+        resume = invoker.begin_resume(
+            intervention_id, body.expected_lease_version, body.operator_id
+        )
+        transition = _transition_response(resume.transition)
+        return ResumeInterventionResponse(
+            **transition.model_dump(),
+            result=resume.result,
         )
 
     @app.get(

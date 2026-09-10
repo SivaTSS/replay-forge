@@ -14,6 +14,7 @@ from replayforge.interventions.models import (
     OwnerKind,
 )
 from replayforge.interventions.router import InMemoryInterventionRouter
+from replayforge.runs.results import RunResult
 
 
 class InterventionAuthorizationError(ValueError):
@@ -24,6 +25,12 @@ class InterventionAuthorizationError(ValueError):
 class InterventionTransition:
     intervention: Intervention
     lease: ControlLease
+
+
+@dataclass(frozen=True, slots=True)
+class InterventionResume:
+    transition: InterventionTransition
+    result: RunResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +81,28 @@ class InterventionCoordinator:
         )
         updated = self.interventions.compare_and_swap(
             intervention_id, InterventionStatus.CLAIMED, replacement
+        )
+        return InterventionTransition(updated, lease)
+
+    def reopen(self, intervention_id: str, explanation: str) -> InterventionTransition:
+        current = self.interventions.get(intervention_id)
+        replacement = current.reopen(explanation)
+        updated = self.interventions.compare_and_swap(
+            intervention_id, InterventionStatus.RESUMING, replacement
+        )
+        lease = self.leases.repository.get(str(current.session_id))
+        if lease.owner != PAUSED_OWNER:
+            raise RuntimeError("a reopened intervention must retain paused ownership")
+        return InterventionTransition(updated, lease)
+
+    def complete_resume(
+        self, intervention_id: str, expected_lease_version: int, resolution: str
+    ) -> InterventionTransition:
+        current = self.interventions.get(intervention_id)
+        replacement = current.resolve(resolution)
+        lease = self.leases.complete_resume(str(current.session_id), expected_lease_version)
+        updated = self.interventions.compare_and_swap(
+            intervention_id, InterventionStatus.RESUMING, replacement
         )
         return InterventionTransition(updated, lease)
 

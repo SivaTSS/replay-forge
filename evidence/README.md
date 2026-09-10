@@ -20,7 +20,7 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bun
 
 - Genuine paid-provider discovery: provider integration is implemented, but no runtime OpenAI credential is available in this environment.
 - Recovery and hard-failure bundles.
-- Exported same-session human-handoff evidence bundle; a real Chromium integration already verifies retained-session input and metadata-only audit events.
+- Exported same-session human-handoff evidence bundle; a real Chromium integration already verifies retained-session input, metadata-only audit events, fresh-state revalidation, deterministic continuation, terminal evidence, and teardown.
 - Selected redacted screenshots and Playwright trace archives.
 
 These omissions remain visible by design. Unit or integration fixtures are never represented as genuine run evidence.

@@ -11,6 +11,12 @@ type Intervention = {
   lease_version: number;
   lease_expires_at: string;
 };
+type RunResult = {
+  status: "success" | "business_outcome" | "failure" | "intervention_required";
+  code?: string;
+  intervention_id?: string;
+};
+type TransitionResponse = Intervention & { result?: RunResult | null };
 
 type ErrorBody = { code?: string; message?: string };
 type HumanKey = "Enter" | "Escape" | "Tab" | "Shift+Tab" | "Backspace" | "Delete" | "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
@@ -43,6 +49,7 @@ export default function InterventionConsole() {
   const [pending, setPending] = useState(false);
   const [manualText, setManualText] = useState("");
   const [manualKey, setManualKey] = useState<HumanKey>("Enter");
+  const [resumeResult, setResumeResult] = useState<RunResult | null>(null);
   const mutationInFlight = useRef(false);
 
   const requestTransition = useCallback(
@@ -65,7 +72,18 @@ export default function InterventionConsole() {
             body: JSON.stringify(payload),
           },
         );
-        setIntervention(await readJson<Intervention>(response));
+        const next = await readJson<TransitionResponse>(response);
+        setResumeResult(next.result ?? null);
+        if (next.result?.status === "intervention_required" && next.result.intervention_id) {
+          const followUp = await fetch(
+            `/runtime/api/v1/interventions/${encodeURIComponent(next.result.intervention_id)}`,
+            { cache: "no-store" },
+          );
+          setIntervention(await readJson<Intervention>(followUp));
+          setInterventionId(next.result.intervention_id);
+        } else {
+          setIntervention(next);
+        }
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Runtime request failed.");
       } finally {
@@ -218,6 +236,7 @@ export default function InterventionConsole() {
         { cache: "no-store" },
       );
       setIntervention(await readJson<Intervention>(response));
+      setResumeResult(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Intervention lookup failed.");
     } finally {
@@ -257,6 +276,12 @@ export default function InterventionConsole() {
       </section>
 
       {error ? <div className="error" role="alert">{error}</div> : null}
+      {resumeResult ? (
+        <div className={`result result-${resumeResult.status}`} role="status">
+          Resume result: {resumeResult.status.replaceAll("_", " ")}
+          {resumeResult.code ? ` · ${resumeResult.code}` : ""}
+        </div>
+      ) : null}
       {intervention ? (
         <section className="workspace" aria-live="polite">
           <div className="viewport-panel">

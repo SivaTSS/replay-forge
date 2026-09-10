@@ -63,6 +63,26 @@ def test_claim_release_and_resume_transitions_share_lease_version() -> None:
     assert resuming.intervention.status is InterventionStatus.RESUMING
     assert resuming.lease.owner.kind is OwnerKind.AUTOMATION_PAUSED
 
+    reopened = service.reopen(intervention_id, "Checkpoint no longer matches.")
+    assert reopened.intervention.status is InterventionStatus.OPEN
+    assert reopened.intervention.operator_id is None
+    assert reopened.lease == resuming.lease
+
+
+def test_completed_resume_returns_control_to_automation() -> None:
+    service, intervention_id = coordinator()
+    claimed = service.claim(intervention_id, 2, "operator-7")
+    resuming = service.begin_resume(intervention_id, claimed.lease.version, "operator-7")
+
+    completed = service.complete_resume(
+        intervention_id, resuming.lease.version, "Resume checkpoint verified."
+    )
+
+    assert completed.intervention.status is InterventionStatus.RESOLVED
+    assert completed.intervention.resolution == "Resume checkpoint verified."
+    assert completed.lease.owner == AUTOMATION_OWNER
+    assert completed.lease.version == resuming.lease.version + 1
+
 
 def test_stale_claim_and_wrong_operator_fail_closed() -> None:
     service, intervention_id = coordinator()

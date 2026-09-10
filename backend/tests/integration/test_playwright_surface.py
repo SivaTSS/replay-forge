@@ -25,6 +25,11 @@ from replayforge.capabilities.models import (
     RouteCondition,
     TypeAction,
 )
+from replayforge.capabilities.serialization import (
+    artifact_content_hash,
+    dump_artifact_yaml,
+    load_artifact_yaml,
+)
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.interventions.leases import (
@@ -36,7 +41,11 @@ from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.interventions.service import InterventionCoordinator
 from replayforge.policy.types import Risk
 from replayforge.runs.journal import InMemoryRunJournal
-from replayforge.runs.results import BusinessOutcomeResult, SuccessResult
+from replayforge.runs.results import (
+    BusinessOutcomeResult,
+    InterventionRequiredResult,
+    SuccessResult,
+)
 from replayforge.runtime.composition import (
     LiveBrowserSession,
     RuntimeInterventionService,
@@ -46,7 +55,13 @@ from replayforge.runtime.settings import RuntimeSettings
 from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
 from replayforge.shared.ids import EntityKind, new_id
-from replayforge.surfaces.models import HumanPointerInput, HumanTextInput, Viewport
+from replayforge.surfaces.models import (
+    HumanKey,
+    HumanKeyInput,
+    HumanPointerInput,
+    HumanTextInput,
+    Viewport,
+)
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
@@ -371,3 +386,88 @@ def test_human_input_controls_original_browser_session(demo_bank: str) -> None:
             "operator-7",
             "Integration test complete.",
         )
+
+
+def test_replay_resumes_after_validated_same_session_handoff(
+    demo_bank: str, tmp_path: Path
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    artifact = load_artifact_yaml(
+        (repository / "capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
+    )
+    steps = list(artifact.steps)
+    steps[1] = steps[1].model_copy(update={"risk": Risk.SENSITIVE})
+    modified = artifact.model_copy(
+        update={
+            "capability": artifact.capability.model_copy(update={"risk": Risk.SENSITIVE}),
+            "steps": tuple(steps),
+            "policy": artifact.policy.model_copy(update={"maximum_risk": Risk.SENSITIVE}),
+            "provenance": artifact.provenance.model_copy(update={"artifact_content_hash": None}),
+        }
+    )
+    modified = modified.model_copy(
+        update={
+            "provenance": modified.provenance.model_copy(
+                update={"artifact_content_hash": artifact_content_hash(modified)}
+            )
+        }
+    )
+    artifact_path = tmp_path / "capabilities/member.lookup_savings_balance/1.0.0.yaml"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text(dump_artifact_yaml(modified))
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=tmp_path / "capabilities",
+            evidence_directory=tmp_path / "evidence",
+            demo_base_url=demo_bank,
+        )
+    )
+
+    try:
+        paused = runtime.service.invoke(
+            "member.lookup_savings_balance",
+            "1.0.0",
+            "harbor",
+            {"member_id": "12345"},
+        )
+        assert isinstance(paused, InterventionRequiredResult)
+        open_transition = runtime.intervention_service.get(paused.intervention_id)
+        claimed = runtime.intervention_service.claim(
+            paused.intervention_id, open_transition.lease.version, "operator-7"
+        )
+        frame = runtime.intervention_service.viewport(
+            paused.intervention_id, claimed.lease.version, "operator-7"
+        )
+        runtime.intervention_service.send_input(
+            paused.intervention_id,
+            claimed.lease.version,
+            "operator-7",
+            HumanInputCommand(
+                client_sequence=frame.next_client_sequence,
+                source_frame_sequence=frame.sequence,
+                viewport=frame.viewport,
+                action=HumanKeyInput(HumanKey.ENTER),
+            ),
+        )
+
+        completed = runtime.intervention_service.begin_resume(
+            paused.intervention_id, claimed.lease.version, "operator-7"
+        )
+
+        assert isinstance(completed.result, SuccessResult)
+        assert completed.result.outputs["member_id"] == "12345"
+        assert completed.result.outputs["available_balance"] == "1420.57"
+        assert completed.result.checkpoint.verified
+        assert completed.transition.intervention.status.value == "resolved"
+        event_types = [event.event_type for event in runtime.journals[paused.run_id].events()]
+        assert "human_input_applied" in event_types
+        assert "resume_checkpoint_verified" in event_types
+        assert "automation_resumed" in event_types
+        assert runtime.live_sessions == {}
+        verification = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
+            completed.result.evidence_manifest,
+        )
+        assert verification.terminal_result_verified
+    finally:
+        runtime.close()

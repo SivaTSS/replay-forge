@@ -57,6 +57,8 @@ class FakeSurfaceSession:
     closed: bool = False
     static_fingerprint: bool = False
     observation_count: int = 0
+    route: str = "/members/search"
+    postconditions_valid: bool = True
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     origin: str = "http://demo.local:3001"
 
@@ -66,7 +68,7 @@ class FakeSurfaceSession:
             id=new_id(EntityKind.EVENT),
             session_id=self.session_id,
             captured_at=datetime(2026, 9, 10, 12, 30, tzinfo=UTC),
-            route="/members/search",
+            route=self.route,
             viewport=Viewport(1280, 800),
             fingerprint=(
                 "stable-fingerprint"
@@ -115,6 +117,8 @@ class FakeSurfaceSession:
             return condition.output in outputs
         if isinstance(condition, TextCondition) and condition.value == "No member found":
             return self.member_not_found
+        if isinstance(condition, TextCondition) and condition.value == "Member Results":
+            return self.postconditions_valid
         return True
 
     def extract(self, target: ResolvedTarget) -> str:
@@ -420,6 +424,121 @@ def test_replay_continuation_rejects_unchanged_human_state(
     with pytest.raises(ResumeValidationError, match="has not changed"):
         engine.validate_resume(continuations[0])
     assert session.closed is False
+
+
+def test_replay_continuation_returns_human_discovered_business_outcome(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["risk"] = "sensitive"
+    session = FakeSurfaceSession()
+    continuations: list[ReplayContinuation] = []
+    engine, recorder, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+    paused_result = engine.execute(request_for(valid_artifact_data, "123456789"))
+    assert isinstance(paused_result, InterventionRequiredResult)
+    session.member_not_found = True
+
+    outcome = engine.validate_resume(continuations[0])
+    resumed_result = engine.resume(continuations[0], automation_lease_version=5, outcome=outcome)
+
+    assert isinstance(resumed_result, BusinessOutcomeResult)
+    assert resumed_result.code == "member_not_found"
+    assert resumed_result.details == {"member_id": "***6789"}
+    assert session.closed is True
+    assert ("resume_checkpoint_verified", "search.submit") in recorder.events
+
+
+def test_replay_continuation_rejects_disallowed_location(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["postconditions"] = [
+        {"kind": "text", "value": "Member Results", "match": "exact"}
+    ]
+    session = FakeSurfaceSession()
+    continuations: list[ReplayContinuation] = []
+    engine, _, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+    session.origin = "https://outside.example"
+
+    with pytest.raises(ResumeValidationError, match="outside") as captured:
+        engine.validate_resume(continuations[0])
+
+    assert captured.value.code == "resume_location_not_allowed"
+
+
+def test_replay_continuation_requires_declared_postcondition(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["risk"] = "sensitive"
+    session = FakeSurfaceSession()
+    continuations: list[ReplayContinuation] = []
+    engine, _, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+
+    with pytest.raises(ResumeValidationError, match="no declared postcondition") as captured:
+        engine.validate_resume(continuations[0])
+
+    assert captured.value.code == "resume_checkpoint_missing"
+
+
+def test_replay_continuation_rejects_postcondition_mismatch(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["postconditions"] = [
+        {"kind": "text", "value": "Member Results", "match": "exact"}
+    ]
+    session = FakeSurfaceSession()
+    continuations: list[ReplayContinuation] = []
+    engine, _, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+    session.postconditions_valid = False
+
+    with pytest.raises(ResumeValidationError, match="does not satisfy") as captured:
+        engine.validate_resume(continuations[0])
+
+    assert captured.value.code == "resume_checkpoint_mismatch"
+
+
+def test_replay_continuation_validates_index(valid_artifact_data: dict[str, Any]) -> None:
+    session = FakeSurfaceSession()
+    engine, _, _ = build_engine(session)
+    invalid = ReplayContinuation(
+        intervention_id=str(new_id(EntityKind.INTERVENTION)),
+        request=request_for(valid_artifact_data),
+        session=session,
+        inputs={"member_id": "12345"},
+        outputs={},
+        interrupted_step_index=999,
+        initial_fingerprint="state",
+    )
+
+    with pytest.raises(ValueError, match="outside the artifact"):
+        engine.validate_resume(invalid)
 
 
 def test_invalid_extracted_output_is_a_typed_failure(

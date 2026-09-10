@@ -91,7 +91,7 @@ Intervention result includes intervention/session IDs, trigger, current step, ri
 - `GET /api/v1/interventions/{id}` returns context, state, lease summary, and allowed transitions.
 - `POST /api/v1/interventions/{id}/claim` requires expected lease version and returns a new version.
 - `POST /api/v1/interventions/{id}/release` returns control to paused automation.
-- `POST /api/v1/interventions/{id}/resume` starts deterministic revalidation; it does not immediately declare resumption.
+- `POST /api/v1/interventions/{id}/resume` performs deterministic replay revalidation and returns the updated intervention plus a typed terminal or subsequent-intervention result when continuation runs. A mismatch returns the intervention to `open`; unavailable discovery continuation also reopens safely.
 - `GET /api/v1/interventions/{id}/viewport` returns a bounded, non-cacheable PNG plus frame-sequence, viewport-dimension, and next-client-sequence headers only to the operator holding the exact live lease version.
 - `POST /api/v1/interventions/{id}/heartbeat` renews claimed human ownership and returns the next monotonic lease version.
 - `POST /api/v1/interventions/{id}/input` accepts a bounded left-click, text insertion, or allowlisted navigation key tied to the exact lease, latest frame, viewport dimensions, and next client sequence. Typed text is never retained in audit evidence.

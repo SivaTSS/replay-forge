@@ -20,6 +20,9 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid #68e0b8; ou
 button { min-height: 42px; border: 0; border-radius: 7px; background: #68e0b8; color: #07111f; padding: 0 16px; font-weight: 800; cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .38; }
 .error { margin-bottom: 20px; padding: 12px 14px; border: 1px solid #ff8b8266; border-radius: 8px; background: #5b1e2466; color: #ffc4bf; }
+.result { margin-bottom: 20px; padding: 12px 14px; border: 1px solid #7d9ac066; border-radius: 8px; background: #18325299; color: #d8e8fb; text-transform: capitalize; }
+.result-success { border-color: #68e0b866; background: #12453599; color: #a8f5da; }
+.result-failure { border-color: #ff8b8266; background: #5b1e2466; color: #ffc4bf; }
 .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; }
 .viewport-panel, aside { border: 1px solid #2b405b; background: #0a1728dd; border-radius: 12px; box-shadow: 0 16px 50px #0005; }
 .panel-heading { min-height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #2b405b; }

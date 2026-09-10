@@ -201,6 +201,8 @@ Potentially sensitive controls use an explicit confirmation panel showing the ex
 
 Automation never resumes based only on an operator button click.
 
+The current replay implementation retains a typed continuation containing the interrupted step index, validated inputs, accumulated outputs, original session, and initial fingerprint. Resume revalidates the effective origin/route policy, declared business outcomes, every interrupted-step postcondition, and an observable state change on the browser-owner thread. Failure returns the intervention to `OPEN`; success returns the lease to automation, skips the already human-completed step, executes only the remaining deterministic steps, finalizes evidence exactly once, and closes the session. A subsequent escalation rebinds the same live session to its new intervention ID. Discovery-loop continuation remains a documented follow-on and safely reopens rather than pretending to resume.
+
 ## 11. Resume checkpoint
 
 The checkpoint identifies acceptable post-human states. It may require:
