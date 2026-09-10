@@ -10,8 +10,9 @@ uv sync --extra dev --frozen
 npx --yes pnpm@10.15.1 install --frozen-lockfile
 uv run ruff format --check backend scripts pyproject.toml
 uv run ruff check backend scripts
-uv run mypy backend/src backend/tests scripts/verify_evidence.py scripts/export_evidence.py
+uv run mypy backend/src backend/tests scripts/verify_evidence.py scripts/export_evidence.py scripts/verify_evidence_bundles.py
 uv run pytest --ignore=backend/tests/integration --cov=replayforge --cov-report=term-missing -q
+uv run python scripts/verify_evidence_bundles.py evidence
 npx --yes pnpm@10.15.1 typecheck
 npx --yes pnpm@10.15.1 build
 uv run pytest backend/tests/integration -q

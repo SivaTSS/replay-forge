@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 
 from replayforge.capabilities.serialization import load_artifact_yaml
-from replayforge.evidence.export import EvidenceExportRequest, export_evidence_bundle
+from replayforge.evidence.export import (
+    EvidenceBundleIntegrityError,
+    EvidenceExportRequest,
+    export_evidence_bundle,
+    verify_evidence_bundle,
+)
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.evidence.redaction import EvidenceRejectedError
 from replayforge.policy.types import DataClassification
@@ -62,6 +67,65 @@ def test_export_writes_stable_verified_bundle(tmp_path: Path) -> None:
     )
     assert manifest["files"]["result.json"]["size_bytes"] == len(result)
     assert json.loads(result)["outputs"]["balance"] == "[REDACTED_FINANCIAL]"
+    assert verify_evidence_bundle(destination).run_id == journal.run_id
+
+
+def test_bundle_verifier_rejects_tampering(tmp_path: Path) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    (destination / "result.json").write_text("{}")
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="hash or size"):
+        verify_evidence_bundle(destination)
+
+
+def test_bundle_verifier_rejects_missing_file(tmp_path: Path) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    (destination / "events.jsonl").unlink()
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="missing"):
+        verify_evidence_bundle(destination)
+
+
+@pytest.mark.parametrize("mutation", ["scenario", "event_sequence", "result_run"])
+def test_bundle_verifier_rejects_semantic_inconsistency(tmp_path: Path, mutation: str) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if mutation == "scenario":
+        manifest["scenario"] = "different-scenario"
+    elif mutation == "event_sequence":
+        events_path = destination / "events.jsonl"
+        events = [json.loads(line) for line in events_path.read_text().splitlines()]
+        events[0]["sequence"] = 9
+        content = b"".join(
+            json.dumps(event, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+            for event in events
+        )
+        events_path.write_bytes(content)
+        manifest["files"]["events.jsonl"] = {
+            "content_hash": f"sha256:{hashlib.sha256(content).hexdigest()}",
+            "size_bytes": len(content),
+        }
+    else:
+        result_path = destination / "result.json"
+        result = json.loads(result_path.read_text())
+        result["run_id"] = str(new_id(EntityKind.RUN))
+        content = json.dumps(result, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        result_path.write_bytes(content)
+        manifest["files"]["result.json"] = {
+            "content_hash": f"sha256:{hashlib.sha256(content).hexdigest()}",
+            "size_bytes": len(content),
+        }
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(EvidenceBundleIntegrityError):
+        verify_evidence_bundle(destination)
 
 
 def test_export_refuses_to_replace_existing_evidence(tmp_path: Path) -> None:

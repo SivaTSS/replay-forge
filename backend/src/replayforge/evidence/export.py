@@ -8,11 +8,20 @@ import re
 import shutil
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.capabilities.serialization import artifact_content_hash
-from replayforge.evidence.integrity import RunEvidenceManifest, verify_run_manifest
+from replayforge.evidence.integrity import (
+    EventEvidence,
+    RunEvidenceManifest,
+    TerminalResultEvidence,
+    verify_run_manifest,
+)
 from replayforge.evidence.ports import EvidenceStore
 from replayforge.evidence.redaction import StructuredRedactor
 
@@ -49,6 +58,57 @@ class EvidenceExport:
     destination: Path
     run_id: str
     manifest_hash: str
+
+
+class EvidenceBundleIntegrityError(ValueError):
+    """Raised when an exported reviewer bundle is incomplete or inconsistent."""
+
+
+class _BundleModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class BundleFile(_BundleModel):
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    size_bytes: int = Field(ge=0, le=20_000_000)
+
+
+class BundleArtifact(_BundleModel):
+    capability_id: str = Field(pattern=r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    version: str = Field(pattern=r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
+
+
+class BundleRedaction(_BundleModel):
+    directives: tuple[str, ...]
+    source_manifest_verified: Literal[True]
+
+
+class BundleSourceManifest(_BundleModel):
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    key: str = Field(pattern=r"^evidence://.+$")
+
+
+class EvidenceBundleManifest(_BundleModel):
+    artifact: BundleArtifact
+    commands: tuple[str, ...] = Field(min_length=1, max_length=20)
+    commit_sha: str = Field(pattern=r"^[0-9a-f]{7,40}$")
+    files: dict[Literal["events.jsonl", "result.json"], BundleFile]
+    generated_at: datetime
+    redaction: BundleRedaction
+    run_id: str
+    scenario: str = Field(pattern=r"^[a-z][a-z0-9-]{1,63}$")
+    schema_version: Literal["evidence-bundle.v1"]
+    source_manifest: BundleSourceManifest
+
+    @field_validator("files")
+    @classmethod
+    def require_all_files(
+        cls, value: dict[Literal["events.jsonl", "result.json"], BundleFile]
+    ) -> dict[Literal["events.jsonl", "result.json"], BundleFile]:
+        if set(value) != {"events.jsonl", "result.json"}:
+            raise ValueError("bundle must declare exactly the required files")
+        return value
 
 
 def export_evidence_bundle(
@@ -122,6 +182,54 @@ def export_evidence_bundle(
         shutil.rmtree(temporary, ignore_errors=True)
         raise
     return EvidenceExport(destination, source.run_id, verification.manifest_hash)
+
+
+def verify_evidence_bundle(directory: Path) -> EvidenceExport:
+    """Verify a stable bundle without requiring its transient source store."""
+
+    try:
+        manifest_content = (directory / "manifest.json").read_bytes()
+        manifest = EvidenceBundleManifest.model_validate_json(manifest_content)
+    except (OSError, ValidationError) as error:
+        raise EvidenceBundleIntegrityError("evidence bundle manifest is invalid") from error
+    if directory.name != manifest.scenario:
+        raise EvidenceBundleIntegrityError("bundle directory does not match its scenario")
+
+    content_by_name: dict[str, bytes] = {}
+    for name, declared in manifest.files.items():
+        try:
+            content = (directory / name).read_bytes()
+        except OSError as error:
+            raise EvidenceBundleIntegrityError("evidence bundle file is missing") from error
+        if _file_metadata(content) != declared.model_dump(mode="python"):
+            raise EvidenceBundleIntegrityError("evidence bundle file hash or size does not match")
+        content_by_name[name] = content
+
+    events = [line for line in content_by_name["events.jsonl"].splitlines() if line]
+    if not events:
+        raise EvidenceBundleIntegrityError("evidence bundle has no events")
+    for sequence, content in enumerate(events, start=1):
+        try:
+            event = EventEvidence.model_validate_json(content)
+        except ValidationError as error:
+            raise EvidenceBundleIntegrityError("evidence bundle event is invalid") from error
+        if event.run_id != manifest.run_id or event.sequence != sequence:
+            raise EvidenceBundleIntegrityError("evidence bundle events are not ordered for the run")
+    try:
+        result = TerminalResultEvidence.model_validate_json(content_by_name["result.json"])
+    except ValidationError as error:
+        raise EvidenceBundleIntegrityError("evidence bundle result is invalid") from error
+    if result.run_id != manifest.run_id:
+        raise EvidenceBundleIntegrityError("evidence bundle result belongs to a different run")
+
+    StructuredRedactor().sanitize_json(
+        manifest.model_dump(mode="json"), {}, run_salt=manifest.run_id
+    )
+    return EvidenceExport(
+        directory,
+        manifest.run_id,
+        f"sha256:{hashlib.sha256(manifest_content).hexdigest()}",
+    )
 
 
 def _file_metadata(content: bytes) -> dict[str, object]:
