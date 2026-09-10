@@ -60,6 +60,10 @@ from replayforge.shared.ids import EntityId, EntityKind, new_id
 from replayforge.surfaces.models import (
     ActionReceipt,
     ActionStatus,
+    HumanInput,
+    HumanKeyInput,
+    HumanPointerInput,
+    HumanTextInput,
     NormalizedObservation,
     ResolvedTarget,
     SurfaceError,
@@ -121,6 +125,11 @@ class PlaywrightSurfaceDriver:
         if self.active_session is None:
             raise SurfaceError("session_missing", "No active surface session is available.")
         return self.active_session.capture_live_frame()
+
+    def execute_active_human_input(self, action: HumanInput) -> None:
+        if self.active_session is None:
+            raise SurfaceError("session_missing", "No active surface session is available.")
+        self.active_session.execute_human_input(action)
 
     def close(self) -> None:
         if self.browser is not None:
@@ -198,6 +207,30 @@ class PlaywrightSurfaceSession:
             content=self.capture_provider_frame(),
             viewport=Viewport(viewport["width"], viewport["height"]),
         )
+
+    def execute_human_input(self, action: HumanInput) -> None:
+        try:
+            if isinstance(action, HumanPointerInput):
+                viewport = self.page.viewport_size or {"width": 1280, "height": 800}
+                if action.x >= viewport["width"] or action.y >= viewport["height"]:
+                    raise SurfaceError(
+                        "pointer_out_of_bounds",
+                        "Pointer coordinates are outside the current viewport.",
+                        effect_absent=True,
+                    )
+                self.page.mouse.click(action.x, action.y, button="left")
+            elif isinstance(action, HumanTextInput):
+                self.page.keyboard.insert_text(action.text)
+            elif isinstance(action, HumanKeyInput):
+                self.page.keyboard.press(action.key.value)
+            else:
+                raise TypeError("unsupported human input action")
+        except SurfaceError:
+            raise
+        except Exception as exc:
+            raise SurfaceError(
+                "human_input_failed", "The human input could not be applied."
+            ) from exc
 
     def resolve(self, target: LocatorBundle, timeout_ms: int) -> ResolvedTarget:
         root = self._scoped_root(target)

@@ -6,6 +6,7 @@ import subprocess
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from threading import Lock
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -26,12 +27,26 @@ from replayforge.capabilities.models import (
 )
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
+from replayforge.interventions.leases import (
+    ControlLeaseService,
+    InMemoryControlLeaseRepository,
+)
+from replayforge.interventions.models import HumanInputCommand
+from replayforge.interventions.router import InMemoryInterventionRouter
+from replayforge.interventions.service import InterventionCoordinator
 from replayforge.policy.types import Risk
+from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.runs.results import BusinessOutcomeResult, SuccessResult
-from replayforge.runtime.composition import build_runtime
+from replayforge.runtime.composition import (
+    LiveBrowserSession,
+    RuntimeInterventionService,
+    build_runtime,
+)
 from replayforge.runtime.settings import RuntimeSettings
+from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
-from replayforge.surfaces.models import Viewport
+from replayforge.shared.ids import EntityKind, new_id
+from replayforge.surfaces.models import HumanPointerInput, HumanTextInput, Viewport
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
@@ -263,3 +278,96 @@ def test_registered_artifact_returns_real_member_not_found_outcome(
         assert verification.terminal_result_verified
     finally:
         runtime.close()
+
+
+def test_human_input_controls_original_browser_session(demo_bank: str) -> None:
+    clock = SystemClock()
+    driver = PlaywrightSurfaceDriver(demo_bank)
+    worker = SerialSessionWorker("handoff-integration")
+    session = worker.call(
+        lambda: driver.open("northstar_member_service", "harbor", "member_search")
+    )
+    leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
+    router = InMemoryInterventionRouter(clock)
+    run_id = str(new_id(EntityKind.RUN))
+    intervention_id = str(new_id(EntityKind.INTERVENTION))
+    initial = leases.create_for_automation(str(session.session_id))
+    paused = leases.pause(str(session.session_id), initial.version, intervention_id)
+    observation = worker.call(session.observe)
+    router.create(
+        intervention_id=intervention_id,
+        run_id=run_id,
+        session_id=str(session.session_id),
+        code="unexpected_dialog",
+        step_id="search.member_id",
+        observation=observation,
+    )
+    journal = InMemoryRunJournal(run_id, clock)
+    service = RuntimeInterventionService(
+        InterventionCoordinator(router, leases),
+        {intervention_id: LiveBrowserSession(worker, driver)},
+        {run_id: journal},
+        Lock(),
+    )
+    claimed = service.claim(intervention_id, paused.version, "operator-7")
+
+    try:
+        member_field = worker.call(
+            lambda: session.page.frame_locator('iframe[title="Member operations"]')
+            .get_by_label("Member ID", exact=True)
+            .bounding_box()
+        )
+        assert member_field is not None
+        frame = service.viewport(intervention_id, claimed.lease.version, "operator-7")
+        service.send_input(
+            intervention_id,
+            claimed.lease.version,
+            "operator-7",
+            HumanInputCommand(
+                client_sequence=frame.next_client_sequence,
+                source_frame_sequence=frame.sequence,
+                viewport=frame.viewport,
+                action=HumanPointerInput(
+                    int(member_field["x"] + member_field["width"] / 2),
+                    int(member_field["y"] + member_field["height"] / 2),
+                ),
+            ),
+        )
+        frame = service.viewport(intervention_id, claimed.lease.version, "operator-7")
+        service.send_input(
+            intervention_id,
+            claimed.lease.version,
+            "operator-7",
+            HumanInputCommand(
+                client_sequence=frame.next_client_sequence,
+                source_frame_sequence=frame.sequence,
+                viewport=frame.viewport,
+                action=HumanTextInput("67890"),
+            ),
+        )
+
+        assert (
+            worker.call(
+                lambda: session.page.frame_locator('iframe[title="Member operations"]')
+                .get_by_label("Member ID", exact=True)
+                .input_value()
+            )
+            == "67890"
+        )
+        assert driver.active_session is session
+        assert str(driver.active_session.session_id) == str(session.session_id)
+        events = journal.events()
+        assert [event.event_type for event in events] == [
+            "human_input_dispatched",
+            "human_input_applied",
+            "human_input_dispatched",
+            "human_input_applied",
+        ]
+        assert "67890" not in repr(events)
+    finally:
+        service.terminate(
+            intervention_id,
+            service.get(intervention_id).lease.version,
+            "operator-7",
+            "Integration test complete.",
+        )

@@ -1,6 +1,6 @@
 # Frontend and UX Specification
 
-> Implementation status: the current `apps/control-plane` vertical slice implements intervention lookup, exclusive claim, renewable heartbeat, lease-guarded viewport polling, release, begin-resume, and termination. The broader navigation and authoring surfaces below remain the product architecture, not a claim of completed UI breadth.
+> Implementation status: the current `apps/control-plane` vertical slice implements intervention lookup, exclusive claim, renewable heartbeat, ordered lease-guarded viewport polling, bounded pointer/text/key forwarding, release, begin-resume, and termination. The broader navigation and authoring surfaces below remain the product architecture, not a claim of completed UI breadth.
 
 ## Experience objective
 

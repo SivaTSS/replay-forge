@@ -28,6 +28,9 @@ from replayforge.interventions.leases import (
 )
 from replayforge.interventions.models import (
     ControlOwner,
+    HumanInputCommand,
+    HumanInputConflictError,
+    HumanInputReceipt,
     InterventionFrame,
     InterventionStatus,
     OwnerKind,
@@ -53,7 +56,7 @@ from replayforge.runs.results import (
 from replayforge.runs.service import ReplayApplicationService, ReplayExecutor
 from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
-from replayforge.surfaces.models import SurfaceFrame
+from replayforge.surfaces.models import HumanInput, SurfaceError, SurfaceFrame
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 _ALLOWED_ROUTES = frozenset({"/members/search", "/accounts/:account_id/details"})
@@ -108,12 +111,16 @@ class RetainedSurfaceDriver(Protocol):
 
     def capture_active_frame(self) -> SurfaceFrame: ...
 
+    def execute_active_human_input(self, action: HumanInput) -> None: ...
+
 
 @dataclass(slots=True)
 class LiveBrowserSession:
     worker: SerialSessionWorker
     driver: RetainedSurfaceDriver
     frame_sequence: int = 0
+    latest_frame: InterventionFrame | None = None
+    last_client_sequence: int = 0
 
     def close(self) -> None:
         self.worker.close(self.driver.close)
@@ -121,7 +128,31 @@ class LiveBrowserSession:
     def capture_frame(self) -> InterventionFrame:
         frame = self.worker.call(self.driver.capture_active_frame)
         self.frame_sequence += 1
-        return InterventionFrame(frame.content, self.frame_sequence, frame.viewport)
+        self.latest_frame = InterventionFrame(
+            frame.content,
+            self.frame_sequence,
+            frame.viewport,
+            self.last_client_sequence + 1,
+        )
+        return self.latest_frame
+
+    def validate_input(self, command: HumanInputCommand) -> None:
+        if command.client_sequence != self.last_client_sequence + 1:
+            raise HumanInputConflictError("client input sequence is stale or out of order")
+        if self.latest_frame is None or command.source_frame_sequence != self.latest_frame.sequence:
+            raise HumanInputConflictError("source frame is stale or unavailable")
+        if command.viewport != self.latest_frame.viewport:
+            raise HumanInputConflictError("source viewport dimensions are stale")
+
+    def invalidate_frame(self) -> None:
+        self.latest_frame = None
+
+    def apply_input(self, command: HumanInputCommand) -> HumanInputReceipt:
+        self.validate_input(command)
+        self.last_client_sequence = command.client_sequence
+        self.latest_frame = None
+        self.worker.call(lambda: self.driver.execute_active_human_input(command.action))
+        return HumanInputReceipt(command.client_sequence, command.source_frame_sequence)
 
 
 @dataclass(slots=True)
@@ -176,6 +207,7 @@ class ManagedDiscoveryExecutor:
 class RuntimeInterventionService:
     coordinator: InterventionCoordinator
     live_sessions: dict[str, LiveBrowserSession]
+    journals: dict[str, InMemoryRunJournal]
     lock: Lock
 
     def get(self, intervention_id: str) -> InterventionTransition:
@@ -185,21 +217,31 @@ class RuntimeInterventionService:
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
         with self.lock:
-            return self.coordinator.claim(intervention_id, expected_lease_version, operator_id)
+            transition = self.coordinator.claim(
+                intervention_id, expected_lease_version, operator_id
+            )
+            self._invalidate_frame(intervention_id)
+            return transition
 
     def release(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
         with self.lock:
-            return self.coordinator.release(intervention_id, expected_lease_version, operator_id)
+            transition = self.coordinator.release(
+                intervention_id, expected_lease_version, operator_id
+            )
+            self._invalidate_frame(intervention_id)
+            return transition
 
     def begin_resume(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
         with self.lock:
-            return self.coordinator.begin_resume(
+            transition = self.coordinator.begin_resume(
                 intervention_id, expected_lease_version, operator_id
             )
+            self._invalidate_frame(intervention_id)
+            return transition
 
     def viewport(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
@@ -230,7 +272,69 @@ class RuntimeInterventionService:
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
         with self.lock:
-            return self.coordinator.heartbeat(intervention_id, expected_lease_version, operator_id)
+            transition = self.coordinator.heartbeat(
+                intervention_id, expected_lease_version, operator_id
+            )
+            self._invalidate_frame(intervention_id)
+            return transition
+
+    def send_input(
+        self,
+        intervention_id: str,
+        expected_lease_version: int,
+        operator_id: str,
+        command: HumanInputCommand,
+    ) -> HumanInputReceipt:
+        with self.lock:
+            transition = self.coordinator.get(intervention_id)
+            if (
+                transition.intervention.status is not InterventionStatus.CLAIMED
+                or transition.intervention.operator_id != operator_id
+            ):
+                raise InterventionAuthorizationError("operator does not own this intervention")
+            self.coordinator.leases.assert_can_act(
+                str(transition.intervention.session_id),
+                expected_lease_version,
+                ControlOwner(OwnerKind.HUMAN, operator_id),
+            )
+            session = self.live_sessions.get(intervention_id)
+            journal = self.journals.get(str(transition.intervention.run_id))
+            if session is None or journal is None:
+                raise InterventionAuthorizationError("live intervention session is unavailable")
+            session.validate_input(command)
+            details = {
+                **command.audit_details(),
+                "intervention_id": intervention_id,
+                "operator_id": operator_id,
+                "session_id": str(transition.intervention.session_id),
+            }
+            journal.record(
+                "human_input_dispatched", str(transition.intervention.run_id), details=details
+            )
+            try:
+                receipt = session.apply_input(command)
+            except BaseException as error:
+                failure_details = {
+                    **details,
+                    "error_code": (
+                        error.code if isinstance(error, SurfaceError) else "input_dispatch_failed"
+                    ),
+                }
+                journal.record(
+                    "human_input_failed",
+                    str(transition.intervention.run_id),
+                    details=failure_details,
+                )
+                raise
+            journal.record(
+                "human_input_applied", str(transition.intervention.run_id), details=details
+            )
+            return receipt
+
+    def _invalidate_frame(self, intervention_id: str) -> None:
+        session = self.live_sessions.get(intervention_id)
+        if session is not None:
+            session.invalidate_frame()
 
     def terminate(
         self,
@@ -421,7 +525,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         finalize_discovery,
     )
     intervention_service = RuntimeInterventionService(
-        InterventionCoordinator(interventions, lease_service), live_sessions, lock
+        InterventionCoordinator(interventions, lease_service), live_sessions, journals, lock
     )
     return LocalRuntime(
         service,

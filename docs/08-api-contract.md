@@ -92,12 +92,13 @@ Intervention result includes intervention/session IDs, trigger, current step, ri
 - `POST /api/v1/interventions/{id}/claim` requires expected lease version and returns a new version.
 - `POST /api/v1/interventions/{id}/release` returns control to paused automation.
 - `POST /api/v1/interventions/{id}/resume` starts deterministic revalidation; it does not immediately declare resumption.
-- `GET /api/v1/interventions/{id}/viewport` returns a bounded, non-cacheable PNG only to the operator holding the exact live lease version.
+- `GET /api/v1/interventions/{id}/viewport` returns a bounded, non-cacheable PNG plus frame-sequence, viewport-dimension, and next-client-sequence headers only to the operator holding the exact live lease version.
 - `POST /api/v1/interventions/{id}/heartbeat` renews claimed human ownership and returns the next monotonic lease version.
+- `POST /api/v1/interventions/{id}/input` accepts a bounded left-click, text insertion, or allowlisted navigation key tied to the exact lease, latest frame, viewport dimensions, and next client sequence. Typed text is never retained in audit evidence.
 - `POST /api/v1/interventions/{id}/complete` requires a verifiable manual-completion contract.
 - `POST /api/v1/interventions/{id}/terminate` safely closes the run after final evidence.
 
-All ownership mutations return `409` on stale lease versions.
+All ownership mutations return `409` on stale lease versions. Human input also returns `409` for an already-used/out-of-order client sequence or stale source frame.
 
 ## Applications and tenants
 

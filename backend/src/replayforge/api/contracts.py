@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ApiModel(BaseModel):
@@ -71,3 +71,60 @@ class InterventionTransitionResponse(ApiModel):
     control_owner: str
     lease_version: int
     lease_expires_at: str
+
+
+class PointerInputPayload(ApiModel):
+    kind: Literal["pointer"]
+    x: int = Field(ge=0, lt=8_192)
+    y: int = Field(ge=0, lt=8_192)
+
+
+class TextInputPayload(ApiModel):
+    kind: Literal["text"]
+    text: str = Field(min_length=1, max_length=1_000)
+
+
+class KeyInputPayload(ApiModel):
+    kind: Literal["key"]
+    key: Literal[
+        "Enter",
+        "Escape",
+        "Tab",
+        "Shift+Tab",
+        "Backspace",
+        "Delete",
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+    ]
+
+
+HumanInputPayload = Annotated[
+    PointerInputPayload | TextInputPayload | KeyInputPayload,
+    Field(discriminator="kind"),
+]
+
+
+class HumanInputRequest(ApiModel):
+    expected_lease_version: int = Field(ge=1)
+    operator_id: str = Field(pattern=r"^[A-Za-z0-9_.@-]{2,100}$")
+    client_sequence: int = Field(ge=1, le=2_147_483_647)
+    source_frame_sequence: int = Field(ge=1, le=2_147_483_647)
+    viewport_width: int = Field(ge=1, le=8_192)
+    viewport_height: int = Field(ge=1, le=8_192)
+    input: HumanInputPayload
+
+    @model_validator(mode="after")
+    def validate_pointer_bounds(self) -> HumanInputRequest:
+        if isinstance(self.input, PointerInputPayload) and (
+            self.input.x >= self.viewport_width or self.input.y >= self.viewport_height
+        ):
+            raise ValueError("pointer coordinates must fall inside the source viewport")
+        return self
+
+
+class HumanInputResponse(ApiModel):
+    accepted: Literal[True]
+    client_sequence: int
+    source_frame_sequence: int

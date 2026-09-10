@@ -14,6 +14,8 @@ from replayforge.interventions.leases import LeaseConflictError
 from replayforge.interventions.models import (
     ControlLease,
     ControlOwner,
+    HumanInputCommand,
+    HumanInputReceipt,
     Intervention,
     InterventionFrame,
     InterventionStatus,
@@ -101,12 +103,21 @@ class FakeInterventionInvoker:
     def viewport(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionFrame:
-        return InterventionFrame(self.frame, 17, Viewport(1280, 800))
+        return InterventionFrame(self.frame, 17, Viewport(1280, 800), 9)
 
     def heartbeat(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
         return self.transition
+
+    def send_input(
+        self,
+        intervention_id: str,
+        expected_lease_version: int,
+        operator_id: str,
+        command: HumanInputCommand,
+    ) -> HumanInputReceipt:
+        return HumanInputReceipt(command.client_sequence, command.source_frame_sequence)
 
     def terminate(
         self,
@@ -341,6 +352,7 @@ def test_intervention_viewport_is_non_cacheable_png() -> None:
     assert response.headers["x-replayforge-frame-sequence"] == "17"
     assert response.headers["x-replayforge-viewport-width"] == "1280"
     assert response.headers["x-replayforge-viewport-height"] == "800"
+    assert response.headers["x-replayforge-next-client-sequence"] == "9"
     assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
@@ -362,6 +374,95 @@ def test_intervention_heartbeat_returns_rotated_lease() -> None:
 
     assert response.status_code == 200
     assert response.json()["lease_version"] == transition.lease.version
+
+
+def test_intervention_input_accepts_frame_bound_pointer_command() -> None:
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    )
+
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/input",
+        json={
+            "expected_lease_version": 3,
+            "operator_id": "operator-7",
+            "client_sequence": 9,
+            "source_frame_sequence": 17,
+            "viewport_width": 1280,
+            "viewport_height": 800,
+            "input": {"kind": "pointer", "x": 320, "y": 240},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "accepted": True,
+        "client_sequence": 9,
+        "source_frame_sequence": 17,
+    }
+
+
+def test_intervention_input_validation_does_not_echo_text() -> None:
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    )
+    sensitive_marker = "never-echo-this-human-input"
+
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/input",
+        json={
+            "expected_lease_version": 3,
+            "operator_id": "operator-7",
+            "client_sequence": 1,
+            "source_frame_sequence": 17,
+            "viewport_width": 1280,
+            "viewport_height": 800,
+            "input": {"kind": "text", "text": sensitive_marker, "unexpected": True},
+        },
+    )
+
+    assert response.status_code == 422
+    assert sensitive_marker not in response.text
+
+
+def test_intervention_input_rejects_pointer_outside_declared_viewport() -> None:
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    )
+
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/input",
+        json={
+            "expected_lease_version": 3,
+            "operator_id": "operator-7",
+            "client_sequence": 1,
+            "source_frame_sequence": 17,
+            "viewport_width": 1280,
+            "viewport_height": 800,
+            "input": {"kind": "pointer", "x": 1280, "y": 200},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "request_validation_failed"
 
 
 def test_intervention_runtime_absence_is_retryable() -> None:

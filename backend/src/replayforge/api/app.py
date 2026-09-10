@@ -16,10 +16,14 @@ from replayforge.api.contracts import (
     DiscoveryInvocation,
     ErrorBody,
     HealthResponse,
+    HumanInputRequest,
+    HumanInputResponse,
     InterventionTransitionResponse,
+    KeyInputPayload,
     LeaseTransitionRequest,
     ReplayInvocation,
     TerminateInterventionRequest,
+    TextInputPayload,
 )
 from replayforge.api.services import ApiServices
 from replayforge.capabilities.registry import CapabilityNotFoundError
@@ -31,7 +35,11 @@ from replayforge.capabilities.serialization import (
 )
 from replayforge.discovery.models import DiscoverySuccess
 from replayforge.interventions.leases import LeaseConflictError, LeaseNotFoundError
-from replayforge.interventions.models import InterventionTransitionError
+from replayforge.interventions.models import (
+    HumanInputCommand,
+    HumanInputConflictError,
+    InterventionTransitionError,
+)
 from replayforge.interventions.router import (
     InterventionConflictError,
     InterventionNotFoundError,
@@ -41,6 +49,14 @@ from replayforge.interventions.service import (
     InterventionTransition,
 )
 from replayforge.shared.ids import EntityKind, new_id
+from replayforge.surfaces.models import (
+    HumanInput,
+    HumanKey,
+    HumanKeyInput,
+    HumanPointerInput,
+    HumanTextInput,
+    Viewport,
+)
 
 _CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{8,100}$")
 
@@ -94,6 +110,7 @@ def create_app(services: ApiServices) -> FastAPI:
 
     for not_found_error in (InterventionNotFoundError, LeaseNotFoundError):
         app.add_exception_handler(not_found_error, _intervention_not_found)
+    app.add_exception_handler(HumanInputConflictError, _human_input_conflict)
     for conflict_error in (
         LeaseConflictError,
         InterventionConflictError,
@@ -255,6 +272,7 @@ def create_app(services: ApiServices) -> FastAPI:
                 "x-replayforge-frame-sequence": str(frame.sequence),
                 "x-replayforge-viewport-width": str(frame.viewport.width),
                 "x-replayforge-viewport-height": str(frame.viewport.height),
+                "x-replayforge-next-client-sequence": str(frame.next_client_sequence),
             },
         )
 
@@ -270,6 +288,40 @@ def create_app(services: ApiServices) -> FastAPI:
             return invoker
         return _transition_response(
             invoker.heartbeat(intervention_id, body.expected_lease_version, body.operator_id)
+        )
+
+    @app.post(
+        "/api/v1/interventions/{intervention_id}/input",
+        response_model=HumanInputResponse,
+    )
+    def intervention_input(
+        request: Request, intervention_id: str, body: HumanInputRequest
+    ) -> HumanInputResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        action: HumanInput
+        if isinstance(body.input, TextInputPayload):
+            action = HumanTextInput(body.input.text)
+        elif isinstance(body.input, KeyInputPayload):
+            action = HumanKeyInput(HumanKey(body.input.key))
+        else:
+            action = HumanPointerInput(body.input.x, body.input.y)
+        receipt = invoker.send_input(
+            intervention_id,
+            body.expected_lease_version,
+            body.operator_id,
+            HumanInputCommand(
+                client_sequence=body.client_sequence,
+                source_frame_sequence=body.source_frame_sequence,
+                viewport=Viewport(body.viewport_width, body.viewport_height),
+                action=action,
+            ),
+        )
+        return HumanInputResponse(
+            accepted=True,
+            client_sequence=receipt.client_sequence,
+            source_frame_sequence=receipt.source_frame_sequence,
         )
 
     @app.post(
@@ -330,6 +382,16 @@ async def _intervention_conflict(request: Request, error: Exception) -> JSONResp
         status_code=409,
         code="intervention_transition_conflict",
         message="The intervention state or control lease is stale.",
+    )
+
+
+async def _human_input_conflict(request: Request, error: Exception) -> JSONResponse:
+    del error
+    return _error_response(
+        request,
+        status_code=409,
+        code="human_input_conflict",
+        message="The input lease, sequence, or source frame is stale.",
     )
 
 

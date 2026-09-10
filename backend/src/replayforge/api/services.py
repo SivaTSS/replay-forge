@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from replayforge.discovery.models import DiscoveryResult
-from replayforge.interventions.models import InterventionFrame
+from replayforge.interventions.models import (
+    HumanInputCommand,
+    HumanInputReceipt,
+    InterventionFrame,
+)
 from replayforge.interventions.service import InterventionTransition
 from replayforge.runs.results import RunResult
 
@@ -61,6 +65,14 @@ class InterventionInvoker(Protocol):
     def heartbeat(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition: ...
+
+    def send_input(
+        self,
+        intervention_id: str,
+        expected_lease_version: int,
+        operator_id: str,
+        command: HumanInputCommand,
+    ) -> HumanInputReceipt: ...
 
     def terminate(
         self,

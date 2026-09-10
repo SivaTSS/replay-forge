@@ -66,6 +66,46 @@ class SurfaceFrame:
             raise ValueError("surface frame content cannot be empty")
 
 
+class HumanKey(StrEnum):
+    ENTER = "Enter"
+    ESCAPE = "Escape"
+    TAB = "Tab"
+    SHIFT_TAB = "Shift+Tab"
+    BACKSPACE = "Backspace"
+    DELETE = "Delete"
+    ARROW_UP = "ArrowUp"
+    ARROW_DOWN = "ArrowDown"
+    ARROW_LEFT = "ArrowLeft"
+    ARROW_RIGHT = "ArrowRight"
+
+
+@dataclass(frozen=True, slots=True)
+class HumanPointerInput:
+    x: int
+    y: int
+
+    def __post_init__(self) -> None:
+        if self.x < 0 or self.y < 0:
+            raise ValueError("pointer coordinates cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class HumanTextInput:
+    text: str
+
+    def __post_init__(self) -> None:
+        if not 1 <= len(self.text) <= 1_000:
+            raise ValueError("human text input must contain between 1 and 1000 characters")
+
+
+@dataclass(frozen=True, slots=True)
+class HumanKeyInput:
+    key: HumanKey
+
+
+type HumanInput = HumanPointerInput | HumanTextInput | HumanKeyInput
+
+
 @dataclass(frozen=True, slots=True)
 class NormalizedObservation:
     id: EntityId

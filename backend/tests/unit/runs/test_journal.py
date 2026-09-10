@@ -101,6 +101,21 @@ def test_journal_persists_redacted_events_and_latest_manifest(tmp_path: Path) ->
         assert "must-not-survive" not in content.decode()
 
 
+def test_journal_retains_human_input_as_human_audit_evidence(tmp_path: Path) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "evidence", clock)
+    recorder = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+
+    recorder.record(
+        "human_input_applied",
+        recorder.run_id,
+        details={"input_type": "text", "character_count": 5},
+    )
+
+    manifest = json.loads(store.read(recorder.evidence_manifest_key))
+    assert manifest["events"][0]["retention_class"] == "human_audit"
+
+
 class FailingEvidenceStore:
     def write(
         self,

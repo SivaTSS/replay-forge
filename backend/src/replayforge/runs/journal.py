@@ -210,7 +210,7 @@ def _manifest_record(record: EvidenceRecord) -> dict[str, object]:
 def _retention_class(event_type: str) -> RetentionClass:
     if event_type.endswith("_failed"):
         return RetentionClass.FAILURE
-    if event_type == "intervention_required":
+    if event_type == "intervention_required" or event_type.startswith("human_input_"):
         return RetentionClass.HUMAN_AUDIT
     return RetentionClass.OPERATIONAL
 

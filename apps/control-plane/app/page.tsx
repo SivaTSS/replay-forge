@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type Intervention = {
   intervention_id: string;
@@ -13,10 +13,16 @@ type Intervention = {
 };
 
 type ErrorBody = { code?: string; message?: string };
+type HumanKey = "Enter" | "Escape" | "Tab" | "Shift+Tab" | "Backspace" | "Delete" | "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
+type HumanInput =
+  | { kind: "pointer"; x: number; y: number }
+  | { kind: "text"; text: string }
+  | { kind: "key"; key: HumanKey };
 type ViewportFrame = {
   sequence: number;
   width: number;
   height: number;
+  nextClientSequence: number;
 };
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -35,10 +41,14 @@ export default function InterventionConsole() {
   const [viewportFrame, setViewportFrame] = useState<ViewportFrame | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [manualText, setManualText] = useState("");
+  const [manualKey, setManualKey] = useState<HumanKey>("Enter");
+  const mutationInFlight = useRef(false);
 
   const requestTransition = useCallback(
     async (transition: "claim" | "release" | "resume" | "heartbeat" | "terminate") => {
-      if (!intervention) return;
+      if (!intervention || mutationInFlight.current) return;
+      mutationInFlight.current = true;
       setPending(true);
       setError(null);
       try {
@@ -59,6 +69,7 @@ export default function InterventionConsole() {
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Runtime request failed.");
       } finally {
+        mutationInFlight.current = false;
         setPending(false);
       }
     },
@@ -82,7 +93,12 @@ export default function InterventionConsole() {
         const sequence = Number(response.headers.get("x-replayforge-frame-sequence"));
         const width = Number(response.headers.get("x-replayforge-viewport-width"));
         const height = Number(response.headers.get("x-replayforge-viewport-height"));
-        if (![sequence, width, height].every(Number.isSafeInteger)) {
+        const nextClientSequence = Number(response.headers.get("x-replayforge-next-client-sequence"));
+        if (
+          ![sequence, width, height, nextClientSequence].every(
+            (value) => Number.isSafeInteger(value) && value > 0,
+          )
+        ) {
           throw new Error("Live viewport metadata is invalid.");
         }
         const nextUrl = URL.createObjectURL(await response.blob());
@@ -90,9 +106,14 @@ export default function InterventionConsole() {
           if (previous) URL.revokeObjectURL(previous);
           return nextUrl;
         });
-        setViewportFrame({ sequence, width, height });
+        setViewportFrame({ sequence, width, height, nextClientSequence });
       } catch (cause) {
         if (!controller.signal.aborted) {
+          setViewportFrame(null);
+          setViewportUrl((previous) => {
+            if (previous) URL.revokeObjectURL(previous);
+            return null;
+          });
           setError(cause instanceof Error ? cause.message : "Viewport request failed.");
         }
       }
@@ -106,6 +127,14 @@ export default function InterventionConsole() {
   }, [intervention, operatorId]);
 
   useEffect(() => {
+    setViewportFrame(null);
+    setViewportUrl((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return null;
+    });
+  }, [intervention?.lease_version]);
+
+  useEffect(() => {
     if (!intervention || intervention.control_owner !== `human:${operatorId}`) return;
     const interval = window.setInterval(() => void requestTransition("heartbeat"), 10_000);
     return () => window.clearInterval(interval);
@@ -117,6 +146,67 @@ export default function InterventionConsole() {
     },
     [viewportUrl],
   );
+
+  const sendInput = useCallback(
+    async (input: HumanInput) => {
+      if (!intervention || !viewportFrame || intervention.control_owner !== `human:${operatorId}` || mutationInFlight.current) return false;
+      mutationInFlight.current = true;
+      setPending(true);
+      setError(null);
+      try {
+        const response = await fetch(
+          `/runtime/api/v1/interventions/${encodeURIComponent(intervention.intervention_id)}/input`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              expected_lease_version: intervention.lease_version,
+              operator_id: operatorId,
+              client_sequence: viewportFrame.nextClientSequence,
+              source_frame_sequence: viewportFrame.sequence,
+              viewport_width: viewportFrame.width,
+              viewport_height: viewportFrame.height,
+              input,
+            }),
+          },
+        );
+        await readJson(response);
+        setViewportFrame(null);
+        setViewportUrl((previous) => {
+          if (previous) URL.revokeObjectURL(previous);
+          return null;
+        });
+        return true;
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Human input was rejected.");
+        return false;
+      } finally {
+        mutationInFlight.current = false;
+        setPending(false);
+      }
+    },
+    [intervention, operatorId, viewportFrame],
+  );
+
+  function clickViewport(event: MouseEvent<HTMLImageElement>) {
+    if (!viewportFrame || pending) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = Math.min(
+      viewportFrame.width - 1,
+      Math.max(0, Math.floor(((event.clientX - bounds.left) / bounds.width) * viewportFrame.width)),
+    );
+    const y = Math.min(
+      viewportFrame.height - 1,
+      Math.max(0, Math.floor(((event.clientY - bounds.top) / bounds.height) * viewportFrame.height)),
+    );
+    void sendInput({ kind: "pointer", x, y });
+  }
+
+  async function submitText(event: FormEvent) {
+    event.preventDefault();
+    if (!manualText) return;
+    if (await sendInput({ kind: "text", text: manualText })) setManualText("");
+  }
 
   async function load(event: FormEvent) {
     event.preventDefault();
@@ -181,7 +271,11 @@ export default function InterventionConsole() {
               {owned && viewportUrl ? (
                 // The source is a short-lived same-origin blob generated from a no-store response.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={viewportUrl} alt="Current retained browser viewport" />
+                <img
+                  src={viewportUrl}
+                  alt="Current retained browser viewport; click to send a left-click"
+                  onClick={clickViewport}
+                />
               ) : (
                 <p>{owned ? "Waiting for the first frame…" : "Claim control to view the live session."}</p>
               )}
@@ -205,7 +299,33 @@ export default function InterventionConsole() {
               <button className="secondary" disabled={pending || !owned} onClick={() => void requestTransition("resume")}>Begin resume</button>
               <button className="danger" disabled={pending || (!owned && intervention.status !== "open")} onClick={() => void requestTransition("terminate")}>Terminate</button>
             </div>
-            <p className="boundary">Manual pointer and keyboard forwarding are not enabled in this build.</p>
+            <div className="manual-input" aria-label="Manual session input">
+              <p className="eyebrow">Manual input</p>
+              <p>Click the current frame, or send text to the control already focused in the retained session.</p>
+              <form onSubmit={submitText}>
+                <label>
+                  Text (not retained)
+                  <input
+                    value={manualText}
+                    onChange={(event) => setManualText(event.target.value)}
+                    maxLength={1000}
+                    autoComplete="off"
+                    disabled={!owned || !viewportFrame || pending}
+                  />
+                </label>
+                <button disabled={!owned || !viewportFrame || pending || !manualText}>Send text</button>
+              </form>
+              <div className="key-input">
+                <label>
+                  Navigation key
+                  <select value={manualKey} onChange={(event) => setManualKey(event.target.value as HumanKey)} disabled={!owned || !viewportFrame || pending}>
+                    {['Enter', 'Escape', 'Tab', 'Shift+Tab', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].map((key) => <option key={key}>{key}</option>)}
+                  </select>
+                </label>
+                <button disabled={!owned || !viewportFrame || pending} onClick={() => void sendInput({ kind: "key", key: manualKey })}>Send key</button>
+              </div>
+            </div>
+            <p className="boundary">Input is accepted once against the latest frame and current lease. Typed text is never written to the audit log.</p>
           </aside>
         </section>
       ) : null}

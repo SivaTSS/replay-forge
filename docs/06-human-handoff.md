@@ -142,6 +142,8 @@ Concurrent claims return a conflict containing only the current owner display na
 
 The current local vertical slice implements that fallback as a lease-guarded PNG endpoint. Browser creation, frame capture, and teardown all execute on the same session-owner thread; continuous CDP screencasting remains a production transport follow-on.
 
+Each fallback response carries an ordered frame sequence, authoritative viewport dimensions, and the next accepted client-input sequence in response headers. The operator cannot issue a coordinate command until one of these frames has been received.
+
 ### Human input
 
 Supported input:
@@ -161,6 +163,8 @@ Each message contains:
 - Input payload
 
 The server rejects input when frame dimensions are stale beyond tolerance, the lease is invalid, or the session route is no longer allowed.
+
+The implemented local HTTP fallback deliberately narrows this design to one left-click per latest frame, text insertion into the already-focused control, and a fixed navigation-key allowlist. It requires an exact frame and viewport match, accepts the next client sequence exactly once, invalidates the frame after dispatch, and executes on the retained browser's owner thread. Audit events retain input kind, sequence, coordinates or character count, but never typed text. Pointer movement, wheel, arbitrary key chords, and focus-by-selector remain part of the WebSocket/CDP follow-on rather than being silently approximated.
 
 ### Audit grouping
 

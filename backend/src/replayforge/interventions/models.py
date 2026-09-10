@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from replayforge.shared.ids import EntityId
-from replayforge.surfaces.models import Viewport
+from replayforge.surfaces.models import HumanInput, HumanKeyInput, HumanPointerInput, Viewport
 
 
 class OwnerKind(StrEnum):
@@ -47,10 +47,52 @@ class InterventionFrame:
     content: bytes
     sequence: int
     viewport: Viewport
+    next_client_sequence: int = 1
 
     def __post_init__(self) -> None:
         if self.sequence < 1:
             raise ValueError("frame sequence must be positive")
+        if self.next_client_sequence < 1:
+            raise ValueError("next client sequence must be positive")
+
+
+class HumanInputConflictError(RuntimeError):
+    """Input references stale or already-consumed operator state."""
+
+
+@dataclass(frozen=True, slots=True)
+class HumanInputCommand:
+    client_sequence: int
+    source_frame_sequence: int
+    viewport: Viewport
+    action: HumanInput
+
+    def __post_init__(self) -> None:
+        if self.client_sequence < 1 or self.source_frame_sequence < 1:
+            raise ValueError("input and source-frame sequences must be positive")
+        if isinstance(self.action, HumanPointerInput) and (
+            self.action.x >= self.viewport.width or self.action.y >= self.viewport.height
+        ):
+            raise ValueError("pointer coordinates must fall inside the source viewport")
+
+    def audit_details(self) -> dict[str, object]:
+        details: dict[str, object] = {
+            "client_sequence": self.client_sequence,
+            "source_frame_sequence": self.source_frame_sequence,
+            "viewport_height": self.viewport.height,
+            "viewport_width": self.viewport.width,
+        }
+        if isinstance(self.action, HumanPointerInput):
+            return {**details, "input_type": "pointer", "x": self.action.x, "y": self.action.y}
+        if isinstance(self.action, HumanKeyInput):
+            return {**details, "input_type": "key", "key": self.action.key.value}
+        return {**details, "input_type": "text", "character_count": len(self.action.text)}
+
+
+@dataclass(frozen=True, slots=True)
+class HumanInputReceipt:
+    client_sequence: int
+    source_frame_sequence: int
 
 
 @dataclass(frozen=True, slots=True)
