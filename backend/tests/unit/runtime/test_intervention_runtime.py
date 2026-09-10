@@ -20,7 +20,7 @@ from replayforge.runtime.composition import LiveBrowserSession, RuntimeIntervent
 from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
-from replayforge.surfaces.models import NormalizedObservation, Viewport
+from replayforge.surfaces.models import NormalizedObservation, SurfaceFrame, Viewport
 
 
 @dataclass
@@ -29,9 +29,9 @@ class FakeRetainedDriver:
     captured_on: int | None = None
     closed_on: int | None = None
 
-    def capture_active_frame(self) -> bytes:
+    def capture_active_frame(self) -> SurfaceFrame:
         self.captured_on = get_ident()
-        return self.frame
+        return SurfaceFrame(self.frame, Viewport(1280, 800))
 
     def close(self) -> None:
         self.closed_on = get_ident()
@@ -78,7 +78,9 @@ def test_viewport_requires_current_human_lease_and_uses_owner_thread() -> None:
     try:
         frame = service.viewport(intervention_id, claimed.lease.version, "operator-7")
 
-        assert frame.startswith(b"\x89PNG\r\n\x1a\n")
+        assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
+        assert frame.sequence == 1
+        assert frame.viewport == Viewport(1280, 800)
         assert driver.captured_on == owner_thread
         with pytest.raises(InterventionAuthorizationError):
             service.viewport(intervention_id, claimed.lease.version, "operator-8")
@@ -87,9 +89,9 @@ def test_viewport_requires_current_human_lease_and_uses_owner_thread() -> None:
         heartbeat = service.heartbeat(intervention_id, claimed.lease.version, "operator-7")
         with pytest.raises(LeaseConflictError):
             service.viewport(intervention_id, claimed.lease.version, "operator-7")
-        assert service.viewport(intervention_id, heartbeat.lease.version, "operator-7").startswith(
-            b"\x89PNG"
-        )
+        next_frame = service.viewport(intervention_id, heartbeat.lease.version, "operator-7")
+        assert next_frame.content.startswith(b"\x89PNG")
+        assert next_frame.sequence == 2
     finally:
         service.terminate(
             intervention_id,

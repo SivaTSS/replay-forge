@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from replayforge.shared.ids import EntityId
+from replayforge.surfaces.models import Viewport
 
 
 class OwnerKind(StrEnum):
@@ -37,6 +38,19 @@ class ControlOwner:
 AUTOMATION_OWNER = ControlOwner(OwnerKind.AUTOMATION)
 PAUSED_OWNER = ControlOwner(OwnerKind.AUTOMATION_PAUSED)
 NO_OWNER = ControlOwner(OwnerKind.NONE)
+
+
+@dataclass(frozen=True, slots=True)
+class InterventionFrame:
+    """Ordered frame exposed to the operator for stale-input protection."""
+
+    content: bytes
+    sequence: int
+    viewport: Viewport
+
+    def __post_init__(self) -> None:
+        if self.sequence < 1:
+            raise ValueError("frame sequence must be positive")
 
 
 @dataclass(frozen=True, slots=True)

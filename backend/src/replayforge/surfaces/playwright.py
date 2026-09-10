@@ -63,6 +63,7 @@ from replayforge.surfaces.models import (
     NormalizedObservation,
     ResolvedTarget,
     SurfaceError,
+    SurfaceFrame,
     Viewport,
 )
 
@@ -116,10 +117,10 @@ class PlaywrightSurfaceDriver:
         self.active_session = session
         return session
 
-    def capture_active_frame(self) -> bytes:
+    def capture_active_frame(self) -> SurfaceFrame:
         if self.active_session is None:
             raise SurfaceError("session_missing", "No active surface session is available.")
-        return self.active_session.capture_provider_frame()
+        return self.active_session.capture_live_frame()
 
     def close(self) -> None:
         if self.browser is not None:
@@ -190,6 +191,13 @@ class PlaywrightSurfaceSession:
             raise SurfaceError(
                 "screenshot_failed", "The current UI frame could not be captured."
             ) from exc
+
+    def capture_live_frame(self) -> SurfaceFrame:
+        viewport = self.page.viewport_size or {"width": 1280, "height": 800}
+        return SurfaceFrame(
+            content=self.capture_provider_frame(),
+            viewport=Viewport(viewport["width"], viewport["height"]),
+        )
 
     def resolve(self, target: LocatorBundle, timeout_ms: int) -> ResolvedTarget:
         root = self._scoped_root(target)

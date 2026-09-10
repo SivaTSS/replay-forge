@@ -26,7 +26,12 @@ from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
 )
-from replayforge.interventions.models import ControlOwner, InterventionStatus, OwnerKind
+from replayforge.interventions.models import (
+    ControlOwner,
+    InterventionFrame,
+    InterventionStatus,
+    OwnerKind,
+)
 from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.interventions.service import (
     InterventionAuthorizationError,
@@ -48,6 +53,7 @@ from replayforge.runs.results import (
 from replayforge.runs.service import ReplayApplicationService, ReplayExecutor
 from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
+from replayforge.surfaces.models import SurfaceFrame
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 _ALLOWED_ROUTES = frozenset({"/members/search", "/accounts/:account_id/details"})
@@ -100,19 +106,22 @@ def effective_replay_policy(record: CapabilityVersionRecord, origin: str) -> Eff
 class RetainedSurfaceDriver(Protocol):
     def close(self) -> None: ...
 
-    def capture_active_frame(self) -> bytes: ...
+    def capture_active_frame(self) -> SurfaceFrame: ...
 
 
 @dataclass(slots=True)
 class LiveBrowserSession:
     worker: SerialSessionWorker
     driver: RetainedSurfaceDriver
+    frame_sequence: int = 0
 
     def close(self) -> None:
         self.worker.close(self.driver.close)
 
-    def capture_frame(self) -> bytes:
-        return self.worker.call(self.driver.capture_active_frame)
+    def capture_frame(self) -> InterventionFrame:
+        frame = self.worker.call(self.driver.capture_active_frame)
+        self.frame_sequence += 1
+        return InterventionFrame(frame.content, self.frame_sequence, frame.viewport)
 
 
 @dataclass(slots=True)
@@ -194,7 +203,7 @@ class RuntimeInterventionService:
 
     def viewport(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
-    ) -> bytes:
+    ) -> InterventionFrame:
         with self.lock:
             transition = self.coordinator.get(intervention_id)
             if (
@@ -211,7 +220,9 @@ class RuntimeInterventionService:
             if session is None:
                 raise InterventionAuthorizationError("live intervention session is unavailable")
             frame = session.capture_frame()
-        if len(frame) > 5 * 1024 * 1024 or not frame.startswith(b"\x89PNG\r\n\x1a\n"):
+        if len(frame.content) > 5 * 1024 * 1024 or not frame.content.startswith(
+            b"\x89PNG\r\n\x1a\n"
+        ):
             raise RuntimeError("live viewport frame violates its media contract")
         return frame
 

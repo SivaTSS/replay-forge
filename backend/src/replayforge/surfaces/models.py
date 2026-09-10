@@ -55,6 +55,18 @@ class Viewport:
 
 
 @dataclass(frozen=True, slots=True)
+class SurfaceFrame:
+    """One raster frame paired with the viewport it represents."""
+
+    content: bytes
+    viewport: Viewport
+
+    def __post_init__(self) -> None:
+        if not self.content:
+            raise ValueError("surface frame content cannot be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class NormalizedObservation:
     id: EntityId
     session_id: EntityId

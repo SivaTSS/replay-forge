@@ -246,12 +246,15 @@ def create_app(services: ApiServices) -> FastAPI:
             return invoker
         frame = invoker.viewport(intervention_id, expected_lease_version, operator_id)
         return Response(
-            frame,
+            frame.content,
             media_type="image/png",
             headers={
                 "cache-control": "no-store, max-age=0",
                 "content-security-policy": "default-src 'none'; sandbox",
                 "x-content-type-options": "nosniff",
+                "x-replayforge-frame-sequence": str(frame.sequence),
+                "x-replayforge-viewport-width": str(frame.viewport.width),
+                "x-replayforge-viewport-height": str(frame.viewport.height),
             },
         )
 

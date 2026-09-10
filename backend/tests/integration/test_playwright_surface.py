@@ -31,6 +31,7 @@ from replayforge.runs.results import BusinessOutcomeResult, SuccessResult
 from replayforge.runtime.composition import build_runtime
 from replayforge.runtime.settings import RuntimeSettings
 from replayforge.shared.clock import SystemClock
+from replayforge.surfaces.models import Viewport
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
@@ -93,7 +94,9 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
     try:
         assert session.observe().route == "/members/search"
         assert session.capture_provider_frame().startswith(b"\x89PNG\r\n\x1a\n")
-        assert driver.capture_active_frame().startswith(b"\x89PNG\r\n\x1a\n")
+        frame = driver.capture_active_frame()
+        assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
+        assert frame.viewport == Viewport(1280, 800)
         member_field = in_member_frame(
             LocatorBundle(
                 description="Member ID field",

@@ -13,6 +13,11 @@ type Intervention = {
 };
 
 type ErrorBody = { code?: string; message?: string };
+type ViewportFrame = {
+  sequence: number;
+  width: number;
+  height: number;
+};
 
 async function readJson<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & ErrorBody;
@@ -27,6 +32,7 @@ export default function InterventionConsole() {
   const [operatorId, setOperatorId] = useState("operator-7");
   const [intervention, setIntervention] = useState<Intervention | null>(null);
   const [viewportUrl, setViewportUrl] = useState<string | null>(null);
+  const [viewportFrame, setViewportFrame] = useState<ViewportFrame | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -73,11 +79,18 @@ export default function InterventionConsole() {
           { cache: "no-store", signal: controller.signal },
         );
         if (!response.ok) throw new Error("Live viewport is unavailable for this lease.");
+        const sequence = Number(response.headers.get("x-replayforge-frame-sequence"));
+        const width = Number(response.headers.get("x-replayforge-viewport-width"));
+        const height = Number(response.headers.get("x-replayforge-viewport-height"));
+        if (![sequence, width, height].every(Number.isSafeInteger)) {
+          throw new Error("Live viewport metadata is invalid.");
+        }
         const nextUrl = URL.createObjectURL(await response.blob());
         setViewportUrl((previous) => {
           if (previous) URL.revokeObjectURL(previous);
           return nextUrl;
         });
+        setViewportFrame({ sequence, width, height });
       } catch (cause) {
         if (!controller.signal.aborted) {
           setError(cause instanceof Error ? cause.message : "Viewport request failed.");
@@ -180,6 +193,7 @@ export default function InterventionConsole() {
             <dl>
               <div><dt>Owner</dt><dd>{intervention.control_owner}</dd></div>
               <div><dt>Version</dt><dd>{intervention.lease_version}</dd></div>
+              <div><dt>Frame</dt><dd>{viewportFrame ? `${viewportFrame.sequence} · ${viewportFrame.width}×${viewportFrame.height}` : "—"}</dd></div>
               <div><dt>Expires</dt><dd>{new Date(intervention.lease_expires_at).toLocaleTimeString()}</dd></div>
               <div><dt>Run</dt><dd>{intervention.run_id}</dd></div>
               <div><dt>Session</dt><dd>{intervention.session_id}</dd></div>

@@ -15,6 +15,7 @@ from replayforge.interventions.models import (
     ControlLease,
     ControlOwner,
     Intervention,
+    InterventionFrame,
     InterventionStatus,
     OwnerKind,
 )
@@ -27,6 +28,7 @@ from replayforge.runs.results import (
     VerifiedCheckpoint,
 )
 from replayforge.shared.ids import EntityKind, new_id
+from replayforge.surfaces.models import Viewport
 
 
 @dataclass
@@ -98,8 +100,8 @@ class FakeInterventionInvoker:
 
     def viewport(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
-    ) -> bytes:
-        return self.frame
+    ) -> InterventionFrame:
+        return InterventionFrame(self.frame, 17, Viewport(1280, 800))
 
     def heartbeat(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
@@ -336,6 +338,9 @@ def test_intervention_viewport_is_non_cacheable_png() -> None:
     assert response.headers["content-type"] == "image/png"
     assert response.headers["cache-control"] == "no-store, max-age=0"
     assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-replayforge-frame-sequence"] == "17"
+    assert response.headers["x-replayforge-viewport-width"] == "1280"
+    assert response.headers["x-replayforge-viewport-height"] == "800"
     assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
