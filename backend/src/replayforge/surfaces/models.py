@@ -12,6 +12,30 @@ from replayforge.shared.ids import EntityId
 SurfaceSessionId = NewType("SurfaceSessionId", str)
 
 
+class SurfaceError(RuntimeError):
+    """A classified surface failure safe to expose in a run result."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        recoverable: bool = False,
+        effect_absent: bool = False,
+        intervention_recommended: bool = False,
+        expected: dict[str, object] | None = None,
+        observed: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.safe_message = message
+        self.recoverable = recoverable
+        self.effect_absent = effect_absent
+        self.intervention_recommended = intervention_recommended
+        self.expected = expected
+        self.observed = observed
+
+
 class ActionStatus(StrEnum):
     DISPATCHED = "dispatched"
     COMPLETED = "completed"
