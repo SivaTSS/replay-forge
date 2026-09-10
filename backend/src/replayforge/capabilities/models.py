@@ -289,7 +289,7 @@ class WaitForAction(ArtifactModel):
 class ExtractAction(ArtifactModel):
     kind: Literal["extract"]
     output: str
-    transform: Literal["text", "trim", "decimal", "date-time"] = "trim"
+    transform: Literal["text", "trim", "lowercase", "decimal", "date-time"] = "trim"
 
 
 class AssertAction(ArtifactModel):

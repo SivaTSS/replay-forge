@@ -190,6 +190,12 @@ def build_engine(
     return engine, recorder, router
 
 
+def test_extraction_transforms_are_canonical() -> None:
+    assert ReplayEngine._transform(" Savings ", "lowercase") == "savings"
+    assert ReplayEngine._transform(" $1,420.57 ", "decimal") == "1420.57"
+    assert ReplayEngine._transform(" unchanged ", "text") == " unchanged "
+
+
 def request_for(artifact_data: dict[str, Any], member_id: str = "12345") -> ReplayRequest:
     return ReplayRequest(
         run_id=new_id(EntityKind.RUN),

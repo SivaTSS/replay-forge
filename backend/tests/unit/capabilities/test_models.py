@@ -5,10 +5,23 @@ from pydantic import ValidationError
 
 from replayforge.capabilities.models import (
     CapabilityArtifact,
+    ExtractAction,
     LocatorCandidate,
     RetryPolicy,
     ValueSchema,
 )
+
+
+def test_lowercase_is_an_explicit_extraction_transform(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["steps"][2]["action"]["transform"] = "lowercase"
+
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+
+    action = artifact.steps[2].action
+    assert isinstance(action, ExtractAction)
+    assert action.transform == "lowercase"
 
 
 def test_valid_artifact_is_deeply_immutable(valid_artifact_data: dict[str, Any]) -> None:

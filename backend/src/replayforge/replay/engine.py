@@ -370,6 +370,8 @@ class ReplayEngine:
 
     @staticmethod
     def _transform(value: str, transform: str) -> str:
+        if transform == "lowercase":
+            return value.strip().casefold()
         if transform in {"trim", "decimal", "date-time"}:
             return value.strip().removeprefix("$").replace(",", "")
         return value
