@@ -10,9 +10,11 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
 .mypy_cache/
 .ruff_cache/
 .venv/
+*.egg-info/
 
 # Node.js
 node_modules/
@@ -25,4 +27,3 @@ test-results/
 .idea/
 .vscode/
 .DS_Store
-

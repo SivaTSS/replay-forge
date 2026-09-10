@@ -1,0 +1,201 @@
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
+from replayforge.capabilities.models import (
+    CapabilityArtifact,
+    LocatorCandidate,
+    RetryPolicy,
+    ValueSchema,
+)
+
+
+def test_valid_artifact_is_deeply_immutable(valid_artifact_data: dict[str, Any]) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+
+    with pytest.raises(ValidationError, match="frozen"):
+        artifact.capability.version = "1.0.1"
+
+
+def test_unknown_fields_are_rejected(valid_artifact_data: dict[str, Any]) -> None:
+    valid_artifact_data["provider_transcript"] = {"reasoning": "must not be persisted"}
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+def test_unknown_input_reference_is_rejected(valid_artifact_data: dict[str, Any]) -> None:
+    valid_artifact_data["steps"][0]["action"]["value"]["path"] = "account_number"
+
+    with pytest.raises(ValidationError, match="references an unknown input"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+def test_duplicate_step_ids_are_rejected(valid_artifact_data: dict[str, Any]) -> None:
+    valid_artifact_data["steps"][1]["id"] = valid_artifact_data["steps"][0]["id"]
+
+    with pytest.raises(ValidationError, match="step IDs must be unique"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+def test_required_output_must_be_checked_at_checkpoint(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["checkpoint"]["condition"] = {
+        "kind": "route",
+        "pattern": "/accounts/*/details",
+    }
+
+    with pytest.raises(ValidationError, match="checkpoint does not validate required outputs"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+def test_step_cannot_exceed_capability_risk(valid_artifact_data: dict[str, Any]) -> None:
+    valid_artifact_data["steps"][1]["risk"] = "irreversible"
+
+    with pytest.raises(ValidationError, match="exceeds the capability risk ceiling"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+def test_coordinate_locator_requires_dimensions_and_low_portability(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["steps"][0]["target"]["candidates"] = [
+        {"strategy": "coordinates", "x": 10, "y": 20}
+    ]
+
+    with pytest.raises(ValidationError, match="coordinate locator requires"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+def test_schema_forbids_additional_top_level_properties() -> None:
+    schema = CapabilityArtifact.model_json_schema()
+
+    assert schema["additionalProperties"] is False
+
+
+@pytest.mark.parametrize(
+    ("schema", "message"),
+    [
+        (
+            {
+                "type": "object",
+                "description": "Nested value",
+                "data_classification": "public",
+                "required": ["missing"],
+                "properties": {},
+            },
+            "required properties are not declared",
+        ),
+        (
+            {
+                "type": "string",
+                "description": "Scalar value",
+                "data_classification": "public",
+                "required": ["invalid"],
+            },
+            "only object schemas",
+        ),
+        (
+            {
+                "type": "string",
+                "description": "Bad bounds",
+                "data_classification": "public",
+                "min_length": 10,
+                "max_length": 2,
+            },
+            "min_length cannot exceed",
+        ),
+        (
+            {
+                "type": "string",
+                "description": "Bad expression",
+                "data_classification": "public",
+                "pattern": "[",
+            },
+            "pattern must be a valid regular expression",
+        ),
+    ],
+)
+def test_value_schema_rejects_invalid_shapes(schema: dict[str, Any], message: str) -> None:
+    with pytest.raises((ValidationError, ValueError), match=message):
+        ValueSchema.model_validate(schema)
+
+
+@pytest.mark.parametrize(
+    ("candidate", "message"),
+    [
+        ({"strategy": "role_name", "role": "button"}, "requires role and name"),
+        ({"strategy": "label"}, "label locator requires value"),
+        (
+            {"strategy": "relative_text", "anchor": "Balance"},
+            "requires anchor, relation, and element",
+        ),
+        (
+            {
+                "strategy": "coordinates",
+                "x": 1,
+                "y": 2,
+                "viewport_width": 100,
+                "viewport_height": 100,
+            },
+            "must declare low portability",
+        ),
+    ],
+)
+def test_locator_candidate_rejects_incomplete_strategy_data(
+    candidate: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        LocatorCandidate.model_validate(candidate)
+
+
+@pytest.mark.parametrize(
+    "retry",
+    [
+        {"max_attempts": 1, "backoff_ms": [100]},
+        {"max_attempts": 2, "backoff_ms": [30_001]},
+    ],
+)
+def test_retry_policy_is_strictly_bounded(retry: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="backoff"):
+        RetryPolicy.model_validate(retry)
+
+
+def test_targeted_action_requires_locator(valid_artifact_data: dict[str, Any]) -> None:
+    valid_artifact_data["steps"][1].pop("target")
+
+    with pytest.raises(ValidationError, match="click action requires a target"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("compatibility_family", "application families must match"),
+        ("policy_risk", "risk and policy maximum risk must match"),
+        ("compatibility_entry", "entry point is not allowed"),
+        ("disallowed_action", "uses a disallowed action type"),
+        ("unknown_recovery", "references an unknown recovery"),
+        ("unknown_outcome", "references an unknown business outcome"),
+    ],
+)
+def test_artifact_rejects_cross_reference_and_policy_conflicts(
+    valid_artifact_data: dict[str, Any], mutation: str, message: str
+) -> None:
+    if mutation == "compatibility_family":
+        valid_artifact_data["compatibility"]["application_family"] = "other_app"
+    elif mutation == "policy_risk":
+        valid_artifact_data["policy"]["maximum_risk"] = "reversible"
+    elif mutation == "compatibility_entry":
+        valid_artifact_data["compatibility"]["entry_point"] = "account_admin"
+    elif mutation == "disallowed_action":
+        valid_artifact_data["policy"]["allowed_action_types"].remove("click")
+    elif mutation == "unknown_recovery":
+        valid_artifact_data["steps"][0]["recovery_refs"] = ["missing"]
+    else:
+        valid_artifact_data["steps"][0]["outcome_refs"] = ["missing"]
+
+    with pytest.raises(ValidationError, match=message):
+        CapabilityArtifact.model_validate(valid_artifact_data)

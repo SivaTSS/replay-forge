@@ -21,6 +21,7 @@ def test_new_ids_are_unique() -> None:
         "unknown_0123456789abcdef0123456789abcdef",
         "run_0123456789abcdef0123456789abcdeg",
         "RUN_0123456789abcdef0123456789abcdef",
+        "xxx_0123456789abcdef0123456789abcdef",
     ],
 )
 def test_parse_id_rejects_invalid_values(value: str) -> None:

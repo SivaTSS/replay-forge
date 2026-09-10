@@ -1,0 +1,2126 @@
+{
+  "$defs": {
+    "AllCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all": "#/$defs/AllCondition",
+                "any": "#/$defs/AnyCondition",
+                "element": "#/$defs/ElementCondition",
+                "identity_matches": "#/$defs/IdentityMatchesCondition",
+                "not": "#/$defs/NotCondition",
+                "output_valid": "#/$defs/OutputValidCondition",
+                "route": "#/$defs/RouteCondition",
+                "text": "#/$defs/TextCondition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RouteCondition"
+              },
+              {
+                "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/ElementCondition"
+              },
+              {
+                "$ref": "#/$defs/OutputValidCondition"
+              },
+              {
+                "$ref": "#/$defs/IdentityMatchesCondition"
+              },
+              {
+                "$ref": "#/$defs/AllCondition"
+              },
+              {
+                "$ref": "#/$defs/AnyCondition"
+              },
+              {
+                "$ref": "#/$defs/NotCondition"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "all",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "conditions"
+      ],
+      "title": "AllCondition",
+      "type": "object"
+    },
+    "AnyCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all": "#/$defs/AllCondition",
+                "any": "#/$defs/AnyCondition",
+                "element": "#/$defs/ElementCondition",
+                "identity_matches": "#/$defs/IdentityMatchesCondition",
+                "not": "#/$defs/NotCondition",
+                "output_valid": "#/$defs/OutputValidCondition",
+                "route": "#/$defs/RouteCondition",
+                "text": "#/$defs/TextCondition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RouteCondition"
+              },
+              {
+                "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/ElementCondition"
+              },
+              {
+                "$ref": "#/$defs/OutputValidCondition"
+              },
+              {
+                "$ref": "#/$defs/IdentityMatchesCondition"
+              },
+              {
+                "$ref": "#/$defs/AllCondition"
+              },
+              {
+                "$ref": "#/$defs/AnyCondition"
+              },
+              {
+                "$ref": "#/$defs/NotCondition"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "any",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "conditions"
+      ],
+      "title": "AnyCondition",
+      "type": "object"
+    },
+    "AssertAction": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllCondition",
+              "any": "#/$defs/AnyCondition",
+              "element": "#/$defs/ElementCondition",
+              "identity_matches": "#/$defs/IdentityMatchesCondition",
+              "not": "#/$defs/NotCondition",
+              "output_valid": "#/$defs/OutputValidCondition",
+              "route": "#/$defs/RouteCondition",
+              "text": "#/$defs/TextCondition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RouteCondition"
+            },
+            {
+              "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/ElementCondition"
+            },
+            {
+              "$ref": "#/$defs/OutputValidCondition"
+            },
+            {
+              "$ref": "#/$defs/IdentityMatchesCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Condition"
+        },
+        "kind": {
+          "const": "assert",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "condition"
+      ],
+      "title": "AssertAction",
+      "type": "object"
+    },
+    "BusinessOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_after_steps": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allowed After Steps",
+          "type": "array"
+        },
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]+$",
+          "title": "Code",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "detect": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllCondition",
+              "any": "#/$defs/AnyCondition",
+              "element": "#/$defs/ElementCondition",
+              "identity_matches": "#/$defs/IdentityMatchesCondition",
+              "not": "#/$defs/NotCondition",
+              "output_valid": "#/$defs/OutputValidCondition",
+              "route": "#/$defs/RouteCondition",
+              "text": "#/$defs/TextCondition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RouteCondition"
+            },
+            {
+              "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/ElementCondition"
+            },
+            {
+              "$ref": "#/$defs/OutputValidCondition"
+            },
+            {
+              "$ref": "#/$defs/IdentityMatchesCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Detect"
+        },
+        "result": {
+          "$ref": "#/$defs/OutcomeResult"
+        }
+      },
+      "required": [
+        "code",
+        "description",
+        "detect",
+        "allowed_after_steps"
+      ],
+      "title": "BusinessOutcome",
+      "type": "object"
+    },
+    "CapabilityMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "application_family": {
+          "title": "Application Family",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "risk": {
+          "$ref": "#/$defs/Risk"
+        },
+        "surface": {
+          "$ref": "#/$defs/SurfaceKind"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "version": {
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "name",
+        "description",
+        "application_family",
+        "surface",
+        "risk"
+      ],
+      "title": "CapabilityMetadata",
+      "type": "object"
+    },
+    "CapabilityPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_action_types": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Action Types",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "allowed_entry_points": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Entry Points",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "forbidden_text_inputs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Forbidden Text Inputs",
+          "type": "array"
+        },
+        "maximum_risk": {
+          "$ref": "#/$defs/Risk"
+        },
+        "output_redaction": {
+          "additionalProperties": {
+            "enum": [
+              "remove",
+              "last4",
+              "tokenize"
+            ],
+            "type": "string"
+          },
+          "title": "Output Redaction",
+          "type": "object"
+        }
+      },
+      "required": [
+        "allowed_action_types",
+        "allowed_entry_points",
+        "maximum_risk"
+      ],
+      "title": "CapabilityPolicy",
+      "type": "object"
+    },
+    "Checkpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllCondition",
+              "any": "#/$defs/AnyCondition",
+              "element": "#/$defs/ElementCondition",
+              "identity_matches": "#/$defs/IdentityMatchesCondition",
+              "not": "#/$defs/NotCondition",
+              "output_valid": "#/$defs/OutputValidCondition",
+              "route": "#/$defs/RouteCondition",
+              "text": "#/$defs/TextCondition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RouteCondition"
+            },
+            {
+              "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/ElementCondition"
+            },
+            {
+              "$ref": "#/$defs/OutputValidCondition"
+            },
+            {
+              "$ref": "#/$defs/IdentityMatchesCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Condition"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]+$",
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "condition"
+      ],
+      "title": "Checkpoint",
+      "type": "object"
+    },
+    "CheckpointAction": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpoint_id": {
+          "title": "Checkpoint Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "checkpoint",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "checkpoint_id"
+      ],
+      "title": "CheckpointAction",
+      "type": "object"
+    },
+    "ClickAction": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "click",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ClickAction",
+      "type": "object"
+    },
+    "Compatibility": {
+      "additionalProperties": false,
+      "properties": {
+        "application_family": {
+          "title": "Application Family",
+          "type": "string"
+        },
+        "base_variant": {
+          "title": "Base Variant",
+          "type": "string"
+        },
+        "entry_point": {
+          "title": "Entry Point",
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/SurfaceFingerprint"
+        },
+        "supported_variants": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Supported Variants",
+          "type": "array"
+        },
+        "surface_contract": {
+          "title": "Surface Contract",
+          "type": "string"
+        }
+      },
+      "required": [
+        "application_family",
+        "base_variant",
+        "supported_variants",
+        "surface_contract",
+        "entry_point",
+        "fingerprint"
+      ],
+      "title": "Compatibility",
+      "type": "object"
+    },
+    "DataClassification": {
+      "enum": [
+        "public",
+        "operational",
+        "customer_identifier",
+        "personal",
+        "financial",
+        "credential",
+        "secret"
+      ],
+      "title": "DataClassification",
+      "type": "string"
+    },
+    "ElementCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "element",
+          "title": "Kind",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "exists",
+            "absent",
+            "visible",
+            "hidden",
+            "enabled",
+            "disabled"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/LocatorBundle"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "state"
+      ],
+      "title": "ElementCondition",
+      "type": "object"
+    },
+    "EvidenceRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "default": true,
+          "title": "After",
+          "type": "boolean"
+        },
+        "before": {
+          "default": false,
+          "title": "Before",
+          "type": "boolean"
+        },
+        "on_failure": {
+          "default": true,
+          "title": "On Failure",
+          "type": "boolean"
+        }
+      },
+      "title": "EvidenceRequirement",
+      "type": "object"
+    },
+    "ExtractAction": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "extract",
+          "title": "Kind",
+          "type": "string"
+        },
+        "output": {
+          "title": "Output",
+          "type": "string"
+        },
+        "transform": {
+          "default": "trim",
+          "enum": [
+            "text",
+            "trim",
+            "decimal",
+            "date-time"
+          ],
+          "title": "Transform",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "output"
+      ],
+      "title": "ExtractAction",
+      "type": "object"
+    },
+    "FrameLocator": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "$ref": "#/$defs/LocatorCandidate"
+        }
+      },
+      "required": [
+        "locator"
+      ],
+      "title": "FrameLocator",
+      "type": "object"
+    },
+    "IdentityMatchesCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "extracted_output": {
+          "title": "Extracted Output",
+          "type": "string"
+        },
+        "input_path": {
+          "title": "Input Path",
+          "type": "string"
+        },
+        "kind": {
+          "const": "identity_matches",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "extracted_output",
+        "input_path"
+      ],
+      "title": "IdentityMatchesCondition",
+      "type": "object"
+    },
+    "InputValue": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+          "title": "Path",
+          "type": "string"
+        },
+        "source": {
+          "const": "input",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "path"
+      ],
+      "title": "InputValue",
+      "type": "object"
+    },
+    "JsonValueType": {
+      "enum": [
+        "string",
+        "integer",
+        "boolean",
+        "object"
+      ],
+      "title": "JsonValueType",
+      "type": "string"
+    },
+    "Landmark": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "heading",
+            "field",
+            "text"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "Landmark",
+      "type": "object"
+    },
+    "LiteralValue": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "literal",
+          "title": "Source",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "source",
+        "value"
+      ],
+      "title": "LiteralValue",
+      "type": "object"
+    },
+    "LocatorBundle": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/LocatorCandidate"
+          },
+          "minItems": 1,
+          "title": "Candidates",
+          "type": "array"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/LocatorScope"
+        },
+        "state": {
+          "$ref": "#/$defs/TargetState"
+        },
+        "tenant_overrides_allowed": {
+          "default": false,
+          "title": "Tenant Overrides Allowed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "description",
+        "candidates"
+      ],
+      "title": "LocatorBundle",
+      "type": "object"
+    },
+    "LocatorCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor"
+        },
+        "element": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Element"
+        },
+        "expected_count": {
+          "default": 1,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Expected Count",
+          "type": "integer"
+        },
+        "match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "portability": {
+          "$ref": "#/$defs/Portability",
+          "default": "high"
+        },
+        "relation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relation"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "strategy": {
+          "$ref": "#/$defs/LocatorStrategy"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "viewport_height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Viewport Height"
+        },
+        "viewport_width": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Viewport Width"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y"
+        }
+      },
+      "required": [
+        "strategy"
+      ],
+      "title": "LocatorCandidate",
+      "type": "object"
+    },
+    "LocatorScope": {
+      "additionalProperties": false,
+      "properties": {
+        "frame_path": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FrameLocator"
+          },
+          "title": "Frame Path",
+          "type": "array"
+        },
+        "window": {
+          "default": "primary",
+          "title": "Window",
+          "type": "string"
+        }
+      },
+      "title": "LocatorScope",
+      "type": "object"
+    },
+    "LocatorStrategy": {
+      "enum": [
+        "role_name",
+        "label",
+        "text",
+        "relative_text",
+        "placeholder",
+        "title",
+        "css",
+        "accessibility_path",
+        "image_anchor",
+        "coordinates"
+      ],
+      "title": "LocatorStrategy",
+      "type": "string"
+    },
+    "MatchMode": {
+      "enum": [
+        "exact",
+        "contains",
+        "regex"
+      ],
+      "title": "MatchMode",
+      "type": "string"
+    },
+    "NavigateAction": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_point": {
+          "title": "Entry Point",
+          "type": "string"
+        },
+        "kind": {
+          "const": "navigate",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "entry_point"
+      ],
+      "title": "NavigateAction",
+      "type": "object"
+    },
+    "NotCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllCondition",
+              "any": "#/$defs/AnyCondition",
+              "element": "#/$defs/ElementCondition",
+              "identity_matches": "#/$defs/IdentityMatchesCondition",
+              "not": "#/$defs/NotCondition",
+              "output_valid": "#/$defs/OutputValidCondition",
+              "route": "#/$defs/RouteCondition",
+              "text": "#/$defs/TextCondition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RouteCondition"
+            },
+            {
+              "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/ElementCondition"
+            },
+            {
+              "$ref": "#/$defs/OutputValidCondition"
+            },
+            {
+              "$ref": "#/$defs/IdentityMatchesCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Condition"
+        },
+        "kind": {
+          "const": "not",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "condition"
+      ],
+      "title": "NotCondition",
+      "type": "object"
+    },
+    "ObjectContract": {
+      "additionalProperties": false,
+      "properties": {
+        "additional_properties": {
+          "const": false,
+          "default": false,
+          "title": "Additional Properties",
+          "type": "boolean"
+        },
+        "properties": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ValueSchema"
+          },
+          "title": "Properties",
+          "type": "object"
+        },
+        "required": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required",
+          "type": "array"
+        },
+        "type": {
+          "const": "object",
+          "default": "object",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "required",
+        "properties"
+      ],
+      "title": "ObjectContract",
+      "type": "object"
+    },
+    "OutcomeResult": {
+      "additionalProperties": false,
+      "properties": {
+        "details": {
+          "additionalProperties": {
+            "discriminator": {
+              "mapping": {
+                "input": "#/$defs/InputValue",
+                "literal": "#/$defs/LiteralValue"
+              },
+              "propertyName": "source"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/InputValue"
+              },
+              {
+                "$ref": "#/$defs/LiteralValue"
+              }
+            ]
+          },
+          "title": "Details",
+          "type": "object"
+        },
+        "status": {
+          "const": "business_outcome",
+          "default": "business_outcome",
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "OutcomeResult",
+      "type": "object"
+    },
+    "OutputValidCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "output_valid",
+          "title": "Kind",
+          "type": "string"
+        },
+        "output": {
+          "title": "Output",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "output"
+      ],
+      "title": "OutputValidCondition",
+      "type": "object"
+    },
+    "PersistenceMode": {
+      "enum": [
+        "full",
+        "redacted",
+        "forbidden"
+      ],
+      "title": "PersistenceMode",
+      "type": "string"
+    },
+    "Portability": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "Portability",
+      "type": "string"
+    },
+    "PressKeysAction": {
+      "additionalProperties": false,
+      "properties": {
+        "keys": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Keys",
+          "type": "array"
+        },
+        "kind": {
+          "const": "press_keys",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "keys"
+      ],
+      "title": "PressKeysAction",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_content_hash": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Content Hash"
+        },
+        "compiler_version": {
+          "title": "Compiler Version",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "discovery_run_id": {
+          "title": "Discovery Run Id",
+          "type": "string"
+        },
+        "evidence_manifest_key": {
+          "title": "Evidence Manifest Key",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_policy_version": {
+          "title": "Prompt Policy Version",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "surface_adapter_version": {
+          "title": "Surface Adapter Version",
+          "type": "string"
+        },
+        "target_fingerprint": {
+          "title": "Target Fingerprint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "discovery_run_id",
+        "provider",
+        "model",
+        "prompt_policy_version",
+        "surface_adapter_version",
+        "compiler_version",
+        "created_at",
+        "target_fingerprint",
+        "evidence_manifest_key"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Recovery": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "max_uses": {
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Max Uses",
+          "type": "integer"
+        },
+        "resume_at": {
+          "title": "Resume At",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "trigger": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllCondition",
+              "any": "#/$defs/AnyCondition",
+              "element": "#/$defs/ElementCondition",
+              "identity_matches": "#/$defs/IdentityMatchesCondition",
+              "not": "#/$defs/NotCondition",
+              "output_valid": "#/$defs/OutputValidCondition",
+              "route": "#/$defs/RouteCondition",
+              "text": "#/$defs/TextCondition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RouteCondition"
+            },
+            {
+              "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/ElementCondition"
+            },
+            {
+              "$ref": "#/$defs/OutputValidCondition"
+            },
+            {
+              "$ref": "#/$defs/IdentityMatchesCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Trigger"
+        }
+      },
+      "required": [
+        "id",
+        "trigger",
+        "max_uses",
+        "steps",
+        "resume_at"
+      ],
+      "title": "Recovery",
+      "type": "object"
+    },
+    "RetryPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "backoff_ms": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Backoff Ms",
+          "type": "array"
+        },
+        "max_attempts": {
+          "default": 1,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "require_effect_absent": {
+          "default": true,
+          "title": "Require Effect Absent",
+          "type": "boolean"
+        },
+        "retry_on": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Retry On",
+          "type": "array"
+        }
+      },
+      "title": "RetryPolicy",
+      "type": "object"
+    },
+    "Risk": {
+      "enum": [
+        "read_only",
+        "reversible",
+        "sensitive",
+        "irreversible"
+      ],
+      "title": "Risk",
+      "type": "string"
+    },
+    "RouteCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "route",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pattern": {
+          "minLength": 1,
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "pattern"
+      ],
+      "title": "RouteCondition",
+      "type": "object"
+    },
+    "ScrollAction": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "exclusiveMinimum": 0,
+          "maximum": 2000,
+          "title": "Amount",
+          "type": "integer"
+        },
+        "direction": {
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "kind": {
+          "const": "scroll",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "direction",
+        "amount"
+      ],
+      "title": "ScrollAction",
+      "type": "object"
+    },
+    "SelectAction": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "select",
+          "title": "Kind",
+          "type": "string"
+        },
+        "option": {
+          "discriminator": {
+            "mapping": {
+              "input": "#/$defs/InputValue",
+              "literal": "#/$defs/LiteralValue"
+            },
+            "propertyName": "source"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/InputValue"
+            },
+            {
+              "$ref": "#/$defs/LiteralValue"
+            }
+          ],
+          "title": "Option"
+        }
+      },
+      "required": [
+        "kind",
+        "option"
+      ],
+      "title": "SelectAction",
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "discriminator": {
+            "mapping": {
+              "assert": "#/$defs/AssertAction",
+              "checkpoint": "#/$defs/CheckpointAction",
+              "click": "#/$defs/ClickAction",
+              "extract": "#/$defs/ExtractAction",
+              "navigate": "#/$defs/NavigateAction",
+              "press_keys": "#/$defs/PressKeysAction",
+              "scroll": "#/$defs/ScrollAction",
+              "select": "#/$defs/SelectAction",
+              "switch_context": "#/$defs/SwitchContextAction",
+              "type": "#/$defs/TypeAction",
+              "wait_for": "#/$defs/WaitForAction"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/NavigateAction"
+            },
+            {
+              "$ref": "#/$defs/ClickAction"
+            },
+            {
+              "$ref": "#/$defs/TypeAction"
+            },
+            {
+              "$ref": "#/$defs/PressKeysAction"
+            },
+            {
+              "$ref": "#/$defs/SelectAction"
+            },
+            {
+              "$ref": "#/$defs/ScrollAction"
+            },
+            {
+              "$ref": "#/$defs/WaitForAction"
+            },
+            {
+              "$ref": "#/$defs/ExtractAction"
+            },
+            {
+              "$ref": "#/$defs/AssertAction"
+            },
+            {
+              "$ref": "#/$defs/SwitchContextAction"
+            },
+            {
+              "$ref": "#/$defs/CheckpointAction"
+            }
+          ],
+          "title": "Action"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvidenceRequirement"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_.-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "outcome_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Outcome Refs",
+          "type": "array"
+        },
+        "postconditions": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all": "#/$defs/AllCondition",
+                "any": "#/$defs/AnyCondition",
+                "element": "#/$defs/ElementCondition",
+                "identity_matches": "#/$defs/IdentityMatchesCondition",
+                "not": "#/$defs/NotCondition",
+                "output_valid": "#/$defs/OutputValidCondition",
+                "route": "#/$defs/RouteCondition",
+                "text": "#/$defs/TextCondition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RouteCondition"
+              },
+              {
+                "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/ElementCondition"
+              },
+              {
+                "$ref": "#/$defs/OutputValidCondition"
+              },
+              {
+                "$ref": "#/$defs/IdentityMatchesCondition"
+              },
+              {
+                "$ref": "#/$defs/AllCondition"
+              },
+              {
+                "$ref": "#/$defs/AnyCondition"
+              },
+              {
+                "$ref": "#/$defs/NotCondition"
+              }
+            ]
+          },
+          "title": "Postconditions",
+          "type": "array"
+        },
+        "preconditions": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all": "#/$defs/AllCondition",
+                "any": "#/$defs/AnyCondition",
+                "element": "#/$defs/ElementCondition",
+                "identity_matches": "#/$defs/IdentityMatchesCondition",
+                "not": "#/$defs/NotCondition",
+                "output_valid": "#/$defs/OutputValidCondition",
+                "route": "#/$defs/RouteCondition",
+                "text": "#/$defs/TextCondition"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RouteCondition"
+              },
+              {
+                "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/ElementCondition"
+              },
+              {
+                "$ref": "#/$defs/OutputValidCondition"
+              },
+              {
+                "$ref": "#/$defs/IdentityMatchesCondition"
+              },
+              {
+                "$ref": "#/$defs/AllCondition"
+              },
+              {
+                "$ref": "#/$defs/AnyCondition"
+              },
+              {
+                "$ref": "#/$defs/NotCondition"
+              }
+            ]
+          },
+          "title": "Preconditions",
+          "type": "array"
+        },
+        "recovery_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Recovery Refs",
+          "type": "array"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetryPolicy"
+        },
+        "risk": {
+          "$ref": "#/$defs/Risk"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocatorBundle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "maximum": 120000,
+          "minimum": 100,
+          "title": "Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "action",
+        "risk"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "SurfaceFingerprint": {
+      "additionalProperties": false,
+      "properties": {
+        "forbidden_landmarks": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Landmark"
+          },
+          "title": "Forbidden Landmarks",
+          "type": "array"
+        },
+        "required_landmarks": {
+          "items": {
+            "$ref": "#/$defs/Landmark"
+          },
+          "minItems": 1,
+          "title": "Required Landmarks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "required_landmarks"
+      ],
+      "title": "SurfaceFingerprint",
+      "type": "object"
+    },
+    "SurfaceKind": {
+      "enum": [
+        "web",
+        "desktop"
+      ],
+      "title": "SurfaceKind",
+      "type": "string"
+    },
+    "SwitchContextAction": {
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "title": "Context",
+          "type": "string"
+        },
+        "kind": {
+          "const": "switch_context",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "context"
+      ],
+      "title": "SwitchContextAction",
+      "type": "object"
+    },
+    "TargetState": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enabled"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "title": "TargetState",
+      "type": "object"
+    },
+    "TextCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "TextCondition",
+      "type": "object"
+    },
+    "TypeAction": {
+      "additionalProperties": false,
+      "properties": {
+        "clear": {
+          "default": true,
+          "title": "Clear",
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "type",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "discriminator": {
+            "mapping": {
+              "input": "#/$defs/InputValue",
+              "literal": "#/$defs/LiteralValue"
+            },
+            "propertyName": "source"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/InputValue"
+            },
+            {
+              "$ref": "#/$defs/LiteralValue"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "TypeAction",
+      "type": "object"
+    },
+    "ValueSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "additional_properties": {
+          "const": false,
+          "default": false,
+          "title": "Additional Properties",
+          "type": "boolean"
+        },
+        "const": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Const"
+        },
+        "data_classification": {
+          "$ref": "#/$defs/DataClassification"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "enum": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Enum",
+          "type": "array"
+        },
+        "example": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Example"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "enum": [
+                "date",
+                "date-time",
+                "decimal"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "max_length": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Length"
+        },
+        "min_length": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Length"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "persistence": {
+          "$ref": "#/$defs/PersistenceMode",
+          "default": "redacted"
+        },
+        "properties": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ValueSchema"
+          },
+          "title": "Properties",
+          "type": "object"
+        },
+        "required": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Required",
+          "type": "array"
+        },
+        "type": {
+          "$ref": "#/$defs/JsonValueType"
+        }
+      },
+      "required": [
+        "type",
+        "description",
+        "data_classification"
+      ],
+      "title": "ValueSchema",
+      "type": "object"
+    },
+    "WaitForAction": {
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllCondition",
+              "any": "#/$defs/AnyCondition",
+              "element": "#/$defs/ElementCondition",
+              "identity_matches": "#/$defs/IdentityMatchesCondition",
+              "not": "#/$defs/NotCondition",
+              "output_valid": "#/$defs/OutputValidCondition",
+              "route": "#/$defs/RouteCondition",
+              "text": "#/$defs/TextCondition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RouteCondition"
+            },
+            {
+              "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/ElementCondition"
+            },
+            {
+              "$ref": "#/$defs/OutputValidCondition"
+            },
+            {
+              "$ref": "#/$defs/IdentityMatchesCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Condition"
+        },
+        "kind": {
+          "const": "wait_for",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "condition"
+      ],
+      "title": "WaitForAction",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "capability": {
+      "$ref": "#/$defs/CapabilityMetadata"
+    },
+    "checkpoint": {
+      "$ref": "#/$defs/Checkpoint"
+    },
+    "compatibility": {
+      "$ref": "#/$defs/Compatibility"
+    },
+    "inputs": {
+      "$ref": "#/$defs/ObjectContract"
+    },
+    "outcomes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BusinessOutcome"
+      },
+      "title": "Outcomes",
+      "type": "array"
+    },
+    "outputs": {
+      "$ref": "#/$defs/ObjectContract"
+    },
+    "policy": {
+      "$ref": "#/$defs/CapabilityPolicy"
+    },
+    "preconditions": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "all": "#/$defs/AllCondition",
+            "any": "#/$defs/AnyCondition",
+            "element": "#/$defs/ElementCondition",
+            "identity_matches": "#/$defs/IdentityMatchesCondition",
+            "not": "#/$defs/NotCondition",
+            "output_valid": "#/$defs/OutputValidCondition",
+            "route": "#/$defs/RouteCondition",
+            "text": "#/$defs/TextCondition"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/RouteCondition"
+          },
+          {
+            "$ref": "#/$defs/TextCondition"
+          },
+          {
+            "$ref": "#/$defs/ElementCondition"
+          },
+          {
+            "$ref": "#/$defs/OutputValidCondition"
+          },
+          {
+            "$ref": "#/$defs/IdentityMatchesCondition"
+          },
+          {
+            "$ref": "#/$defs/AllCondition"
+          },
+          {
+            "$ref": "#/$defs/AnyCondition"
+          },
+          {
+            "$ref": "#/$defs/NotCondition"
+          }
+        ]
+      },
+      "title": "Preconditions",
+      "type": "array"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "recoveries": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Recovery"
+      },
+      "title": "Recoveries",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "capability",
+    "compatibility",
+    "inputs",
+    "outputs",
+    "steps",
+    "checkpoint",
+    "policy",
+    "provenance"
+  ],
+  "title": "CapabilityArtifact",
+  "type": "object"
+}
