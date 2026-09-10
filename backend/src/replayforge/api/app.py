@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from replayforge.api.contracts import (
     ArtifactValidationRequest,
     ArtifactValidationResponse,
+    DiscoveryInvocation,
     ErrorBody,
     HealthResponse,
     ReplayInvocation,
@@ -25,6 +26,7 @@ from replayforge.capabilities.serialization import (
     artifact_json_schema,
     load_artifact_yaml,
 )
+from replayforge.discovery.models import DiscoverySuccess
 from replayforge.shared.ids import EntityKind, new_id
 
 _CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{8,100}$")
@@ -92,6 +94,28 @@ def create_app(services: ApiServices) -> FastAPI:
                 retryable=True,
             )
         return HealthResponse(status="ready")
+
+    @app.post("/api/v1/discoveries")
+    def discover(request: Request, body: DiscoveryInvocation) -> JSONResponse:
+        if services.discovery_invoker is None or not services.discovery_invoker.ready():
+            return _error_response(
+                request,
+                status_code=503,
+                code="discovery_not_ready",
+                message="The configured model provider is unavailable.",
+                retryable=True,
+            )
+        result = services.discovery_invoker.invoke(**body.model_dump())
+        if isinstance(result, DiscoverySuccess):
+            payload = {
+                "status": result.status,
+                "run_id": result.run_id,
+                "artifact": result.artifact.model_dump(mode="json"),
+                "evidence_manifest": result.evidence_manifest,
+            }
+            return JSONResponse(payload, status_code=200)
+        status_code = 202 if result.status == "intervention_required" else 200
+        return JSONResponse(result.model_dump(mode="json"), status_code=status_code)
 
     @app.get("/api/v1/capabilities/schema")
     def capability_schema() -> dict[str, Any]:

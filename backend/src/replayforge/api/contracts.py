@@ -19,6 +19,16 @@ class ReplayInvocation(ApiModel):
     inputs: dict[str, Any]
 
 
+class DiscoveryInvocation(ApiModel):
+    goal: str = Field(min_length=10, max_length=1_000)
+    application_family: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    tenant: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
+    entry_point: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    inputs: dict[str, Any]
+    max_steps: int = Field(default=20, ge=1, le=50)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
+
+
 class ArtifactValidationRequest(ApiModel):
     yaml: str = Field(min_length=1, max_length=1_000_000)
 

@@ -8,6 +8,7 @@ from replayforge.api.services import ApiServices
 from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.capabilities.serialization import dump_artifact_yaml
+from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.runs.results import (
     CapabilityReference,
     RunResult,
@@ -39,6 +40,23 @@ class FakeReplayInvoker:
             capability=CapabilityReference(id=capability_id, version=version or "1.0.0"),
             outputs={"available_balance": "1420.57"},
             checkpoint=VerifiedCheckpoint(id="savings_balance_verified", verified=True),
+            evidence_manifest="evidence://test/manifest.json",
+        )
+
+
+@dataclass
+class FakeDiscoveryInvoker:
+    artifact: CapabilityArtifact
+    is_ready: bool = True
+
+    def ready(self) -> bool:
+        return self.is_ready
+
+    def invoke(self, **kwargs: Any) -> DiscoveryResult:
+        return DiscoverySuccess(
+            status="success",
+            run_id="run_0123456789abcdef0123456789abcdef",
+            artifact=self.artifact,
             evidence_manifest="evidence://test/manifest.json",
         )
 
@@ -155,3 +173,41 @@ def test_unknown_capability_is_a_sanitized_404() -> None:
     assert response.status_code == 404
     assert response.json()["code"] == "capability_not_found"
     assert "internal lookup" not in response.text
+
+
+def test_discovery_requires_provider_readiness() -> None:
+    response = client().post(
+        "/api/v1/discoveries",
+        json={
+            "goal": "Look up the current savings balance",
+            "application_family": "northstar_member_service",
+            "tenant": "harbor",
+            "entry_point": "member_search",
+            "inputs": {"member_id": "12345"},
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "discovery_not_ready"
+
+
+def test_successful_discovery_returns_compiled_artifact(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    api = TestClient(create_app(ApiServices(FakeReplayInvoker(), FakeDiscoveryInvoker(artifact))))
+
+    response = api.post(
+        "/api/v1/discoveries",
+        json={
+            "goal": "Look up the current savings balance",
+            "application_family": "northstar_member_service",
+            "tenant": "harbor_credit_union",
+            "entry_point": "member_search",
+            "inputs": {"member_id": "12345"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["artifact"]["capability"]["id"] == artifact.capability.id
