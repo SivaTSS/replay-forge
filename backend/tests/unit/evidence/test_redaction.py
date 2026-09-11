@@ -79,6 +79,15 @@ def test_configured_secret_is_rejected_without_disclosing_it() -> None:
     assert "known-sensitive-value" not in str(error.value)
 
 
+def test_validates_secret_free_immutable_text() -> None:
+    redactor = StructuredRedactor(configured_secrets=("known-sensitive-value",))
+
+    redactor.validate_text("schema_version: '1.0'")
+
+    with pytest.raises(EvidenceRejectedError, match="forbidden"):
+        redactor.validate_text("description: known-sensitive-value")
+
+
 def test_non_strict_scanner_is_available_only_as_explicit_configuration() -> None:
     sanitized = StructuredRedactor(strict=False).sanitize_json(
         {"synthetic": "sk-" + "abcdefghijklmnop1234"}, {}, run_salt="test"

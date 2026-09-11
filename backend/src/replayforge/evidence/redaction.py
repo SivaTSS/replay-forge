@@ -55,6 +55,11 @@ class StructuredRedactor:
             redaction_directives=tuple(sorted(directives)),
         )
 
+    def validate_text(self, content: str) -> None:
+        """Reject secret-like text that must remain byte-for-byte intact."""
+
+        self._scan(content)
+
     def _redact_mapping(
         self,
         value: dict[str, Any],

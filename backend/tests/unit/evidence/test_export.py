@@ -76,11 +76,18 @@ def test_export_writes_stable_verified_bundle(tmp_path: Path) -> None:
 
     assert exported.destination == destination
     manifest = json.loads((destination / "manifest.json").read_text())
+    artifact_content = (destination / "artifact.yaml").read_bytes()
     events = (destination / "events.jsonl").read_bytes()
     result = (destination / "result.json").read_bytes()
     screenshot = (destination / "screenshots/001.png").read_bytes()
     trace = (destination / "trace.zip").read_bytes()
     assert manifest["run_id"] == journal.run_id
+    assert manifest["artifact"]["file"] == "artifact.yaml"
+    assert manifest["files"]["artifact.yaml"] == {
+        "content_hash": f"sha256:{hashlib.sha256(artifact_content).hexdigest()}",
+        "size_bytes": len(artifact_content),
+    }
+    assert load_artifact_yaml(artifact_content.decode()) == _request(journal).artifact
     assert manifest["redaction"]["source_manifest_verified"] is True
     assert manifest["redaction"]["directives"] == [
         "mask:input",
@@ -125,6 +132,35 @@ def test_bundle_verifier_rejects_missing_file(tmp_path: Path) -> None:
 
     with pytest.raises(EvidenceBundleIntegrityError, match="missing"):
         verify_evidence_bundle(destination)
+
+
+def test_bundle_verifier_rejects_artifact_metadata_mismatch(tmp_path: Path) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["artifact"]["version"] = "9.9.9"
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="does not match"):
+        verify_evidence_bundle(destination)
+
+
+def test_bundle_verifier_accepts_legacy_bundle_without_embedded_artifact(
+    tmp_path: Path,
+) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["artifact"].pop("file")
+    manifest["files"].pop("artifact.yaml")
+    (destination / "artifact.yaml").unlink()
+    manifest_path.write_text(json.dumps(manifest))
+
+    assert verify_evidence_bundle(destination).run_id == journal.run_id
 
 
 @pytest.mark.parametrize("attachment", ["screenshots/001.png", "trace.zip"])
@@ -244,6 +280,28 @@ def test_export_rejects_secret_in_reproduction_command(tmp_path: Path) -> None:
             tmp_path / "replay-success",
             request,
             configured_secrets=("highly-sensitive-value",),
+        )
+
+    assert not (tmp_path / "replay-success").exists()
+
+
+def test_export_rejects_secret_in_embedded_artifact(tmp_path: Path) -> None:
+    store, journal = _retained_run(tmp_path)
+    request = _request(journal)
+    unsafe_artifact = request.artifact.model_copy(
+        update={
+            "capability": request.artifact.capability.model_copy(
+                update={"description": "known-sensitive-value"}
+            )
+        }
+    )
+
+    with pytest.raises(EvidenceRejectedError):
+        export_evidence_bundle(
+            store,
+            tmp_path / "replay-success",
+            replace(request, artifact=unsafe_artifact),
+            configured_secrets=("known-sensitive-value",),
         )
 
     assert not (tmp_path / "replay-success").exists()

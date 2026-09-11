@@ -12,10 +12,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from replayforge.capabilities.models import CapabilityArtifact
-from replayforge.capabilities.serialization import artifact_content_hash
+from replayforge.capabilities.serialization import (
+    artifact_content_hash,
+    dump_artifact_yaml,
+    load_artifact_yaml,
+)
 from replayforge.evidence.integrity import (
     EventEvidence,
     RunEvidenceManifest,
@@ -81,6 +85,7 @@ class BundleAttachment(BundleFile):
 class BundleArtifact(_BundleModel):
     capability_id: str = Field(pattern=r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
     content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    file: Literal["artifact.yaml"] | None = None
     version: str = Field(pattern=r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
 
 
@@ -99,7 +104,7 @@ class EvidenceBundleManifest(_BundleModel):
     attachments: dict[str, BundleAttachment] = Field(default_factory=dict, max_length=100)
     commands: tuple[str, ...] = Field(min_length=1, max_length=20)
     commit_sha: str = Field(pattern=r"^[0-9a-f]{7,40}$")
-    files: dict[Literal["events.jsonl", "result.json"], BundleFile]
+    files: dict[Literal["artifact.yaml", "events.jsonl", "result.json"], BundleFile]
     generated_at: datetime
     redaction: BundleRedaction
     run_id: str
@@ -110,11 +115,18 @@ class EvidenceBundleManifest(_BundleModel):
     @field_validator("files")
     @classmethod
     def require_all_files(
-        cls, value: dict[Literal["events.jsonl", "result.json"], BundleFile]
-    ) -> dict[Literal["events.jsonl", "result.json"], BundleFile]:
-        if set(value) != {"events.jsonl", "result.json"}:
-            raise ValueError("bundle must declare exactly the required files")
+        cls,
+        value: dict[Literal["artifact.yaml", "events.jsonl", "result.json"], BundleFile],
+    ) -> dict[Literal["artifact.yaml", "events.jsonl", "result.json"], BundleFile]:
+        if not {"events.jsonl", "result.json"}.issubset(value):
+            raise ValueError("bundle must declare all required files")
         return value
+
+    @model_validator(mode="after")
+    def require_consistent_artifact_file(self) -> EvidenceBundleManifest:
+        if (self.artifact.file is None) != ("artifact.yaml" not in self.files):
+            raise ValueError("bundle artifact file declaration is inconsistent")
+        return self
 
     @field_validator("attachments")
     @classmethod
@@ -151,7 +163,11 @@ def export_evidence_bundle(
         store.read(entry.key).rstrip(b"\n") + b"\n" for entry in source.events
     )
     result_content = store.read(source.terminal_result.key).rstrip(b"\n") + b"\n"
+    artifact_content = dump_artifact_yaml(request.artifact).encode()
+    redactor = StructuredRedactor(configured_secrets=configured_secrets)
+    redactor.validate_text(artifact_content.decode("utf-8"))
     files = {
+        "artifact.yaml": _file_metadata(artifact_content),
         "events.jsonl": _file_metadata(events_content),
         "result.json": _file_metadata(result_content),
     }
@@ -185,6 +201,7 @@ def export_evidence_bundle(
         "artifact": {
             "capability_id": request.artifact.capability.id,
             "content_hash": artifact_content_hash(request.artifact),
+            "file": "artifact.yaml",
             "version": request.artifact.capability.version,
         },
         "attachments": attachment_metadata,
@@ -204,13 +221,12 @@ def export_evidence_bundle(
             "key": request.source_manifest_key,
         },
     }
-    sanitized_manifest = StructuredRedactor(configured_secrets=configured_secrets).sanitize_json(
-        bundle_manifest, {}, run_salt=source.run_id
-    )
+    sanitized_manifest = redactor.sanitize_json(bundle_manifest, {}, run_salt=source.run_id)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
     try:
+        _durable_write(temporary / "artifact.yaml", artifact_content)
         _durable_write(temporary / "events.jsonl", events_content)
         _durable_write(temporary / "result.json", result_content)
         for relative_path, content in attachment_content.items():
@@ -245,6 +261,22 @@ def verify_evidence_bundle(directory: Path) -> EvidenceExport:
         if _file_metadata(content) != declared.model_dump(mode="python"):
             raise EvidenceBundleIntegrityError("evidence bundle file hash or size does not match")
         content_by_name[name] = content
+
+    if manifest.artifact.file is not None:
+        try:
+            embedded_artifact = load_artifact_yaml(
+                content_by_name[manifest.artifact.file].decode("utf-8")
+            )
+        except (UnicodeDecodeError, ValidationError, ValueError) as error:
+            raise EvidenceBundleIntegrityError("embedded capability artifact is invalid") from error
+        if (
+            embedded_artifact.capability.id != manifest.artifact.capability_id
+            or embedded_artifact.capability.version != manifest.artifact.version
+            or artifact_content_hash(embedded_artifact) != manifest.artifact.content_hash
+        ):
+            raise EvidenceBundleIntegrityError(
+                "embedded capability artifact does not match its bundle metadata"
+            )
 
     for relative_path, declared in manifest.attachments.items():
         try:
