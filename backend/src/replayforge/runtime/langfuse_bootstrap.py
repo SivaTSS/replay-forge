@@ -77,6 +77,7 @@ def provision(application_env: Path, server_env: Path) -> bool:
         secret_key = f"lf_sk_{secrets.token_urlsafe(32)}"
     assert public_key is not None and secret_key is not None
 
+    minio_password = server.get("MINIO_ROOT_PASSWORD") or secrets.token_hex(24)
     server_updates = {
         "NEXTAUTH_URL": "http://localhost:3100",
         "NEXTAUTH_SECRET": server.get("NEXTAUTH_SECRET") or secrets.token_urlsafe(48),
@@ -85,12 +86,21 @@ def provision(application_env: Path, server_env: Path) -> bool:
         "POSTGRES_PASSWORD": server.get("POSTGRES_PASSWORD") or secrets.token_hex(24),
         "CLICKHOUSE_PASSWORD": server.get("CLICKHOUSE_PASSWORD") or secrets.token_hex(24),
         "REDIS_AUTH": server.get("REDIS_AUTH") or secrets.token_hex(24),
-        "MINIO_ROOT_PASSWORD": server.get("MINIO_ROOT_PASSWORD") or secrets.token_hex(24),
+        "MINIO_ROOT_PASSWORD": minio_password,
+        "LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY": server.get(
+            "LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY"
+        )
+        or minio_password,
+        "LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY": server.get(
+            "LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY"
+        )
+        or minio_password,
         "LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY": server.get(
             "LANGFUSE_S3_BATCH_EXPORT_SECRET_ACCESS_KEY"
         )
         or secrets.token_hex(24),
         "TELEMETRY_ENABLED": "false",
+        "LANGFUSE_IN_APP_AGENT_ENABLED": "false",
         "LANGFUSE_INIT_ORG_ID": "replayforge-local",
         "LANGFUSE_INIT_ORG_NAME": "ReplayForge Local",
         "LANGFUSE_INIT_PROJECT_ID": "replayforge",

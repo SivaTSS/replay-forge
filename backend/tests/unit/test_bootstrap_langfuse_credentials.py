@@ -37,6 +37,10 @@ def test_provision_creates_matching_private_credentials_without_losing_existing_
     assert (
         application["REPLAYFORGE_LANGFUSE_SECRET_KEY"] == server["LANGFUSE_INIT_PROJECT_SECRET_KEY"]
     )
+    assert server["MINIO_ROOT_PASSWORD"] == server["LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY"]
+    assert server["MINIO_ROOT_PASSWORD"] == server["LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY"]
+    assert server["TELEMETRY_ENABLED"] == "false"
+    assert server["LANGFUSE_IN_APP_AGENT_ENABLED"] == "false"
     assert stat.S_IMODE(application_env.stat().st_mode) == 0o600
     assert stat.S_IMODE(server_env.stat().st_mode) == 0o600
 

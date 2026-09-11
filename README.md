@@ -105,6 +105,17 @@ runs reuse the existing project keypair and server secrets. The runtime refuses 
 discovery unless the keys are paired, the endpoint is loopback, and `auth_check()` succeeds.
 The OpenAI key is never printed, committed, or sent to Langfuse.
 
+Start the pinned Langfuse `v4.33.0` Docker Compose deployment:
+
+```bash
+scripts/start_local_langfuse.sh
+```
+
+The wrapper verifies the exact upstream commit, applies the reviewed loopback-only port
+override, waits for `/api/public/ready`, and authenticates the SDK project credentials. Langfuse
+is available at `http://127.0.0.1:3100`. PostgreSQL, ClickHouse, Redis, and the worker expose no
+host ports; MinIO is loopback-only. Upstream Langfuse telemetry and its in-app agent are disabled.
+
 The reviewed [model policy](config/model-policy.yaml) is the only authority for model choice and
 budgets. Environment variables and API requests cannot override the cost-sensitive model, low
 reasoning effort, output-token ceiling, per-run call ceiling, or provider timeout.

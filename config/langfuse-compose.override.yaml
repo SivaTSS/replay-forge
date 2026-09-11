@@ -1,0 +1,23 @@
+services:
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.33.0
+    ports: !reset []
+
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4.33.0
+    ports: !override
+      - 127.0.0.1:3100:3000
+
+  clickhouse:
+    ports: !reset []
+
+  minio:
+    ports: !override
+      - 127.0.0.1:9090:9000
+      - 127.0.0.1:9091:9001
+
+  redis:
+    ports: !reset []
+
+  postgres:
+    ports: !reset []
