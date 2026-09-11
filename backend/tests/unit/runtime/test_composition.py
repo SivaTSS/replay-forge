@@ -2,13 +2,19 @@ from dataclasses import replace
 from email.message import Message
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 import pytest
 from pydantic import SecretStr, ValidationError
 
 from replayforge.capabilities.registry import CapabilityNotFoundError
-from replayforge.runtime.composition import effective_replay_policy, load_registry, origin_ready
+from replayforge.runtime.composition import (
+    build_runtime,
+    effective_replay_policy,
+    load_registry,
+    origin_ready,
+)
 from replayforge.runtime.settings import RuntimeSettings
 
 
@@ -80,8 +86,6 @@ def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready(
             artifact_directory=artifact_directory(),
             langfuse_base_url="https://cloud.langfuse.com",
         )
-    from replayforge.runtime.composition import build_runtime
-
     runtime = build_runtime(settings)
     try:
         assert not runtime.discovery_service.ready()
@@ -160,3 +164,23 @@ def test_origin_readiness_distinguishes_reachable_client_errors_from_outages(
     monkeypatch.setattr("replayforge.runtime.composition.urlopen", fail)
 
     assert origin_ready("http://target") is expected
+
+
+def test_runtime_injects_required_local_telemetry_into_openai_provider() -> None:
+    settings = RuntimeSettings(
+        artifact_directory=artifact_directory(),
+        openai_api_key=SecretStr("runtime-only-key"),
+        langfuse_public_key=SecretStr("local-public-key"),
+        langfuse_secret_key=SecretStr("local-secret-key"),
+    )
+
+    with (
+        patch("replayforge.runtime.composition.LangfuseModelCallTelemetry.create") as create,
+        patch("replayforge.runtime.composition.OpenAIModelProvider.from_api_key") as from_api_key,
+    ):
+        monitor = create.return_value
+        runtime = build_runtime(settings)
+        try:
+            from_api_key.assert_called_once_with("runtime-only-key", settings.model_policy, monitor)
+        finally:
+            runtime.close()

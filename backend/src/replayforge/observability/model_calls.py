@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, cast
 
@@ -11,6 +12,17 @@ from langfuse import Langfuse
 from replayforge.runtime.model_policy import ModelPolicy
 
 logger = logging.getLogger(__name__)
+
+ProviderErrorCategory = Literal[
+    "authentication",
+    "permission",
+    "rate_limit",
+    "timeout",
+    "connection",
+    "request",
+    "server",
+    "unknown",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +38,9 @@ class ModelCallMetric:
     latency_ms: int
     outcome: Literal["success", "provider_error", "invalid_response"]
     usage: ModelUsage | None = None
+    error_category: ProviderErrorCategory | None = None
+    provider_status_code: int | None = None
+    provider_error_code: str | None = None
 
 
 class ModelCallTelemetry(Protocol):
@@ -112,6 +127,20 @@ class LangfuseModelCallTelemetry:
                 "output": float(output_cost),
                 "total": float(input_cost + output_cost),
             }
+        metadata: dict[str, int | str] = {
+            "call_index": metric.call_index,
+            "latency_ms": metric.latency_ms,
+            "outcome": metric.outcome,
+            "payload_capture": "disabled",
+        }
+        if metric.error_category is not None:
+            metadata["error_category"] = metric.error_category
+        if metric.provider_status_code is not None and 100 <= metric.provider_status_code <= 599:
+            metadata["provider_status_code"] = metric.provider_status_code
+        if metric.provider_error_code is not None and re.fullmatch(
+            r"[a-z][a-z0-9_]{0,63}", metric.provider_error_code
+        ):
+            metadata["provider_error_code"] = metric.provider_error_code
         try:
             with self.client.start_as_current_observation(
                 as_type="generation",
@@ -121,12 +150,7 @@ class LangfuseModelCallTelemetry:
                     "max_output_tokens": self.policy.max_output_tokens,
                     "reasoning_effort": self.policy.reasoning_effort,
                 },
-                metadata={
-                    "call_index": metric.call_index,
-                    "latency_ms": metric.latency_ms,
-                    "outcome": metric.outcome,
-                    "payload_capture": "disabled",
-                },
+                metadata=metadata,
                 usage_details=usage_details,
                 cost_details=cost_details,
             ):

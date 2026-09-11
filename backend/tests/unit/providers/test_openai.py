@@ -70,6 +70,11 @@ class FailingTelemetry(FakeTelemetry):
         raise RuntimeError("telemetry export failed")
 
 
+class SafeFakeProviderError(RuntimeError):
+    status_code = 400
+    code = "invalid_value"
+
+
 def model_policy(**changes: object) -> ModelPolicy:
     policy = load_model_policy(Path("config/model-policy.yaml"))
     return policy.model_copy(update=changes)
@@ -158,7 +163,10 @@ def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
 @pytest.mark.parametrize(
     ("responses", "code"),
     [
-        (FakeResponses(error=RuntimeError("raw provider failure")), "provider_unavailable"),
+        (
+            FakeResponses(error=SafeFakeProviderError("raw provider failure")),
+            "provider_unavailable",
+        ),
         (FakeResponses(result=None), "provider_response_invalid"),
     ],
 )
@@ -174,6 +182,10 @@ def test_provider_errors_are_safe_and_classified(responses: FakeResponses, code:
     assert telemetry.metrics[0].outcome == (
         "provider_error" if responses.error is not None else "invalid_response"
     )
+    if responses.error is not None:
+        assert telemetry.metrics[0].error_category == "request"
+        assert telemetry.metrics[0].provider_status_code == 400
+        assert telemetry.metrics[0].provider_error_code == "invalid_value"
 
 
 def test_provider_enforces_per_run_call_budget() -> None:

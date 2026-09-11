@@ -584,7 +584,7 @@ def build_runtime(settings: object) -> LocalRuntime:
     )
     provider = (
         OpenAIModelProvider.from_api_key(
-            settings.openai_api_key.get_secret_value(), settings.model_policy
+            settings.openai_api_key.get_secret_value(), settings.model_policy, model_telemetry
         )
         if settings.openai_api_key is not None
         else None

@@ -18,6 +18,7 @@ from replayforge.observability.model_calls import (
     ModelCallTelemetry,
     ModelUsage,
     NoOpModelCallTelemetry,
+    ProviderErrorCategory,
 )
 from replayforge.runtime.model_policy import ModelPolicy
 
@@ -66,10 +67,19 @@ class OpenAIModelProvider:
     _calls_made: int = field(default=0, init=False, repr=False)
 
     @classmethod
-    def from_api_key(cls, api_key: str, policy: ModelPolicy) -> OpenAIModelProvider:
+    def from_api_key(
+        cls,
+        api_key: str,
+        policy: ModelPolicy,
+        telemetry: ModelCallTelemetry | None = None,
+    ) -> OpenAIModelProvider:
         if not api_key:
             raise ValueError("OpenAI API key is required")
-        return cls(cast(OpenAIClientPort, OpenAI(api_key=api_key, max_retries=1)), policy)
+        return cls(
+            cast(OpenAIClientPort, OpenAI(api_key=api_key, max_retries=1)),
+            policy,
+            telemetry or NoOpModelCallTelemetry(),
+        )
 
     def for_run(self) -> OpenAIModelProvider:
         return OpenAIModelProvider(self.client, self.policy, self.telemetry)
@@ -140,7 +150,15 @@ class OpenAIModelProvider:
                 timeout=self.policy.timeout_seconds,
             )
         except Exception as error:
-            self._record_metric(call_index, started_at, "provider_error")
+            category, status_code, error_code = _safe_provider_error_details(error)
+            self._record_metric(
+                call_index,
+                started_at,
+                "provider_error",
+                error_category=category,
+                provider_status_code=status_code,
+                provider_error_code=error_code,
+            )
             raise ModelProviderError(
                 "provider_unavailable",
                 "The model provider could not produce a discovery decision.",
@@ -161,6 +179,10 @@ class OpenAIModelProvider:
         started_at: float,
         outcome: Literal["success", "provider_error", "invalid_response"],
         usage: ResponseUsagePort | None = None,
+        *,
+        error_category: ProviderErrorCategory | None = None,
+        provider_status_code: int | None = None,
+        provider_error_code: str | None = None,
     ) -> None:
         model_usage = (
             ModelUsage(usage.input_tokens, usage.output_tokens, usage.total_tokens)
@@ -174,9 +196,37 @@ class OpenAIModelProvider:
                     latency_ms=max(0, round((time.monotonic() - started_at) * 1_000)),
                     outcome=outcome,
                     usage=model_usage,
+                    error_category=error_category,
+                    provider_status_code=provider_status_code,
+                    provider_error_code=provider_error_code,
                 )
             )
         except Exception:
             # Monitoring availability is enforced before a discovery run starts. A transient
             # exporter failure after a paid call must not discard a valid provider response.
             return
+
+
+def _safe_provider_error_details(
+    error: Exception,
+) -> tuple[ProviderErrorCategory, int | None, str | None]:
+    """Reduce provider failures to bounded operational fields without retaining messages."""
+    raw_status = getattr(error, "status_code", None)
+    status_code = raw_status if isinstance(raw_status, int) and 100 <= raw_status <= 599 else None
+    raw_code = getattr(error, "code", None)
+    error_code = raw_code if isinstance(raw_code, str) else None
+    if status_code == 401:
+        return "authentication", status_code, error_code
+    if status_code == 403:
+        return "permission", status_code, error_code
+    if status_code == 429:
+        return "rate_limit", status_code, error_code
+    if status_code is not None and status_code >= 500:
+        return "server", status_code, error_code
+    if status_code is not None and status_code >= 400:
+        return "request", status_code, error_code
+    if isinstance(error, TimeoutError):
+        return "timeout", status_code, error_code
+    if isinstance(error, ConnectionError | OSError):
+        return "connection", status_code, error_code
+    return "unknown", status_code, error_code

@@ -93,6 +93,31 @@ def test_local_telemetry_is_fail_closed_for_readiness_and_fail_open_after_call()
     telemetry(broken_export).record(ModelCallMetric(1, 10, "provider_error"))
 
 
+def test_local_telemetry_exports_only_bounded_provider_failure_details() -> None:
+    client = FakeLangfuseClient()
+
+    telemetry(client).record(
+        ModelCallMetric(
+            1,
+            24,
+            "provider_error",
+            error_category="request",
+            provider_status_code=400,
+            provider_error_code="invalid_value",
+        )
+    )
+
+    assert client.observations[0]["metadata"] == {
+        "call_index": 1,
+        "latency_ms": 24,
+        "outcome": "provider_error",
+        "payload_capture": "disabled",
+        "error_category": "request",
+        "provider_status_code": 400,
+        "provider_error_code": "invalid_value",
+    }
+
+
 def test_local_telemetry_flushes_and_shuts_down_cleanly() -> None:
     client = FakeLangfuseClient()
 
