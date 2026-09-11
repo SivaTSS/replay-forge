@@ -18,14 +18,14 @@ This matrix is the under-delivery guardrail. Evidence paths are planned until ge
 | Recoverable condition | Artifact §11; Replay §11–12 | Bounded recovery tests | `replay-recovery` |
 | Hard debuggable failure | Replay §12–13 | Permission/checkpoint E2E | `replay-hard-failure` |
 | Domain/route/action allowlist | Safety §3–6 | Policy decision table | Policy events |
-| Risk treatment | Safety §7–9 | Block/approval tests | Policy block/handoff |
+| Risk treatment | Safety §7–9 | Block/approval tests | `evidence/human-handoff` (verified) |
 | Secret and PII protection | Safety §10–13 | Redaction/secret scans | All manifests report pass |
-| Structured observability | Architecture §7; Testing §4 | Event schema/order tests | Three verified `events.jsonl` bundles |
+| Structured observability | Architecture §7; Testing §4 | Event schema/order tests | Four verified `events.jsonl` bundles |
 | Rich failure evidence | Testing §4–5 | Evidence completeness test | Failure screenshot/trace |
-| Detect and route intervention | Handoff §2–4 | Trigger/state tests | `human-handoff` |
-| Same-session human control | Handoff §5–9 | Browser-context identity E2E | Handoff frames/events |
-| Resume and preserve context | Handoff §10–12 | Resume-checkpoint E2E | Handoff result/timeline |
-| Control ownership | Handoff §5–8 | Lease concurrency tests | Ownership events |
+| Detect and route intervention | Handoff §2–4 | Trigger/state tests | `evidence/human-handoff` (verified) |
+| Same-session human control | Handoff §5–9 | Browser-context identity E2E | Verified handoff frames/events |
+| Resume and preserve context | Handoff §10–12 | Resume-checkpoint E2E | Verified handoff result/timeline |
+| Control ownership | Handoff §5–8 | Lease concurrency tests | Verified handoff ownership events |
 | Surface abstraction | Architecture §4–6, §11 | Fake/Playwright contracts | Design and contract results |
 | Legacy/desktop extension | Architecture §11 | Design review | REPORT summary |
 | Multi-tenant reuse | Artifact §5; UX §13 | Two-variant E2E | `evidence/tenant-reuse` (verified) |

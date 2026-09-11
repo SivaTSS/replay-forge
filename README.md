@@ -49,6 +49,12 @@ Expected status is `success`, with five outputs and a verified checkpoint. Use m
 
 Version `1.0.0` is the normal model-free replay. Immutable version `2.0.0` preserves the same typed business contract but intentionally classifies search submission as sensitive, so reviewers can exercise claim, same-session control, fresh-state validation, and deterministic resume.
 
+With the API and demo bank running, reproduce that complete handoff through the public HTTP contract:
+
+```bash
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_handoff_run.py
+```
+
 Verify the returned `evidence_manifest`, ordered events, hashes, and exactly-one terminal result independently:
 
 ```bash

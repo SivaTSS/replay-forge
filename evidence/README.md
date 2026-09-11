@@ -8,6 +8,7 @@ Every directory listed as verified below was produced through the public ReplayF
 |---|---|---|
 | [`replay-success`](replay-success/) | Model-free deterministic replay, five typed outputs, and checkpoint verification on Harbor | `success` |
 | [`replay-member-not-found`](replay-member-not-found/) | Alternate UI state becomes the typed `member_not_found` business outcome | `business_outcome` |
+| [`human-handoff`](human-handoff/) | Approval pause, exclusive claim, same-session input, fresh-state resume, masked before/after screenshots, and terminal checkpoint | `success` |
 | [`tenant-reuse`](tenant-reuse/) | The same capability ID, version, and content hash replay successfully on Summit | `success` |
 
 Verify every stable bundle from the repository root:
@@ -19,8 +20,6 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bun
 ## Explicitly not yet evidenced
 
 - Genuine paid-provider discovery: provider integration is implemented, but no runtime OpenAI credential is available in this environment.
-- Recovery and hard-failure bundles.
-- Exported same-session human-handoff evidence bundle; a real Chromium integration already verifies retained-session input, metadata-only audit events, masked before/after screenshots, fresh-state revalidation, deterministic continuation, terminal evidence, and teardown.
-- Selected redacted screenshots and Playwright trace archives.
+- Recovery and hard-failure bundles with selected redacted screenshots; Playwright trace archives.
 
 These omissions remain visible by design. Unit or integration fixtures are never represented as genuine run evidence.
