@@ -8,7 +8,7 @@ from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from threading import Lock
 from typing import Protocol
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from replayforge.api.services import ApiServices
@@ -86,6 +86,17 @@ def load_registry(directory: Path) -> CapabilityRegistry:
             raise ValueError("artifact exceeds the one-megabyte startup limit")
         registry.publish(load_artifact_yaml(path.read_text(encoding="utf-8")))
     return registry
+
+
+def origin_ready(origin: str) -> bool:
+    """Treat an HTTP-speaking origin as reachable even when its root route is client-invalid."""
+    try:
+        with urlopen(origin, timeout=1) as response:
+            return int(response.status) < 500
+    except HTTPError as error:
+        return int(error.code) < 500
+    except (OSError, URLError):
+        return False
 
 
 def effective_replay_policy(record: CapabilityVersionRecord, origin: str) -> EffectivePolicy:
@@ -547,11 +558,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         return ManagedReplayExecutor(engine, driver, worker, live_sessions, lock)
 
     def target_ready() -> bool:
-        try:
-            with urlopen(settings.demo_base_url, timeout=1) as response:
-                return int(response.status) < 500
-        except (OSError, URLError):
-            return False
+        return origin_ready(settings.demo_base_url)
 
     def finalize_replay(result: RunResult) -> RunResult:
         if isinstance(result, InterventionRequiredResult):

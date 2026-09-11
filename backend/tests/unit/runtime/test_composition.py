@@ -1,11 +1,14 @@
 from dataclasses import replace
+from email.message import Message
+from io import BytesIO
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 import pytest
 from pydantic import SecretStr, ValidationError
 
 from replayforge.capabilities.registry import CapabilityNotFoundError
-from replayforge.runtime.composition import effective_replay_policy, load_registry
+from replayforge.runtime.composition import effective_replay_policy, load_registry, origin_ready
 from replayforge.runtime.settings import RuntimeSettings
 
 
@@ -37,7 +40,12 @@ def test_settings_validate_origin_and_artifact_directory() -> None:
 def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = RuntimeSettings(artifact_directory=artifact_directory())
+    settings = RuntimeSettings(
+        artifact_directory=artifact_directory(),
+        openai_api_key=None,
+        langfuse_public_key=None,
+        langfuse_secret_key=None,
+    )
 
     assert "runtime-only-key" not in repr(
         RuntimeSettings(
@@ -56,12 +64,15 @@ def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready(
         RuntimeSettings(
             artifact_directory=artifact_directory(),
             openai_api_key=SecretStr("runtime-only-key"),
+            langfuse_public_key=None,
+            langfuse_secret_key=None,
         )
 
     with pytest.raises(ValidationError, match="configured together"):
         RuntimeSettings(
             artifact_directory=artifact_directory(),
             langfuse_public_key=SecretStr("local-public-key"),
+            langfuse_secret_key=None,
         )
 
     with pytest.raises(ValidationError, match="local HTTP origin"):
@@ -129,3 +140,23 @@ def test_empty_registry_directory_fails_startup(tmp_path: Path) -> None:
 
     with pytest.raises(CapabilityNotFoundError):
         load_registry(artifact_directory()).get("missing.capability", "1.0.0")
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (HTTPError("http://target", 404, "not found", Message(), BytesIO()), True),
+        (HTTPError("http://target", 503, "unavailable", Message(), BytesIO()), False),
+        (URLError("connection refused"), False),
+    ],
+)
+def test_origin_readiness_distinguishes_reachable_client_errors_from_outages(
+    monkeypatch: pytest.MonkeyPatch, error: Exception, expected: bool
+) -> None:
+    def fail(_origin: str, timeout: int) -> None:
+        assert timeout == 1
+        raise error
+
+    monkeypatch.setattr("replayforge.runtime.composition.urlopen", fail)
+
+    assert origin_ready("http://target") is expected
