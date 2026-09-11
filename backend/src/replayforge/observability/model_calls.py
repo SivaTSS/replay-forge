@@ -58,8 +58,6 @@ class LangfuseClientPort(Protocol):
 
     def flush(self) -> None: ...
 
-    def shutdown(self) -> None: ...
-
 
 @dataclass(frozen=True, slots=True)
 class NoOpModelCallTelemetry:
@@ -159,8 +157,10 @@ class LangfuseModelCallTelemetry:
             logger.warning("local Langfuse model-call export failed")
 
     def close(self) -> None:
+        # The SDK resource manager is process-global and owns its atexit shutdown.
+        # A runtime boundary must flush, but must not terminate resources shared by
+        # later runtimes in the same worker or test process.
         try:
             self.client.flush()
-            self.client.shutdown()
         except Exception:
-            logger.warning("local Langfuse shutdown failed")
+            logger.warning("local Langfuse flush failed during runtime shutdown")

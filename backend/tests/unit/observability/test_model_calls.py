@@ -20,7 +20,6 @@ class FakeLangfuseClient:
     fail_export: bool = False
     observations: list[dict[str, Any]] = field(default_factory=list)
     flush_count: int = 0
-    shutdown_count: int = 0
 
     def auth_check(self) -> bool:
         if self.fail_auth:
@@ -35,9 +34,6 @@ class FakeLangfuseClient:
 
     def flush(self) -> None:
         self.flush_count += 1
-
-    def shutdown(self) -> None:
-        self.shutdown_count += 1
 
 
 def telemetry(client: FakeLangfuseClient) -> LangfuseModelCallTelemetry:
@@ -118,10 +114,9 @@ def test_local_telemetry_exports_only_bounded_provider_failure_details() -> None
     }
 
 
-def test_local_telemetry_flushes_and_shuts_down_cleanly() -> None:
+def test_local_telemetry_flushes_without_terminating_process_global_resources() -> None:
     client = FakeLangfuseClient()
 
     telemetry(client).close()
 
     assert client.flush_count == 1
-    assert client.shutdown_count == 1
