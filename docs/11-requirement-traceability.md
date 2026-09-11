@@ -1,11 +1,11 @@
 # Requirement Traceability
 
-This matrix is the under-delivery guardrail. Evidence paths are planned until genuine runs are produced; they must not be marked complete early.
+This matrix is the under-delivery guardrail. Evidence paths are marked verified only after their committed bundles pass independent hash validation.
 
-| Requirement | Owning design | Verification | Planned evidence |
+| Requirement | Owning design | Verification | Evidence |
 |---|---|---|---|
-| Goal and target input | Product §4–6; API §4 | Discovery request validation and UI E2E | `discovery-success` |
-| Model observe-decide-act loop | Discovery §2–6 | Provider/surface contracts; live smoke | `discovery-success/events.jsonl` |
+| Goal and target input | Product §4–6; API §4 | Discovery request validation and UI E2E | `evidence/discovery-success` (verified) |
+| Model observe-decide-act loop | Discovery §2–6 | Provider/surface contracts; live smoke | `evidence/discovery-success/events.jsonl` (verified) |
 | Real UI interaction | Architecture §3; Discovery §5 | Playwright integration | Discovery screenshots/trace |
 | Stopping conditions | Discovery §4–6 | Budget/no-progress tests | Hard-failure run |
 | Typed ordered artifact | Artifact §3–8 | Schema and round-trip tests | Produced capability YAML |
@@ -32,7 +32,7 @@ This matrix is the under-delivery guardrail. Evidence paths are planned until ge
 | Tenant/version drift | Artifact §5; UX §13 | Fingerprint mismatch tests | Drift event/view |
 | Exact README demo commands | Implementation §9 | Clean-clone walkthrough | Evidence manifests |
 | Required seven REPORT headings | Docs index; Implementation §9 | Heading/length check | Root `REPORT.md` |
-| Genuine discovery evidence | Testing §5 | Manual live run + integrity CI | `discovery-success` |
+| Genuine discovery evidence | Testing §5 | Manual live run + integrity CI | `evidence/discovery-success` (verified) |
 | Agent-facing capability API | API §5–7 | Schema and invocation E2E | Agent invocation result |
 
 ## Completion states

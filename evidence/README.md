@@ -6,6 +6,7 @@ Every directory listed as verified below was produced through the public ReplayF
 
 | Scenario | What it proves | Terminal status |
 |---|---|---|
+| [`discovery-success`](discovery-success/) | Genuine OpenAI-driven observe-decide-act discovery against real Chromium, producing a typed eight-step artifact | `success` |
 | [`replay-success`](replay-success/) | Model-free deterministic replay, five typed outputs, and checkpoint verification on Harbor | `success` |
 | [`replay-member-not-found`](replay-member-not-found/) | Alternate UI state becomes the typed `member_not_found` business outcome | `business_outcome` |
 | [`replay-recovery`](replay-recovery/) | A known interstitial triggers one bounded declared recovery before checkpoint-verified completion | `success` |
@@ -21,7 +22,6 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bun
 
 ## Explicitly not yet evidenced
 
-- Genuine paid-provider discovery: provider integration is implemented, but no runtime OpenAI credential is available in this environment.
 - Playwright trace archives.
 
-These omissions remain visible by design. Unit or integration fixtures are never represented as genuine run evidence.
+This optional omission remains visible by design. Unit or integration fixtures are never represented as genuine run evidence.

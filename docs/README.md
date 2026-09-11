@@ -1,6 +1,6 @@
 # ReplayForge Design Documentation
 
-Status: design specification; implementation has not started.
+Status: implemented end-to-end vertical slice with verified genuine discovery, deterministic replay, exceptional outcomes, tenant reuse, and same-session human handoff evidence.
 
 ReplayForge turns one successful, model-driven interaction with a real user interface into a typed, reviewable capability that can be replayed without a model in the decision loop. The system is designed for stable but heterogeneous bank and credit-union back-office applications where runtime exceptions, safety, auditability, and human intervention matter more than raw browsing breadth.
 

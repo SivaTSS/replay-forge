@@ -128,6 +128,10 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_discovery_r
   --artifact-output /tmp/replayforge-genuine-discovery.yaml
 ```
 
+The committed [`evidence/discovery-success`](evidence/discovery-success/) bundle records a
+successful genuine run, its OpenAI/Luna provenance, the compiled artifact, redacted lifecycle
+events, terminal result, and independently verifiable hashes.
+
 Discovery sends ephemeral rendered PNG frames and normalized state. Customer input values are excluded from the model instruction payload. Responses use strict structured output, bounded token/time budgets, no tools, and `store=false`. A successful trace is checkpoint-verified and atomically published as the next immutable patch version.
 
 ## Verification
