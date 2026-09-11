@@ -413,6 +413,49 @@ def test_registered_artifact_returns_real_member_not_found_outcome(
         runtime.close()
 
 
+def test_registered_artifact_classifies_permission_denial_with_masked_evidence(
+    demo_bank: str, tmp_path: Path
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=repository / "capabilities",
+            evidence_directory=tmp_path / "evidence",
+            demo_base_url=demo_bank,
+        )
+    )
+    try:
+        result = runtime.service.invoke(
+            "member.lookup_savings_balance",
+            "1.0.2",
+            "harbor",
+            {"member_id": "12345"},
+        )
+
+        assert isinstance(result, FailureResult)
+        assert result.code == "permission_denied"
+        assert result.step_id == "search.submit"
+        assert result.expected == {"state": "member_results"}
+        assert result.observed == {"state": "permission_denied"}
+        verification = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
+            result.evidence_manifest,
+        )
+        assert verification.attachment_count == 1
+        manifest_path = tmp_path / "evidence" / result.evidence_manifest.removeprefix("evidence://")
+        manifest = json.loads(manifest_path.read_text())
+        attachment = manifest["attachments"][0]
+        assert attachment["retention_class"] == "failure"
+        assert attachment["redaction_directives"] == [
+            "mask:form-controls",
+            "mask:customer-details",
+            "mask:account-table-cells",
+        ]
+        assert runtime.live_sessions == {}
+    finally:
+        runtime.close()
+
+
 def test_real_output_failure_retains_masked_state_before_teardown(
     demo_bank: str, tmp_path: Path
 ) -> None:
