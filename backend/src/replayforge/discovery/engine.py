@@ -100,7 +100,10 @@ class DiscoveryEngine:
                 )
                 observation = session.observe()
                 self.recorder.record("observation_captured", request.run_id)
-                if observation.fingerprint == previous_fingerprint:
+                previous_was_extraction = bool(recordings) and isinstance(
+                    recordings[-1].action, ExtractAction
+                )
+                if observation.fingerprint == previous_fingerprint and not previous_was_extraction:
                     repeated_state += 1
                 else:
                     repeated_state = 0
@@ -349,6 +352,10 @@ class DiscoveryEngine:
 
     @staticmethod
     def _transform(value: str, transform: str) -> str:
-        if transform in {"trim", "decimal", "date-time"}:
+        if transform == "lowercase":
+            return value.strip().lower()
+        if transform == "decimal":
             return value.strip().removeprefix("$").replace(",", "")
+        if transform in {"trim", "date-time"}:
+            return value.strip()
         return value

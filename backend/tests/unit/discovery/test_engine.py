@@ -126,6 +126,15 @@ def make_request(**changes: Any) -> DiscoveryRequest:
     return DiscoveryRequest(**defaults)
 
 
+def test_discovery_extraction_transforms_match_artifact_semantics() -> None:
+    assert DiscoveryEngine._transform(" Savings ", "lowercase") == "savings"
+    assert DiscoveryEngine._transform(" $1,420.57 ", "decimal") == "1420.57"
+    assert DiscoveryEngine._transform(" 2026-09-10T12:30:00Z ", "date-time") == (
+        "2026-09-10T12:30:00Z"
+    )
+    assert DiscoveryEngine._transform(" unchanged ", "text") == " unchanged "
+
+
 def test_successful_loop_records_action_and_compiles_verified_artifact(
     valid_artifact_data: dict[str, Any],
 ) -> None:
@@ -185,6 +194,36 @@ def test_low_confidence_escalates_and_preserves_session(
     assert isinstance(result, InterventionRequiredResult)
     assert result.code == "low_model_confidence"
     assert session.closed is False
+
+
+def test_multiple_extractions_from_one_stable_view_are_not_stuck(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    extract_step = artifact.steps[2]
+    proposal = ActProposal(
+        kind="act",
+        action=extract_step.action,
+        target=extract_step.target,
+        rationale="Extract one declared value from the stable details view.",
+        expected_effect="The declared output is bound without changing the page.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=0.99,
+    )
+    provider = QueueModelProvider(
+        [
+            proposal,
+            proposal,
+            CompleteProposal(kind="complete", rationale="Required output is verified."),
+        ]
+    )
+    session = FakeSurfaceSession(static_fingerprint=True)
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, DiscoverySuccess)
+    assert len(provider.calls) == 3
 
 
 def test_provider_can_explicitly_request_human_help(

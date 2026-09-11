@@ -5,6 +5,7 @@ import os
 import subprocess
 import time
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 from urllib.error import URLError
@@ -34,6 +35,15 @@ from replayforge.capabilities.serialization import (
     dump_artifact_yaml,
     load_artifact_yaml,
 )
+from replayforge.discovery.compiler import SavingsBalanceCompiler
+from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
+from replayforge.discovery.models import (
+    ActProposal,
+    CompleteProposal,
+    DiscoveryProposal,
+    DiscoverySuccess,
+    ProviderContext,
+)
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.interventions.leases import (
@@ -43,6 +53,8 @@ from replayforge.interventions.leases import (
 from replayforge.interventions.models import HumanInputCommand
 from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.interventions.service import InterventionCoordinator
+from replayforge.policy.evaluator import PolicyEvaluator
+from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import Risk
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.runs.results import (
@@ -121,6 +133,97 @@ def in_member_frame(target: LocatorBundle) -> LocatorBundle:
             )
         }
     )
+
+
+@dataclass
+class ScriptedDiscoveryProvider:
+    proposals: list[DiscoveryProposal]
+    calls: list[ProviderContext] = field(default_factory=list)
+    provider_name: str = "scripted-integration"
+    model_name: str = "not-a-model"
+
+    def decide(self, context: ProviderContext) -> DiscoveryProposal:
+        self.calls.append(context)
+        return self.proposals.pop(0)
+
+
+def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    seed = load_artifact_yaml(
+        (repository / "capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
+    )
+    proposals: list[DiscoveryProposal] = [
+        ActProposal(
+            kind="act",
+            action=step.action,
+            target=step.target,
+            rationale=f"Exercise the visible {step.name} control.",
+            expected_effect=f"Complete {step.name} and expose the next state.",
+            declared_risk=step.risk,
+            confidence=1.0,
+        )
+        for step in seed.steps
+    ]
+    proposals.append(
+        CompleteProposal(
+            kind="complete",
+            rationale="Every required output is visible and deterministically verified.",
+        )
+    )
+    provider = ScriptedDiscoveryProvider(proposals)
+    driver = PlaywrightSurfaceDriver(demo_bank)
+    clock = SystemClock()
+    run_id = str(new_id(EntityKind.RUN))
+    engine = DiscoveryEngine(
+        surface_driver=driver,
+        model_provider=provider,
+        artifact_compiler=SavingsBalanceCompiler(clock),
+        policy_evaluator=PolicyEvaluator(clock),
+        effective_policy=EffectivePolicy.intersect(
+            PolicyLayer(
+                name="integration",
+                allowed_origins=frozenset({demo_bank}),
+                allowed_route_patterns=frozenset(
+                    {"/members/search", "/accounts/:account_id/details"}
+                ),
+                allowed_action_types=frozenset({"type", "click", "extract"}),
+                maximum_risk=Risk.READ_ONLY,
+            )
+        ),
+        lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
+        recorder=InMemoryRunJournal(run_id, clock),
+        intervention_router=InMemoryInterventionRouter(clock),
+        clock=clock,
+    )
+    try:
+        result = engine.execute(
+            DiscoveryRequest(
+                run_id=run_id,
+                goal="Look up the synthetic member and return the current savings balance.",
+                application_family="northstar_member_service",
+                tenant="harbor",
+                entry_point="member_search",
+                inputs={"member_id": "12345"},
+            )
+        )
+
+        assert isinstance(result, DiscoverySuccess)
+        assert result.artifact.provenance.provider == "scripted-integration"
+        assert result.artifact.provenance.artifact_content_hash == artifact_content_hash(
+            result.artifact
+        )
+        assert result.artifact.steps[0].action == seed.steps[0].action
+        assert len(provider.calls) == len(seed.steps) + 1
+        assert all(call.screenshot_png.startswith(b"\x89PNG\r\n\x1a\n") for call in provider.calls)
+        assert provider.calls[0].required_output_names == (
+            "member_id",
+            "account_type",
+            "currency",
+            "available_balance",
+            "as_of",
+        )
+    finally:
+        driver.close()
 
 
 def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Path) -> None:
