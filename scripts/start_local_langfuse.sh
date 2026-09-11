@@ -7,6 +7,7 @@ readonly LANGFUSE_REPOSITORY="https://github.com/langfuse/langfuse.git"
 readonly LOCAL_REPOSITORY=".local/langfuse"
 readonly SERVER_ENV=".secrets/langfuse-server.env"
 readonly OVERRIDE_FILE="config/langfuse-compose.override.yaml"
+readonly REPLAYFORGE_UV_CACHE="${UV_CACHE_DIR:-/tmp/replayforge-uv-cache}"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker Engine and the Compose plugin are required." >&2
@@ -17,7 +18,7 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 2
 fi
 
-UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/replayforge-uv-cache}" \
+UV_CACHE_DIR="${REPLAYFORGE_UV_CACHE}" \
   uv run python scripts/bootstrap_langfuse_credentials.py
 
 if [[ ! -d "${LOCAL_REPOSITORY}/.git" ]]; then
@@ -41,7 +42,7 @@ compose=(
 
 for _attempt in {1..60}; do
   if curl --fail --silent http://127.0.0.1:3100/api/public/ready >/dev/null; then
-    UV_CACHE_DIR="${UV_CACHE_DIR}" uv run python scripts/check_local_langfuse.py
+    UV_CACHE_DIR="${REPLAYFORGE_UV_CACHE}" uv run python scripts/check_local_langfuse.py
     exit 0
   fi
   sleep 5
