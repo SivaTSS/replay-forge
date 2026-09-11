@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from openai.lib._pydantic import to_strict_json_schema
 
 from replayforge.discovery.models import CompleteProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
@@ -137,6 +138,22 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     assert telemetry.metrics[0].outcome == "success"
     assert telemetry.metrics[0].usage is not None
     assert telemetry.metrics[0].usage.total_tokens == 150
+
+
+def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> None:
+    schema = to_strict_json_schema(ProposalEnvelope)
+    serialized = json.dumps(schema, sort_keys=True)
+
+    assert '"oneOf"' not in serialized
+    assert '"anyOf"' in serialized
+    assert "AssertAction" not in serialized
+    assert "WaitForAction" not in serialized
+    assert "NavigateAction" not in serialized
+    assert {
+        "ProviderClickAction",
+        "ProviderTypeAction",
+        "ProviderExtractAction",
+    }.issubset(schema["$defs"])
 
 
 @pytest.mark.parametrize("frame", [b"", b"x" * (5 * 1024 * 1024 + 1)])

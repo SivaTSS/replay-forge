@@ -9,9 +9,15 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, cast
 
 from openai import OpenAI
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from replayforge.discovery.models import DiscoveryProposal, ProviderContext
+from replayforge.capabilities.models import InputValue, LiteralValue, LocatorBundle
+from replayforge.discovery.models import (
+    CompleteProposal,
+    DiscoveryProposal,
+    EscalateProposal,
+    ProviderContext,
+)
 from replayforge.discovery.ports import ModelProviderError
 from replayforge.observability.model_calls import (
     ModelCallMetric,
@@ -20,6 +26,7 @@ from replayforge.observability.model_calls import (
     NoOpModelCallTelemetry,
     ProviderErrorCategory,
 )
+from replayforge.policy.types import Risk
 from replayforge.runtime.model_policy import ModelPolicy
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
@@ -30,10 +37,41 @@ Declare risk conservatively. Extract every required output using its exact field
 complete only when every required output and the requested result are visibly verified."""
 
 
-class ProposalEnvelope(BaseModel):
+class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    proposal: DiscoveryProposal
+
+class ProviderClickAction(ProviderModel):
+    kind: Literal["click"]
+
+
+class ProviderTypeAction(ProviderModel):
+    kind: Literal["type"]
+    value: InputValue | LiteralValue
+    clear: bool = True
+
+
+class ProviderExtractAction(ProviderModel):
+    kind: Literal["extract"]
+    output: str
+    transform: Literal["text", "trim", "lowercase", "decimal", "date-time"] = "trim"
+
+
+class ProviderActProposal(ProviderModel):
+    kind: Literal["act"]
+    action: ProviderClickAction | ProviderTypeAction | ProviderExtractAction
+    target: LocatorBundle | None = None
+    rationale: str = Field(min_length=1, max_length=500)
+    expected_effect: str = Field(min_length=1, max_length=500)
+    declared_risk: Risk
+    confidence: float = Field(ge=0, le=1)
+
+
+class ProposalEnvelope(ProviderModel):
+    proposal: ProviderActProposal | CompleteProposal | EscalateProposal
+
+
+_DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
 
 
 class ParsedResponsePort(Protocol):
@@ -171,7 +209,7 @@ class OpenAIModelProvider:
                 "The model provider returned no valid structured discovery decision.",
             )
         self._record_metric(call_index, started_at, "success", response.usage)
-        return parsed.proposal
+        return _DISCOVERY_PROPOSAL.validate_python(parsed.proposal.model_dump(mode="python"))
 
     def _record_metric(
         self,
