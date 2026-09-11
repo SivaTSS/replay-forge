@@ -47,7 +47,13 @@ curl --fail-with-body --silent --show-error -H 'content-type: application/json' 
 
 Expected status is `success`, with five outputs and a verified checkpoint. Use member `99999` for the typed `member_not_found` outcome. Change `harbor` to `summit` to replay the same artifact against the second tenant.
 
-Version `1.0.0` is the normal model-free replay. Immutable version `2.0.0` preserves the same typed business contract but intentionally classifies search submission as sensitive, so reviewers can exercise claim, same-session control, fresh-state validation, and deterministic resume.
+Version `1.0.0` is the normal model-free replay. Immutable patch `1.0.1` exercises one bounded declared recovery for the demo bank's known informational interstitial while preserving the same typed contract. Version `2.0.0` classifies search submission as sensitive so reviewers can exercise claim, same-session control, fresh-state validation, and deterministic resume.
+
+With the API and demo bank running, reproduce the recovery path through the public HTTP contract:
+
+```bash
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_recovery_run.py
+```
 
 With the API and demo bank running, reproduce that complete handoff through the public HTTP contract:
 
