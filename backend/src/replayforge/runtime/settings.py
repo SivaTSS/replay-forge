@@ -15,7 +15,7 @@ from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
 class RuntimeSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="REPLAYFORGE_",
-        env_file=(".env", ".secrets/openai.env"),
+        env_file=(".env", ".secrets/openai.env", ".secrets/langfuse-client.env"),
         extra="ignore",
     )
 
@@ -23,6 +23,9 @@ class RuntimeSettings(BaseSettings):
     evidence_directory: Path = Path("evidence/runtime")
     demo_base_url: str = "http://127.0.0.1:3001"
     browser_headless: bool = True
+    langfuse_base_url: str = "http://127.0.0.1:3100"
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
     model_policy_file: Path = Path("config/model-policy.yaml")
     openai_api_key: SecretStr | None = None
     _model_policy: ModelPolicy = PrivateAttr()
@@ -46,6 +49,22 @@ class RuntimeSettings(BaseSettings):
             raise ValueError("demo base URL must be a credential-free HTTP origin")
         if not self.artifact_directory.is_dir():
             raise ValueError("artifact directory does not exist")
+        langfuse_url = urlsplit(self.langfuse_base_url)
+        if (
+            langfuse_url.scheme != "http"
+            or langfuse_url.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or langfuse_url.username
+            or langfuse_url.password
+            or langfuse_url.query
+            or langfuse_url.fragment
+            or langfuse_url.path not in {"", "/"}
+        ):
+            raise ValueError("Langfuse base URL must be a credential-free local HTTP origin")
+        if (self.langfuse_public_key is None) != (self.langfuse_secret_key is None):
+            raise ValueError("Langfuse public and secret keys must be configured together")
+        if self.openai_api_key is not None and self.langfuse_public_key is None:
+            raise ValueError("OpenAI discovery requires local Langfuse monitoring credentials")
         self._model_policy = load_model_policy(self.model_policy_file)
         self.demo_base_url = self.demo_base_url.rstrip("/")
+        self.langfuse_base_url = self.langfuse_base_url.rstrip("/")
         return self

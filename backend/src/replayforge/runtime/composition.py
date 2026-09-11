@@ -44,6 +44,11 @@ from replayforge.interventions.service import (
     InterventionResume,
     InterventionTransition,
 )
+from replayforge.observability.model_calls import (
+    LangfuseModelCallTelemetry,
+    ModelCallTelemetry,
+    NoOpModelCallTelemetry,
+)
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import DataClassification, Risk
@@ -463,6 +468,7 @@ class LocalRuntime:
     journals: dict[str, InMemoryRunJournal]
     interventions: InMemoryInterventionRouter
     live_sessions: dict[str, LiveBrowserSession]
+    model_telemetry: ModelCallTelemetry
     _lock: Lock = field(repr=False)
 
     @property
@@ -475,6 +481,7 @@ class LocalRuntime:
             self.live_sessions.clear()
         for session in sessions:
             session.close()
+        self.model_telemetry.close()
 
 
 def build_runtime(settings: object) -> LocalRuntime:
@@ -485,8 +492,10 @@ def build_runtime(settings: object) -> LocalRuntime:
     clock = SystemClock()
     registry = load_registry(settings.artifact_directory)
     evidence_store = LocalEvidenceStore(settings.evidence_directory, clock)
-    configured_secrets = (
-        (settings.openai_api_key.get_secret_value(),) if settings.openai_api_key is not None else ()
+    configured_secrets = tuple(
+        secret.get_secret_value()
+        for secret in (settings.openai_api_key, settings.langfuse_secret_key)
+        if secret is not None
     )
     lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
     interventions = InMemoryInterventionRouter(clock)
@@ -556,6 +565,16 @@ def build_runtime(settings: object) -> LocalRuntime:
         return result.model_copy(update={"evidence_manifest": manifest_key})
 
     service = ReplayApplicationService(registry, executor_factory, (target_ready,), finalize_replay)
+    model_telemetry: ModelCallTelemetry = (
+        LangfuseModelCallTelemetry.create(
+            public_key=settings.langfuse_public_key.get_secret_value(),
+            secret_key=settings.langfuse_secret_key.get_secret_value(),
+            base_url=settings.langfuse_base_url,
+            policy=settings.model_policy,
+        )
+        if settings.langfuse_public_key is not None and settings.langfuse_secret_key is not None
+        else NoOpModelCallTelemetry()
+    )
     provider = (
         OpenAIModelProvider.from_api_key(
             settings.openai_api_key.get_secret_value(), settings.model_policy
@@ -636,7 +655,7 @@ def build_runtime(settings: object) -> LocalRuntime:
     discovery_service = DiscoveryApplicationService(
         registry,
         discovery_factory,
-        lambda: provider is not None and target_ready(),
+        lambda: provider is not None and model_telemetry.ready() and target_ready(),
         finalize_discovery,
     )
     intervention_service = RuntimeInterventionService(
@@ -654,5 +673,6 @@ def build_runtime(settings: object) -> LocalRuntime:
         journals,
         interventions,
         live_sessions,
+        model_telemetry,
         lock,
     )

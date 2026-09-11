@@ -43,12 +43,32 @@ def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready(
         RuntimeSettings(
             artifact_directory=artifact_directory(),
             openai_api_key=SecretStr("runtime-only-key"),
+            langfuse_public_key=SecretStr("local-public-key"),
+            langfuse_secret_key=SecretStr("local-secret-key"),
         )
     )
     monkeypatch.setenv("REPLAYFORGE_OPENAI_MODEL", "gpt-6-astra")
     assert RuntimeSettings(artifact_directory=artifact_directory()).model_policy.model == (
         "gpt-5.6-luna"
     )
+
+    with pytest.raises(ValidationError, match="requires local Langfuse"):
+        RuntimeSettings(
+            artifact_directory=artifact_directory(),
+            openai_api_key=SecretStr("runtime-only-key"),
+        )
+
+    with pytest.raises(ValidationError, match="configured together"):
+        RuntimeSettings(
+            artifact_directory=artifact_directory(),
+            langfuse_public_key=SecretStr("local-public-key"),
+        )
+
+    with pytest.raises(ValidationError, match="local HTTP origin"):
+        RuntimeSettings(
+            artifact_directory=artifact_directory(),
+            langfuse_base_url="https://cloud.langfuse.com",
+        )
     from replayforge.runtime.composition import build_runtime
 
     runtime = build_runtime(settings)

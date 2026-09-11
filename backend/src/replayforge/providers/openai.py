@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import json
+import time
 from base64 import b64encode
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict
 
 from replayforge.discovery.models import DiscoveryProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
+from replayforge.observability.model_calls import (
+    ModelCallMetric,
+    ModelCallTelemetry,
+    ModelUsage,
+    NoOpModelCallTelemetry,
+)
 from replayforge.runtime.model_policy import ModelPolicy
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
@@ -32,6 +39,15 @@ class ParsedResponsePort(Protocol):
     @property
     def output_parsed(self) -> ProposalEnvelope | None: ...
 
+    @property
+    def usage(self) -> ResponseUsagePort: ...
+
+
+class ResponseUsagePort(Protocol):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
 
 class ResponsesPort(Protocol):
     def parse(self, **kwargs: Any) -> ParsedResponsePort: ...
@@ -46,6 +62,7 @@ class OpenAIClientPort(Protocol):
 class OpenAIModelProvider:
     client: OpenAIClientPort
     policy: ModelPolicy
+    telemetry: ModelCallTelemetry = field(default_factory=NoOpModelCallTelemetry)
     _calls_made: int = field(default=0, init=False, repr=False)
 
     @classmethod
@@ -55,7 +72,7 @@ class OpenAIModelProvider:
         return cls(cast(OpenAIClientPort, OpenAI(api_key=api_key, max_retries=1)), policy)
 
     def for_run(self) -> OpenAIModelProvider:
-        return OpenAIModelProvider(self.client, self.policy)
+        return OpenAIModelProvider(self.client, self.policy, self.telemetry)
 
     @property
     def provider_name(self) -> str:
@@ -107,6 +124,8 @@ class OpenAIModelProvider:
                 "The discovery run exhausted its reviewed model-call budget.",
             )
         self._calls_made += 1
+        call_index = self._calls_made
+        started_at = time.monotonic()
         try:
             response = self.client.responses.parse(
                 model=self.model_name,
@@ -121,14 +140,43 @@ class OpenAIModelProvider:
                 timeout=self.policy.timeout_seconds,
             )
         except Exception as error:
+            self._record_metric(call_index, started_at, "provider_error")
             raise ModelProviderError(
                 "provider_unavailable",
                 "The model provider could not produce a discovery decision.",
             ) from error
         parsed = response.output_parsed
         if parsed is None:
+            self._record_metric(call_index, started_at, "invalid_response", response.usage)
             raise ModelProviderError(
                 "provider_response_invalid",
                 "The model provider returned no valid structured discovery decision.",
             )
+        self._record_metric(call_index, started_at, "success", response.usage)
         return parsed.proposal
+
+    def _record_metric(
+        self,
+        call_index: int,
+        started_at: float,
+        outcome: Literal["success", "provider_error", "invalid_response"],
+        usage: ResponseUsagePort | None = None,
+    ) -> None:
+        model_usage = (
+            ModelUsage(usage.input_tokens, usage.output_tokens, usage.total_tokens)
+            if usage is not None
+            else None
+        )
+        try:
+            self.telemetry.record(
+                ModelCallMetric(
+                    call_index=call_index,
+                    latency_ms=max(0, round((time.monotonic() - started_at) * 1_000)),
+                    outcome=outcome,
+                    usage=model_usage,
+                )
+            )
+        except Exception:
+            # Monitoring availability is enforced before a discovery run starts. A transient
+            # exporter failure after a paid call must not discard a valid provider response.
+            return

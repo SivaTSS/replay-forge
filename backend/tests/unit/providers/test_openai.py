@@ -10,6 +10,7 @@ import pytest
 
 from replayforge.discovery.models import CompleteProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
+from replayforge.observability.model_calls import ModelCallMetric
 from replayforge.providers.openai import OpenAIModelProvider, ProposalEnvelope
 from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
 from replayforge.shared.ids import EntityKind, new_id
@@ -19,6 +20,14 @@ from replayforge.surfaces.models import NormalizedObservation, Viewport
 @dataclass
 class FakeResponse:
     output_parsed: ProposalEnvelope | None
+    usage: FakeUsage
+
+
+@dataclass
+class FakeUsage:
+    input_tokens: int = 120
+    output_tokens: int = 30
+    total_tokens: int = 150
 
 
 @dataclass
@@ -26,17 +35,39 @@ class FakeResponses:
     result: ProposalEnvelope | None = None
     error: Exception | None = None
     request: dict[str, Any] = field(default_factory=dict)
+    usage: FakeUsage = field(default_factory=FakeUsage)
 
     def parse(self, **kwargs: Any) -> FakeResponse:
         self.request = kwargs
         if self.error is not None:
             raise self.error
-        return FakeResponse(self.result)
+        return FakeResponse(self.result, self.usage)
 
 
 @dataclass
 class FakeClient:
     responses: FakeResponses
+
+
+@dataclass
+class FakeTelemetry:
+    metrics: list[ModelCallMetric] = field(default_factory=list)
+
+    def ready(self) -> bool:
+        return True
+
+    def record(self, metric: ModelCallMetric) -> None:
+        self.metrics.append(metric)
+
+    def close(self) -> None:
+        return None
+
+
+@dataclass
+class FailingTelemetry(FakeTelemetry):
+    def record(self, metric: ModelCallMetric) -> None:
+        del metric
+        raise RuntimeError("telemetry export failed")
 
 
 def model_policy(**changes: object) -> ModelPolicy:
@@ -74,7 +105,8 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     responses = FakeResponses(
         ProposalEnvelope(proposal=CompleteProposal(kind="complete", rationale="Verified."))
     )
-    provider = OpenAIModelProvider(FakeClient(responses), model_policy())
+    telemetry = FakeTelemetry()
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy(), telemetry)
 
     proposal = provider.decide(context())
 
@@ -97,6 +129,9 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     ]
     assert "12345" not in content[0]["text"]
     assert content[1]["image_url"].startswith("data:image/png;base64,")
+    assert telemetry.metrics[0].outcome == "success"
+    assert telemetry.metrics[0].usage is not None
+    assert telemetry.metrics[0].usage.total_tokens == 150
 
 
 @pytest.mark.parametrize("frame", [b"", b"x" * (5 * 1024 * 1024 + 1)])
@@ -128,13 +163,17 @@ def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
     ],
 )
 def test_provider_errors_are_safe_and_classified(responses: FakeResponses, code: str) -> None:
-    provider = OpenAIModelProvider(FakeClient(responses), model_policy())
+    telemetry = FakeTelemetry()
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy(), telemetry)
 
     with pytest.raises(ModelProviderError) as captured:
         provider.decide(context())
 
     assert captured.value.code == code
     assert "raw provider failure" not in captured.value.safe_message
+    assert telemetry.metrics[0].outcome == (
+        "provider_error" if responses.error is not None else "invalid_response"
+    )
 
 
 def test_provider_enforces_per_run_call_budget() -> None:
@@ -149,3 +188,12 @@ def test_provider_enforces_per_run_call_budget() -> None:
         provider.decide(context())
     assert captured.value.code == "provider_budget_exceeded"
     assert provider.for_run().decide(context()).kind == "complete"
+
+
+def test_telemetry_export_failure_does_not_discard_valid_provider_result() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(proposal=CompleteProposal(kind="complete", rationale="Verified."))
+    )
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy(), FailingTelemetry())
+
+    assert provider.decide(context()).kind == "complete"
