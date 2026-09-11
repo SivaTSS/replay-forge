@@ -64,6 +64,18 @@ def test_registry_loads_reviewed_artifact_and_policy_intersects_five_layers() ->
     assert policy.maximum_risk.value == "read_only"
 
 
+def test_registry_loads_immutable_handoff_version_with_sensitive_submit() -> None:
+    registry = load_registry(artifact_directory())
+    record = registry.get("member.lookup_savings_balance", "2.0.0")
+
+    policy = effective_replay_policy(record, "http://127.0.0.1:3001")
+
+    assert record.artifact.capability.risk.value == "sensitive"
+    assert record.artifact.steps[1].id == "search.submit"
+    assert record.artifact.steps[1].risk.value == "sensitive"
+    assert policy.maximum_risk.value == "sensitive"
+
+
 def test_empty_registry_directory_fails_startup(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="no versioned"):
         load_registry(tmp_path)

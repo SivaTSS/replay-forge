@@ -47,6 +47,8 @@ curl --fail-with-body --silent --show-error -H 'content-type: application/json' 
 
 Expected status is `success`, with five outputs and a verified checkpoint. Use member `99999` for the typed `member_not_found` outcome. Change `harbor` to `summit` to replay the same artifact against the second tenant.
 
+Version `1.0.0` is the normal model-free replay. Immutable version `2.0.0` preserves the same typed business contract but intentionally classifies search submission as sensitive, so reviewers can exercise claim, same-session control, fresh-state validation, and deterministic resume.
+
 Verify the returned `evidence_manifest`, ordered events, hashes, and exactly-one terminal result independently:
 
 ```bash
