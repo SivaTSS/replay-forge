@@ -6,7 +6,7 @@ import pytest
 from playwright.sync_api import BrowserContext, Page
 from playwright.sync_api import Error as PlaywrightError
 
-from replayforge.surfaces.models import SurfaceError
+from replayforge.surfaces.models import ActionableControl, ExtractableField, SurfaceError
 from replayforge.surfaces.playwright import PlaywrightSurfaceSession
 
 
@@ -39,13 +39,20 @@ def test_observation_retries_transient_navigation_context(
 
     def read_state(
         current: PlaywrightSurfaceSession,
-    ) -> tuple[str, tuple[str, ...], object]:
+    ) -> tuple[
+        str,
+        tuple[str, ...],
+        tuple[str, ...],
+        tuple[ActionableControl, ...],
+        tuple[ExtractableField, ...],
+        object,
+    ]:
         nonlocal attempts
         del current
         attempts += 1
         if attempts == 1:
             raise PlaywrightError("Execution context was destroyed during navigation")
-        return "/members/search", ("Member Search",), "memberNumber"
+        return "/members/search", ("Member Search",), (), (), (), "memberNumber"
 
     monkeypatch.setattr(PlaywrightSurfaceSession, "_read_observation_state", read_state)
 
@@ -66,7 +73,14 @@ def test_observation_does_not_retry_non_navigation_error(
 
     def fail_state(
         current: PlaywrightSurfaceSession,
-    ) -> tuple[str, tuple[str, ...], object]:
+    ) -> tuple[
+        str,
+        tuple[str, ...],
+        tuple[str, ...],
+        tuple[ActionableControl, ...],
+        tuple[ExtractableField, ...],
+        object,
+    ]:
         del current
         raise PlaywrightError("Target page has been closed")
 
