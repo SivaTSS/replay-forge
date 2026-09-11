@@ -355,6 +355,7 @@ class Step(ArtifactModel):
     retry: RetryPolicy = Field(default_factory=RetryPolicy)
     recovery_refs: tuple[str, ...] = ()
     outcome_refs: tuple[str, ...] = ()
+    failure_refs: tuple[str, ...] = ()
     risk: Risk
     evidence: EvidenceRequirement = Field(default_factory=EvidenceRequirement)
 
@@ -387,6 +388,16 @@ class BusinessOutcome(ArtifactModel):
     detect: Condition
     allowed_after_steps: tuple[str, ...] = Field(min_length=1)
     result: OutcomeResult = Field(default_factory=OutcomeResult)
+
+
+class ApplicationFailure(ArtifactModel):
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]+$")
+    description: str = Field(min_length=1)
+    detect: Condition
+    allowed_after_steps: tuple[str, ...] = Field(min_length=1)
+    expected_state: str = Field(min_length=1)
+    observed_state: str = Field(min_length=1)
+    recoverable: bool = False
 
 
 class Checkpoint(ArtifactModel):
@@ -469,6 +480,7 @@ class CapabilityArtifact(ArtifactModel):
     steps: tuple[Step, ...] = Field(min_length=1)
     recoveries: tuple[Recovery, ...] = ()
     outcomes: tuple[BusinessOutcome, ...] = ()
+    failures: tuple[ApplicationFailure, ...] = ()
     checkpoint: Checkpoint
     policy: CapabilityPolicy
     provenance: Provenance
@@ -490,14 +502,32 @@ class CapabilityArtifact(ArtifactModel):
         if len(recovery_ids) != len(self.recoveries):
             raise ValueError("recovery IDs must be unique")
         outcome_codes = {outcome.code for outcome in self.outcomes}
+        failure_codes = {failure.code for failure in self.failures}
+        if len(failure_codes) != len(self.failures):
+            raise ValueError("application failure codes must be unique")
+        if outcome_codes & failure_codes:
+            raise ValueError("business outcome and application failure codes must be distinct")
+        outcome_steps = {
+            outcome.code: frozenset(outcome.allowed_after_steps) for outcome in self.outcomes
+        }
+        failure_steps = {
+            failure.code: frozenset(failure.allowed_after_steps) for failure in self.failures
+        }
 
         bound_outputs: set[str] = set()
         recovery_steps = tuple(
             recovery_step for recovery in self.recoveries for recovery_step in recovery.steps
         )
         all_step_ids = [*step_ids, *(step.id for step in recovery_steps)]
+        all_step_id_set = set(all_step_ids)
         if len(all_step_ids) != len(set(all_step_ids)):
             raise ValueError("main and recovery step IDs must be unique")
+        for outcome in self.outcomes:
+            if not set(outcome.allowed_after_steps) <= all_step_id_set:
+                raise ValueError(f"outcome {outcome.code} references an unknown step")
+        for failure in self.failures:
+            if not set(failure.allowed_after_steps) <= all_step_id_set:
+                raise ValueError(f"application failure {failure.code} references an unknown step")
         for step in (*self.steps, *recovery_steps):
             is_recovery_step = step.id not in main_step_ids
             if step.action.kind not in self.policy.allowed_action_types:
@@ -531,6 +561,16 @@ class CapabilityArtifact(ArtifactModel):
                 raise ValueError(f"step {step.id} references an unknown recovery")
             if not set(step.outcome_refs) <= outcome_codes:
                 raise ValueError(f"step {step.id} references an unknown business outcome")
+            if not set(step.failure_refs) <= failure_codes:
+                raise ValueError(f"step {step.id} references an unknown application failure")
+            for outcome_code in step.outcome_refs:
+                if step.id not in outcome_steps[outcome_code]:
+                    raise ValueError(f"outcome {outcome_code} is not allowed after step {step.id}")
+            for failure_code in step.failure_refs:
+                if step.id not in failure_steps[failure_code]:
+                    raise ValueError(
+                        f"application failure {failure_code} is not allowed after step {step.id}"
+                    )
 
         missing_bindings = set(self.outputs.required) - bound_outputs
         if missing_bindings:
@@ -548,7 +588,4 @@ class CapabilityArtifact(ArtifactModel):
                 raise ValueError(f"recovery {recovery.id} cannot invoke a nested recovery")
             if recovery.resume_at not in known_steps:
                 raise ValueError(f"recovery {recovery.id} resumes at an unknown step")
-        for outcome in self.outcomes:
-            if not set(outcome.allowed_after_steps) <= known_steps:
-                raise ValueError(f"outcome {outcome.code} references an unknown step")
         return self

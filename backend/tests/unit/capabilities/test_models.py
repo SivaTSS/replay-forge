@@ -36,6 +36,21 @@ def add_recovery(artifact: dict[str, Any]) -> dict[str, Any]:
     return recovery
 
 
+def add_application_failure(artifact: dict[str, Any]) -> dict[str, Any]:
+    failure = {
+        "code": "permission_denied",
+        "description": "The current role cannot view the requested member.",
+        "detect": {"kind": "text", "value": "Permission denied", "match": "exact"},
+        "allowed_after_steps": ["search.submit"],
+        "expected_state": "member_results",
+        "observed_state": "permission_denied",
+        "recoverable": False,
+    }
+    artifact["failures"] = [failure]
+    artifact["steps"][1]["failure_refs"] = [failure["code"]]
+    return failure
+
+
 def test_lowercase_is_an_explicit_extraction_transform(
     valid_artifact_data: dict[str, Any],
 ) -> None:
@@ -113,6 +128,33 @@ def test_recovery_steps_obey_artifact_safety_invariants(
         recovery_step["risk"] = "sensitive"
     else:
         recovery_step["recovery_refs"] = ["dismiss.notice"]
+
+    with pytest.raises(ValidationError, match=message):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("duplicate", "application failure codes must be unique"),
+        ("outcome_collision", "codes must be distinct"),
+        ("unknown_step", "references an unknown step"),
+        ("disallowed_step", "is not allowed after step"),
+    ],
+)
+def test_application_failure_declarations_are_consistent(
+    valid_artifact_data: dict[str, Any], mutation: str, message: str
+) -> None:
+    failure = add_application_failure(valid_artifact_data)
+    if mutation == "duplicate":
+        valid_artifact_data["failures"].append(dict(failure))
+    elif mutation == "outcome_collision":
+        failure["code"] = "member_not_found"
+        valid_artifact_data["steps"][1]["failure_refs"] = ["member_not_found"]
+    elif mutation == "unknown_step":
+        failure["allowed_after_steps"] = ["missing.step"]
+    else:
+        failure["allowed_after_steps"] = ["search.enter_member_id"]
 
     with pytest.raises(ValidationError, match=message):
         CapabilityArtifact.model_validate(valid_artifact_data)
@@ -258,6 +300,7 @@ def test_targeted_action_requires_locator(valid_artifact_data: dict[str, Any]) -
         ("disallowed_action", "uses a disallowed action type"),
         ("unknown_recovery", "references an unknown recovery"),
         ("unknown_outcome", "references an unknown business outcome"),
+        ("unknown_failure", "references an unknown application failure"),
     ],
 )
 def test_artifact_rejects_cross_reference_and_policy_conflicts(
@@ -273,8 +316,10 @@ def test_artifact_rejects_cross_reference_and_policy_conflicts(
         valid_artifact_data["policy"]["allowed_action_types"].remove("click")
     elif mutation == "unknown_recovery":
         valid_artifact_data["steps"][0]["recovery_refs"] = ["missing"]
-    else:
+    elif mutation == "unknown_outcome":
         valid_artifact_data["steps"][0]["outcome_refs"] = ["missing"]
+    else:
+        valid_artifact_data["steps"][0]["failure_refs"] = ["missing"]
 
     with pytest.raises(ValidationError, match=message):
         CapabilityArtifact.model_validate(valid_artifact_data)

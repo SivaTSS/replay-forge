@@ -45,6 +45,7 @@ outputs: {}
 preconditions: []
 steps: []
 outcomes: []
+failures: []
 checkpoint: {}
 policy: {}
 provenance: {}
@@ -203,6 +204,7 @@ Every step contains:
   retry: {}
   recovery_refs: []
   outcome_refs: []
+  failure_refs: []
   risk: "read_only"
   evidence: {}
 ```
@@ -338,7 +340,7 @@ recoveries:
 
 Recovery rules may not call a model, widen policy, mutate capability inputs, or loop without a hard maximum.
 
-## 12. Business outcomes
+## 12. Business outcomes and declared application failures
 
 Business outcomes are legitimate answers produced by the target application.
 
@@ -361,6 +363,27 @@ outcomes:
 ```
 
 Outcome detection is evaluated before treating a missing happy-path target as a failure. Outcomes cannot be inferred solely from timeout or absence.
+
+Known application error states remain failures, but the artifact declares how to identify and
+classify them so replay does not collapse them into a generic timeout or postcondition mismatch:
+
+```yaml
+failures:
+  - code: permission_denied
+    description: The current role cannot view the requested member.
+    detect:
+      kind: text
+      value: Permission denied
+      match: exact
+    allowed_after_steps: [search.submit]
+    expected_state: member_results
+    observed_state: permission_denied
+    recoverable: false
+```
+
+A step must explicitly reference the failure code, and the declaration must explicitly allow
+that step. Expected and observed state labels are static, reviewable metadata rather than raw
+screen content, so the typed failure remains debuggable without persisting customer data.
 
 ## 13. Checkpoint
 

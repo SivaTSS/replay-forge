@@ -8,6 +8,7 @@ from time import sleep
 from typing import Any
 
 from replayforge.capabilities.models import (
+    ApplicationFailure,
     BusinessOutcome,
     CapabilityArtifact,
     ExtractAction,
@@ -373,6 +374,11 @@ class ReplayEngine:
             outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
             if outcome is not None:
                 return self._business_outcome(request, outcome, inputs)
+            declared_failure = self._detect_failure(
+                request.artifact, step, session, outputs, inputs
+            )
+            if declared_failure is not None:
+                return self._application_failure(request, session, step.id, declared_failure)
             for condition in step.postconditions:
                 if not session.wait_until(condition, outputs, inputs, step.timeout_ms):
                     recovery = (
@@ -390,6 +396,13 @@ class ReplayEngine:
                     )
                     if recovery is not None:
                         return recovery
+                    declared_failure = self._detect_failure(
+                        request.artifact, step, session, outputs, inputs
+                    )
+                    if declared_failure is not None:
+                        return self._application_failure(
+                            request, session, step.id, declared_failure
+                        )
                     return self._failure(
                         request,
                         "postcondition_mismatch",
@@ -549,6 +562,39 @@ class ReplayEngine:
             if session.evaluate(outcome.detect, outputs, inputs):
                 return outcome
         return None
+
+    @staticmethod
+    def _detect_failure(
+        artifact: CapabilityArtifact,
+        step: Step,
+        session: SurfaceSession,
+        outputs: dict[str, Any],
+        inputs: dict[str, Any],
+    ) -> ApplicationFailure | None:
+        indexed = {failure.code: failure for failure in artifact.failures}
+        for code in step.failure_refs:
+            failure = indexed[code]
+            if session.evaluate(failure.detect, outputs, inputs):
+                return failure
+        return None
+
+    def _application_failure(
+        self,
+        request: ReplayRequest,
+        session: SurfaceSession,
+        step_id: str,
+        failure: ApplicationFailure,
+    ) -> FailureResult:
+        return self._failure(
+            request,
+            failure.code,
+            failure.description,
+            failure.recoverable,
+            step_id,
+            expected={"state": failure.expected_state},
+            observed={"state": failure.observed_state},
+            session=session,
+        )
 
     def _business_outcome(
         self,

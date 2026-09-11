@@ -34,10 +34,25 @@ def dump_artifact_yaml(artifact: CapabilityArtifact) -> str:
 
 def canonical_artifact_json(artifact: CapabilityArtifact) -> bytes:
     payload = _canonicalize(artifact.model_dump(mode="python", exclude_none=True))
+    _remove_hash_neutral_schema_defaults(payload)
     provenance = payload.get("provenance")
     if isinstance(provenance, dict):
         provenance.pop("artifact_content_hash", None)
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def _remove_hash_neutral_schema_defaults(payload: dict[str, Any]) -> None:
+    """Preserve hashes when additive schema fields are absent from older artifacts."""
+
+    if not payload.get("failures"):
+        payload.pop("failures", None)
+    steps = list(payload.get("steps", ()))
+    for recovery in payload.get("recoveries", ()):
+        if isinstance(recovery, dict):
+            steps.extend(recovery.get("steps", ()))
+    for step in steps:
+        if isinstance(step, dict) and not step.get("failure_refs"):
+            step.pop("failure_refs", None)
 
 
 def _canonicalize(value: Any) -> Any:

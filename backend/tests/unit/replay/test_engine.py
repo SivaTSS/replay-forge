@@ -65,6 +65,7 @@ class FakeSurfaceSession:
     interstitial_visible: bool = False
     recovery_clears_interstitial: bool = True
     recovery_registered_risk: Risk = Risk.READ_ONLY
+    permission_denied: bool = False
     executed_targets: list[str] = field(default_factory=list)
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     origin: str = "http://demo.local:3001"
@@ -146,6 +147,8 @@ class FakeSurfaceSession:
             return self.postconditions_valid and not self.interstitial_visible
         if isinstance(condition, TextCondition) and condition.value == "Important notice":
             return self.interstitial_visible
+        if isinstance(condition, TextCondition) and condition.value == "Permission denied":
+            return self.permission_denied
         return True
 
     def extract(self, target: ResolvedTarget) -> str:
@@ -309,6 +312,25 @@ def add_interstitial_recovery(
             "max_uses": 1,
             "steps": [recovery_step],
             "resume_at": "account.extract_balance",
+        }
+    ]
+
+
+def add_permission_failure(artifact_data: dict[str, Any]) -> None:
+    artifact_data["steps"][1]["failure_refs"] = ["permission_denied"]
+    artifact_data["failures"] = [
+        {
+            "code": "permission_denied",
+            "description": "The current role cannot view the requested member.",
+            "detect": {
+                "kind": "text",
+                "value": "Permission denied",
+                "match": "exact",
+            },
+            "allowed_after_steps": ["search.submit"],
+            "expected_state": "member_results",
+            "observed_state": "permission_denied",
+            "recoverable": False,
         }
     ]
 
@@ -702,6 +724,24 @@ def test_declared_recoverable_absent_target_retries_once(
 
     assert isinstance(result, SuccessResult)
     assert ("step_retry_scheduled", "search.enter_member_id") in recorder.events
+
+
+def test_declared_application_failure_returns_debuggable_typed_result(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    add_permission_failure(valid_artifact_data)
+    session = FakeSurfaceSession(permission_denied=True)
+    engine, recorder, _ = build_engine(session)
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "permission_denied"
+    assert result.step_id == "search.submit"
+    assert result.expected == {"state": "member_results"}
+    assert result.observed == {"state": "permission_denied"}
+    assert result.recoverable is False
+    assert [kind for kind, _, _ in recorder.attachments] == ["failure-state"]
 
 
 def test_declared_recovery_executes_once_and_resumes_at_named_step(

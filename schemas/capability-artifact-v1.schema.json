@@ -124,6 +124,96 @@
       "title": "AnyCondition",
       "type": "object"
     },
+    "ApplicationFailure": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_after_steps": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allowed After Steps",
+          "type": "array"
+        },
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]+$",
+          "title": "Code",
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "detect": {
+          "discriminator": {
+            "mapping": {
+              "all": "#/$defs/AllCondition",
+              "any": "#/$defs/AnyCondition",
+              "element": "#/$defs/ElementCondition",
+              "identity_matches": "#/$defs/IdentityMatchesCondition",
+              "not": "#/$defs/NotCondition",
+              "output_valid": "#/$defs/OutputValidCondition",
+              "route": "#/$defs/RouteCondition",
+              "text": "#/$defs/TextCondition"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RouteCondition"
+            },
+            {
+              "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/ElementCondition"
+            },
+            {
+              "$ref": "#/$defs/OutputValidCondition"
+            },
+            {
+              "$ref": "#/$defs/IdentityMatchesCondition"
+            },
+            {
+              "$ref": "#/$defs/AllCondition"
+            },
+            {
+              "$ref": "#/$defs/AnyCondition"
+            },
+            {
+              "$ref": "#/$defs/NotCondition"
+            }
+          ],
+          "title": "Detect"
+        },
+        "expected_state": {
+          "minLength": 1,
+          "title": "Expected State",
+          "type": "string"
+        },
+        "observed_state": {
+          "minLength": 1,
+          "title": "Observed State",
+          "type": "string"
+        },
+        "recoverable": {
+          "default": false,
+          "title": "Recoverable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "description",
+        "detect",
+        "allowed_after_steps",
+        "expected_state",
+        "observed_state"
+      ],
+      "title": "ApplicationFailure",
+      "type": "object"
+    },
     "AssertAction": {
       "additionalProperties": false,
       "properties": {
@@ -1513,6 +1603,14 @@
         "evidence": {
           "$ref": "#/$defs/EvidenceRequirement"
         },
+        "failure_refs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Failure Refs",
+          "type": "array"
+        },
         "id": {
           "pattern": "^[a-z][a-z0-9_.-]+$",
           "title": "Id",
@@ -2023,6 +2121,14 @@
     },
     "compatibility": {
       "$ref": "#/$defs/Compatibility"
+    },
+    "failures": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ApplicationFailure"
+      },
+      "title": "Failures",
+      "type": "array"
     },
     "inputs": {
       "$ref": "#/$defs/ObjectContract"
