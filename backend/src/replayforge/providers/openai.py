@@ -36,7 +36,10 @@ targets. Do not navigate to arbitrary URLs. Escalate when state is ambiguous, ri
 Declare risk conservatively. Extract every required output using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
 When frame_titles is non-empty, controls represented by the inner application observation must
-use target.scope.frame_path with a title locator matching the relevant frame title exactly."""
+use target.scope.frame_path with a title locator matching the relevant frame title exactly.
+Never exceed maximum_risk. Typing into a search/query field whose operation only retrieves data,
+clicking controls that only navigate to retrieved data, and extracting displayed data are
+read_only. Target descriptions must name only the control or displayed value, not broader data."""
 
 
 class ProviderModel(BaseModel):
@@ -156,6 +159,7 @@ class OpenAIModelProvider:
             },
             "recent_actions": list(context.action_history[-20:]),
             "allowed_action_types": sorted(context.allowed_action_types),
+            "maximum_risk": context.maximum_risk.value,
         }
         input_content = [
             {

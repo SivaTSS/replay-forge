@@ -164,6 +164,10 @@ def test_successful_loop_records_action_and_compiles_verified_artifact(
     assert len(compiler.calls) == 1
     assert len(compiler.calls[0]) == 1
     assert provider.calls[0].required_output_names == ("available_balance",)
+    assert provider.calls[0].maximum_risk is Risk.READ_ONLY
+    assert engine._proposal_summary(CompleteProposal(kind="complete", rationale="Verified.")) == {
+        "proposal_kind": "complete"
+    }
     assert compiler.calls[0][0].target is not extract_step.target
     assert session.closed is True
 

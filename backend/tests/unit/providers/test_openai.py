@@ -135,6 +135,7 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
         "as_of",
     ]
     assert sent["observation"]["frame_titles"] == ["Member operations"]
+    assert sent["maximum_risk"] == "read_only"
     assert "12345" not in content[0]["text"]
     assert content[1]["image_url"].startswith("data:image/png;base64,")
     assert telemetry.metrics[0].outcome == "success"

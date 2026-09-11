@@ -74,3 +74,4 @@ class ProviderContext:
     action_history: tuple[str, ...]
     allowed_action_types: frozenset[str]
     required_output_names: tuple[str, ...]
+    maximum_risk: Risk = Risk.READ_ONLY

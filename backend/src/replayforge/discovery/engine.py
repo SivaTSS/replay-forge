@@ -129,9 +129,14 @@ class DiscoveryEngine:
                         action_history=tuple(history),
                         allowed_action_types=self.effective_policy.allowed_action_types,
                         required_output_names=self.artifact_compiler.required_output_names,
+                        maximum_risk=self.effective_policy.maximum_risk,
                     )
                 )
-                self.recorder.record("model_proposal_received", request.run_id)
+                self.recorder.record(
+                    "model_proposal_received",
+                    request.run_id,
+                    details=self._proposal_summary(proposal),
+                )
                 if isinstance(proposal, EscalateProposal):
                     result = self._intervene(
                         request,
@@ -349,6 +354,26 @@ class DiscoveryEngine:
     @staticmethod
     def _proposal_fingerprint(proposal: ActProposal) -> str:
         return json.dumps(proposal.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+    @staticmethod
+    def _proposal_summary(
+        proposal: ActProposal | CompleteProposal | EscalateProposal,
+    ) -> dict[str, object]:
+        if not isinstance(proposal, ActProposal):
+            return {"proposal_kind": proposal.kind}
+        target = proposal.target
+        return {
+            "proposal_kind": proposal.kind,
+            "action_type": proposal.action.kind,
+            "declared_risk": proposal.declared_risk.value,
+            "target_present": target is not None,
+            "frame_depth": len(target.scope.frame_path) if target is not None else 0,
+            "locator_strategies": (
+                [candidate.strategy.value for candidate in target.candidates]
+                if target is not None
+                else []
+            ),
+        }
 
     @staticmethod
     def _transform(value: str, transform: str) -> str:
