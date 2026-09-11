@@ -93,12 +93,12 @@ REPLAYFORGE_OPENAI_API_KEY=<runtime credential>
 REPLAYFORGE_OPENAI_MODEL=<structured-output-capable model ID>
 ```
 
-Restart the API, then submit:
+Restart the API, then capture the genuine run and its hash-verified compiled artifact to a new
+file (the command refuses to overwrite an existing review artifact):
 
 ```bash
-curl --fail-with-body --silent --show-error -H 'content-type: application/json' \
-  -d '{"goal":"Look up the synthetic member and return the current savings balance.","application_family":"northstar_member_service","tenant":"harbor","entry_point":"member_search","inputs":{"member_id":"12345"},"max_steps":20,"timeout_seconds":120}' \
-  http://127.0.0.1:8000/api/v1/discoveries
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_discovery_run.py \
+  --artifact-output /tmp/replayforge-genuine-discovery.yaml
 ```
 
 Discovery sends ephemeral rendered PNG frames and normalized state. Customer input values are excluded from the model instruction payload. Responses use strict structured output, bounded token/time budgets, no tools, and `store=false`. A successful trace is checkpoint-verified and atomically published as the next immutable patch version.
