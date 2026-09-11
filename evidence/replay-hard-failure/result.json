@@ -1,0 +1,1 @@
+{"code":"permission_denied","evidence_manifest":"evidence://run_c71591bd9bb84f7ebffe9b76cd0bb0cb/manifest-evd_c730d2132af1424b917980e341c58b5a.bin","message":"The current role cannot view the requested member record.","recoverable":false,"run_id":"run_c71591bd9bb84f7ebffe9b76cd0bb0cb","status":"failure","step_id":"search.submit"}
