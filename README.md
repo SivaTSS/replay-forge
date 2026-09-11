@@ -92,15 +92,18 @@ Create the ignored, owner-readable `.secrets/openai.env`, then replace the place
 install -D -m 600 config/openai.env.example .secrets/openai.env
 ```
 
-Create the ignored Langfuse client settings file from the local-stack bootstrap output:
+Generate matching ignored client and headless-server credentials without printing their values:
 
 ```bash
-install -D -m 600 config/langfuse-client.env.example .secrets/langfuse-client.env
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/bootstrap_langfuse_credentials.py
 ```
 
-Put the local Langfuse public and secret project keys in that file. The runtime refuses to
-start model discovery unless the Langfuse credentials are paired, the endpoint is loopback,
-and `auth_check()` succeeds. The OpenAI key is never printed, committed, or sent to Langfuse.
+This preserves existing `.env` settings, writes the matching Langfuse SDK keys to `.env`, writes
+the server's headless-initialization and infrastructure secrets to
+`.secrets/langfuse-server.env`, and enforces mode `0600` on both. It is idempotent: subsequent
+runs reuse the existing project keypair and server secrets. The runtime refuses to start model
+discovery unless the keys are paired, the endpoint is loopback, and `auth_check()` succeeds.
+The OpenAI key is never printed, committed, or sent to Langfuse.
 
 The reviewed [model policy](config/model-policy.yaml) is the only authority for model choice and
 budgets. Environment variables and API requests cannot override the cost-sensitive model, low
