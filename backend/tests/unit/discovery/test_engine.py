@@ -26,7 +26,7 @@ from replayforge.policy.types import Risk
 from replayforge.runs.results import FailureResult, InterventionRequiredResult
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
-from replayforge.surfaces.models import NormalizedObservation
+from replayforge.surfaces.models import NormalizedObservation, SurfaceError
 from tests.unit.replay.test_engine import (
     FakeSurfaceDriver,
     FakeSurfaceSession,
@@ -335,3 +335,82 @@ def test_provider_failure_becomes_safe_terminal_result(
     assert result.code == "provider_unavailable"
     assert result.message == "Provider is temporarily unavailable."
     assert session.closed is True
+
+
+def test_recoverable_effect_absent_locator_failure_is_replanned_without_raw_details(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    extract_step = artifact.steps[2]
+    proposal = ActProposal(
+        kind="act",
+        action=extract_step.action,
+        target=extract_step.target,
+        rationale="Capture the visible balance.",
+        expected_effect="Bind the required balance output.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    provider = QueueModelProvider(
+        [
+            proposal,
+            proposal,
+            CompleteProposal(kind="complete", rationale="The output is verified."),
+        ]
+    )
+    session = FakeSurfaceSession(
+        resolve_error=SurfaceError(
+            "target_absent",
+            "raw selector diagnostics must not reach the model",
+            recoverable=True,
+            effect_absent=True,
+        ),
+        resolve_failures_remaining=1,
+    )
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, DiscoverySuccess)
+    assert provider.calls[1].action_history == (
+        "Previous proposal was not executed (target_absent); choose a different safe target.",
+    )
+    assert "raw selector diagnostics" not in repr(provider.calls)
+    assert isinstance(engine.recorder, MemoryRecorder)
+    assert ("proposal_rejected", None) in engine.recorder.events
+
+
+def test_nonrecoverable_locator_failure_remains_terminal(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[1]
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=step.action,
+                target=step.target,
+                rationale="Submit the search.",
+                expected_effect="Show search results.",
+                declared_risk=Risk.READ_ONLY,
+                confidence=1,
+            )
+        ]
+    )
+    session = FakeSurfaceSession(
+        resolve_error=SurfaceError(
+            "target_ambiguous",
+            "Multiple controls matched.",
+            recoverable=False,
+            effect_absent=True,
+        ),
+        resolve_failures_remaining=1,
+    )
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "target_ambiguous"
+    assert len(provider.calls) == 1

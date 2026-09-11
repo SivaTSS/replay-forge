@@ -212,9 +212,23 @@ class DiscoveryEngine:
                     preserve_session = True
                     return result
 
-                act_result = self._act(
-                    request, session, lease.version, proposal, observation, outputs
-                )
+                try:
+                    act_result = self._act(
+                        request, session, lease.version, proposal, observation, outputs
+                    )
+                except SurfaceError as error:
+                    if not error.recoverable or not error.effect_absent:
+                        raise
+                    self.recorder.record(
+                        "proposal_rejected",
+                        request.run_id,
+                        details={"code": error.code, "effect_absent": True},
+                    )
+                    history.append(
+                        f"Previous proposal was not executed ({error.code}); "
+                        "choose a different safe target."
+                    )
+                    continue
                 if isinstance(act_result, InterventionRequiredResult):
                     preserve_session = True
                     return act_result
