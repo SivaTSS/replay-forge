@@ -68,7 +68,7 @@ from replayforge.surfaces.models import HumanInput, SurfaceError, SurfaceFrame
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 _ALLOWED_ROUTES = frozenset({"/members/search", "/accounts/:account_id/details"})
-_PLATFORM_ACTIONS = frozenset({"type", "click", "extract", "wait_for", "assert"})
+_PLATFORM_ACTIONS = frozenset({"type", "click", "select", "extract", "wait_for", "assert"})
 
 
 def load_registry(directory: Path) -> CapabilityRegistry:

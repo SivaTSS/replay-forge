@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,27 @@ def test_registry_loads_reviewed_artifact_and_policy_intersects_five_layers() ->
     assert policy.layer_names == ("platform", "application", "tenant", "capability", "invocation")
     assert policy.allowed_action_types == frozenset({"type", "click", "extract"})
     assert policy.maximum_risk.value == "read_only"
+
+
+def test_runtime_policy_supports_capability_scoped_select_actions() -> None:
+    registry = load_registry(artifact_directory())
+    record = registry.get("member.lookup_savings_balance", "1.0.0")
+    artifact = record.artifact
+    widened_actions = frozenset({*artifact.policy.allowed_action_types, "select"})
+    record = replace(
+        record,
+        artifact=artifact.model_copy(
+            update={
+                "policy": artifact.policy.model_copy(
+                    update={"allowed_action_types": widened_actions}
+                )
+            }
+        ),
+    )
+
+    policy = effective_replay_policy(record, "http://127.0.0.1:3001")
+
+    assert "select" in policy.allowed_action_types
 
 
 def test_registry_loads_immutable_handoff_version_with_sensitive_submit() -> None:

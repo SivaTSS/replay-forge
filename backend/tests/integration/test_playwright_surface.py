@@ -17,12 +17,16 @@ from replayforge.capabilities.models import (
     FrameLocator,
     IdentityMatchesCondition,
     InputValue,
+    LiteralValue,
     LocatorBundle,
     LocatorCandidate,
     LocatorScope,
     LocatorStrategy,
+    MatchMode,
     OutputValidCondition,
     RouteCondition,
+    SelectAction,
+    TextCondition,
     TypeAction,
 )
 from replayforge.capabilities.serialization import (
@@ -212,6 +216,65 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
         screenshot = tmp_path / "account-details.png"
         session.screenshot(screenshot)
         assert screenshot.stat().st_size > 1_000
+    finally:
+        session.close()
+        driver.close()
+
+
+def test_real_iframe_selects_known_runtime_scenario(demo_bank: str) -> None:
+    driver = PlaywrightSurfaceDriver(demo_bank)
+    session = driver.open("northstar_member_service", "harbor", "member_search")
+    try:
+        scenario = in_member_frame(
+            LocatorBundle(
+                description="Runtime scenario selector",
+                candidates=(
+                    LocatorCandidate(
+                        strategy=LocatorStrategy.LABEL,
+                        value="Runtime scenario",
+                    ),
+                ),
+            )
+        )
+        session.execute(
+            SelectAction(
+                kind="select",
+                option=LiteralValue(source="literal", value="Known interstitial"),
+            ),
+            session.resolve(scenario, 5_000),
+            {},
+        )
+        member_field = in_member_frame(
+            LocatorBundle(
+                description="Member ID field",
+                candidates=(LocatorCandidate(strategy=LocatorStrategy.LABEL, value="Member ID"),),
+            )
+        )
+        session.execute(
+            TypeAction(kind="type", value=InputValue(source="input", path="member_id")),
+            session.resolve(member_field, 5_000),
+            {"member_id": "12345"},
+        )
+        search = in_member_frame(
+            LocatorBundle(
+                description="Search button",
+                candidates=(
+                    LocatorCandidate(
+                        strategy=LocatorStrategy.ROLE_NAME,
+                        role="button",
+                        name="Search",
+                    ),
+                ),
+            )
+        )
+        session.execute(ClickAction(kind="click"), session.resolve(search, 5_000), {})
+
+        assert session.wait_until(
+            TextCondition(kind="text", value="Important notice", match=MatchMode.EXACT),
+            {},
+            {},
+            5_000,
+        )
     finally:
         session.close()
         driver.close()
