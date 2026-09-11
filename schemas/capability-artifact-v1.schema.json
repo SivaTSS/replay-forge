@@ -1245,6 +1245,7 @@
       "additionalProperties": false,
       "properties": {
         "id": {
+          "pattern": "^[a-z][a-z0-9_.-]+$",
           "title": "Id",
           "type": "string"
         },

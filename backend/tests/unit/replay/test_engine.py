@@ -62,6 +62,10 @@ class FakeSurfaceSession:
     route: str = "/members/search"
     postconditions_valid: bool = True
     evidence_capture_error: SurfaceError | None = None
+    interstitial_visible: bool = False
+    recovery_clears_interstitial: bool = True
+    recovery_registered_risk: Risk = Risk.READ_ONLY
+    executed_targets: list[str] = field(default_factory=list)
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     origin: str = "http://demo.local:3001"
 
@@ -97,7 +101,13 @@ class FakeSurfaceSession:
             if self.resolve_failures_remaining > 0:
                 self.resolve_failures_remaining -= 1
             raise self.resolve_error
-        return ResolvedTarget("fake-handle", "resolved control", 0, 1, Risk.READ_ONLY)
+        description = (
+            target.description if isinstance(target, LocatorBundle) else "resolved control"
+        )
+        registered_risk = (
+            self.recovery_registered_risk if description == "Continue notice" else Risk.READ_ONLY
+        )
+        return ResolvedTarget("fake-handle", description, 0, 1, registered_risk)
 
     def capture_locator(self, target: ResolvedTarget) -> LocatorBundle:
         return LocatorBundle.model_validate(
@@ -110,6 +120,10 @@ class FakeSurfaceSession:
     def execute(
         self, action: object, target: ResolvedTarget | None, inputs: dict[str, Any]
     ) -> ActionReceipt:
+        if target is not None:
+            self.executed_targets.append(target.description)
+            if target.description == "Continue notice" and self.recovery_clears_interstitial:
+                self.interstitial_visible = False
         now = datetime(2026, 9, 10, 12, 30, tzinfo=UTC)
         return ActionReceipt(ActionStatus.COMPLETED, now, now, "visible state changed")
 
@@ -129,7 +143,9 @@ class FakeSurfaceSession:
         if isinstance(condition, TextCondition) and condition.value == "No member found":
             return self.member_not_found
         if isinstance(condition, TextCondition) and condition.value == "Member Results":
-            return self.postconditions_valid
+            return self.postconditions_valid and not self.interstitial_visible
+        if isinstance(condition, TextCondition) and condition.value == "Important notice":
+            return self.interstitial_visible
         return True
 
     def extract(self, target: ResolvedTarget) -> str:
@@ -257,6 +273,44 @@ def request_for(artifact_data: dict[str, Any], member_id: str = "12345") -> Repl
         tenant="harbor_credit_union",
         inputs={"member_id": member_id},
     )
+
+
+def add_interstitial_recovery(
+    artifact_data: dict[str, Any], *, verify_recovery_effect: bool = True
+) -> None:
+    artifact_data["steps"][1]["recovery_refs"] = ["dismiss_notice"]
+    artifact_data["steps"][1]["postconditions"] = [
+        {"kind": "text", "value": "Member Results", "match": "exact"}
+    ]
+    recovery_step: dict[str, Any] = {
+        "id": "recovery.dismiss_notice",
+        "name": "Dismiss known notice",
+        "action": {"kind": "click"},
+        "target": {
+            "description": "Continue notice",
+            "candidates": [
+                {
+                    "strategy": "role_name",
+                    "role": "link",
+                    "name": "Continue",
+                }
+            ],
+        },
+        "risk": "read_only",
+    }
+    if verify_recovery_effect:
+        recovery_step["postconditions"] = [
+            {"kind": "text", "value": "Member Results", "match": "exact"}
+        ]
+    artifact_data["recoveries"] = [
+        {
+            "id": "dismiss_notice",
+            "trigger": {"kind": "text", "value": "Important notice", "match": "exact"},
+            "max_uses": 1,
+            "steps": [recovery_step],
+            "resume_at": "account.extract_balance",
+        }
+    ]
 
 
 def test_success_is_model_free_and_checkpoint_verified(
@@ -603,6 +657,7 @@ def test_replay_continuation_validates_index(valid_artifact_data: dict[str, Any]
         session=session,
         inputs={"member_id": "12345"},
         outputs={},
+        recovery_uses={},
         interrupted_step_index=999,
         initial_fingerprint="state",
     )
@@ -647,3 +702,142 @@ def test_declared_recoverable_absent_target_retries_once(
 
     assert isinstance(result, SuccessResult)
     assert ("step_retry_scheduled", "search.enter_member_id") in recorder.events
+
+
+def test_declared_recovery_executes_once_and_resumes_at_named_step(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    add_interstitial_recovery(valid_artifact_data)
+    session = FakeSurfaceSession(interstitial_visible=True)
+    engine, recorder, _ = build_engine(session)
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, SuccessResult)
+    assert session.executed_targets.count("Search button") == 1
+    assert session.executed_targets.count("Continue notice") == 1
+    assert ("recovery_started", "search.submit") in recorder.events
+    assert ("recovery_completed", "search.submit") in recorder.events
+    recovery_details = [
+        details
+        for event, details in zip(recorder.events, recorder.recorded_details, strict=True)
+        if event[0].startswith("recovery_")
+    ]
+    assert recovery_details == [
+        {"recovery_id": "dismiss_notice", "use": 1},
+        {"recovery_id": "dismiss_notice", "resume_at": "account.extract_balance"},
+    ]
+
+
+def test_declared_recovery_exhaustion_is_a_typed_failure(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    add_interstitial_recovery(valid_artifact_data, verify_recovery_effect=False)
+    valid_artifact_data["recoveries"][0]["resume_at"] = "search.submit"
+    session = FakeSurfaceSession(
+        interstitial_visible=True,
+        recovery_clears_interstitial=False,
+    )
+    engine, recorder, _ = build_engine(session)
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "recovery_exhausted"
+    assert session.executed_targets.count("Continue notice") == 1
+    assert ("recovery_exhausted", "search.submit") in recorder.events
+    assert [kind for kind, _, _ in recorder.attachments] == ["failure-state"]
+
+
+def test_unmatched_recovery_trigger_preserves_original_failure(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    add_interstitial_recovery(valid_artifact_data)
+    session = FakeSurfaceSession(postconditions_valid=False)
+    engine, recorder, _ = build_engine(session)
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "postcondition_mismatch"
+    assert not any(event.startswith("recovery_") for event, _ in recorder.events)
+
+
+def test_runtime_risk_escalation_cannot_pause_inside_recovery(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    add_interstitial_recovery(valid_artifact_data)
+    session = FakeSurfaceSession(
+        interstitial_visible=True,
+        recovery_registered_risk=Risk.SENSITIVE,
+    )
+    engine, _, router = build_engine(session, maximum_risk=Risk.SENSITIVE)
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "recovery_requires_human"
+    assert router.created == []
+    assert session.closed is True
+
+
+def test_recovery_budget_is_retained_across_later_human_handoff(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][2]["risk"] = "sensitive"
+    add_interstitial_recovery(valid_artifact_data)
+    session = FakeSurfaceSession(interstitial_visible=True)
+    continuations: list[ReplayContinuation] = []
+    engine, _, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, InterventionRequiredResult)
+    assert continuations[0].interrupted_step_index == 2
+    assert continuations[0].recovery_uses == {"dismiss_notice": 1}
+    assert session.closed is False
+
+
+def test_recovery_control_flow_also_applies_after_validated_resume(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][0]["risk"] = "sensitive"
+    valid_artifact_data["steps"][0]["postconditions"] = [
+        {"kind": "text", "value": "Member Search", "match": "exact"}
+    ]
+    add_interstitial_recovery(valid_artifact_data)
+    session = FakeSurfaceSession(interstitial_visible=True)
+    continuations: list[ReplayContinuation] = []
+    engine, recorder, _ = build_engine(
+        session,
+        maximum_risk=Risk.SENSITIVE,
+        continuation_sink=continuations,
+    )
+
+    paused = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(paused, InterventionRequiredResult)
+    paused_lease = engine.lease_service.repository.get(str(session.session_id))
+    claimed = engine.lease_service.claim(
+        str(session.session_id), paused_lease.version, paused.intervention_id, "operator-7"
+    )
+    returned = engine.lease_service.begin_resume(
+        str(session.session_id), claimed.version, "operator-7"
+    )
+    outcome = engine.validate_resume(continuations[0])
+    automation = engine.lease_service.complete_resume(str(session.session_id), returned.version)
+
+    result = engine.resume(continuations[0], automation.version, outcome)
+
+    assert isinstance(result, SuccessResult)
+    assert session.executed_targets.count("Continue notice") == 1
+    assert ("recovery_completed", "search.submit") in recorder.events

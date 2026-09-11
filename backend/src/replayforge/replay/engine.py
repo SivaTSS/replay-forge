@@ -13,6 +13,7 @@ from replayforge.capabilities.models import (
     ExtractAction,
     InputValue,
     LiteralValue,
+    Recovery,
     Step,
 )
 from replayforge.capabilities.values import ContractValidationError, validate_object
@@ -65,11 +66,17 @@ class ReplayContinuation:
     session: SurfaceSession
     inputs: dict[str, Any]
     outputs: dict[str, Any]
+    recovery_uses: dict[str, int]
     interrupted_step_index: int
     initial_fingerprint: str
 
 
 type ContinuationSink = Callable[[ReplayContinuation], None]
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryResume:
+    step_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +111,7 @@ class ReplayEngine:
             lease = self.lease_service.create_for_automation(session.session_id)
             self.recorder.record("replay_started", request.run_id)
             outputs: dict[str, Any] = {}
+            recovery_uses: dict[str, int] = {}
             for condition in request.artifact.preconditions:
                 if not session.evaluate(condition, outputs, inputs):
                     return self._failure(
@@ -114,8 +122,24 @@ class ReplayEngine:
                         session=session,
                     )
 
-            for step_index, step in enumerate(request.artifact.steps):
-                result = self._execute_step(request, session, step, inputs, outputs, lease.version)
+            step_indexes = {
+                step.id: step_index for step_index, step in enumerate(request.artifact.steps)
+            }
+            step_index = 0
+            while step_index < len(request.artifact.steps):
+                step = request.artifact.steps[step_index]
+                result = self._execute_step(
+                    request,
+                    session,
+                    step,
+                    inputs,
+                    outputs,
+                    recovery_uses,
+                    lease.version,
+                )
+                if isinstance(result, RecoveryResume):
+                    step_index = step_indexes[result.step_id]
+                    continue
                 if result is not None:
                     preserve_session = isinstance(result, InterventionRequiredResult)
                     if isinstance(result, InterventionRequiredResult):
@@ -125,9 +149,11 @@ class ReplayEngine:
                             session,
                             inputs,
                             outputs,
+                            recovery_uses,
                             step_index,
                         )
                     return result
+                step_index += 1
 
             return self._complete(request, session, inputs, outputs)
         except SurfaceError as error:
@@ -212,9 +238,11 @@ class ReplayEngine:
             return self._business_outcome(request, outcome, continuation.inputs)
         preserve_session = False
         try:
-            for step_index in range(
-                continuation.interrupted_step_index + 1, len(request.artifact.steps)
-            ):
+            step_indexes = {
+                step.id: step_index for step_index, step in enumerate(request.artifact.steps)
+            }
+            step_index = continuation.interrupted_step_index + 1
+            while step_index < len(request.artifact.steps):
                 step = request.artifact.steps[step_index]
                 result = self._execute_step(
                     request,
@@ -222,8 +250,12 @@ class ReplayEngine:
                     step,
                     continuation.inputs,
                     continuation.outputs,
+                    continuation.recovery_uses,
                     automation_lease_version,
                 )
+                if isinstance(result, RecoveryResume):
+                    step_index = step_indexes[result.step_id]
+                    continue
                 if result is not None:
                     preserve_session = isinstance(result, InterventionRequiredResult)
                     if isinstance(result, InterventionRequiredResult):
@@ -233,9 +265,11 @@ class ReplayEngine:
                             session,
                             continuation.inputs,
                             continuation.outputs,
+                            continuation.recovery_uses,
                             step_index,
                         )
                     return result
+                step_index += 1
             return self._complete(request, session, continuation.inputs, continuation.outputs)
         except SurfaceError as error:
             result = self._surface_failure(request, session, None, error, automation_lease_version)
@@ -252,9 +286,12 @@ class ReplayEngine:
         step: Step,
         inputs: dict[str, Any],
         outputs: dict[str, Any],
+        recovery_uses: dict[str, int],
         lease_version: int,
         attempt: int = 1,
-    ) -> RunResult | None:
+        allow_recovery: bool = True,
+        allow_intervention: bool = True,
+    ) -> RunResult | RecoveryResume | None:
         try:
             self.lease_service.assert_can_act(session.session_id, lease_version, AUTOMATION_OWNER)
             for condition in step.preconditions:
@@ -304,6 +341,15 @@ class ReplayEngine:
                     session=session,
                 )
             if decision.decision is Decision.REQUIRE_HUMAN_APPROVAL:
+                if not allow_intervention:
+                    return self._failure(
+                        request,
+                        "recovery_requires_human",
+                        "A recovery action requires human approval and cannot run autonomously.",
+                        False,
+                        step.id,
+                        session=session,
+                    )
                 return self._intervene(
                     request, session, step.id, decision.reason_code, observation, lease_version
                 )
@@ -329,6 +375,21 @@ class ReplayEngine:
                 return self._business_outcome(request, outcome, inputs)
             for condition in step.postconditions:
                 if not session.wait_until(condition, outputs, inputs, step.timeout_ms):
+                    recovery = (
+                        self._attempt_recovery(
+                            request,
+                            session,
+                            step,
+                            inputs,
+                            outputs,
+                            recovery_uses,
+                            lease_version,
+                        )
+                        if allow_recovery
+                        else None
+                    )
+                    if recovery is not None:
+                        return recovery
                     return self._failure(
                         request,
                         "postcondition_mismatch",
@@ -368,10 +429,111 @@ class ReplayEngine:
                     step,
                     inputs,
                     outputs,
+                    recovery_uses,
                     lease_version,
                     attempt + 1,
+                    allow_recovery,
+                    allow_intervention,
                 )
+            if allow_recovery:
+                recovery = self._attempt_recovery(
+                    request,
+                    session,
+                    step,
+                    inputs,
+                    outputs,
+                    recovery_uses,
+                    lease_version,
+                )
+                if recovery is not None:
+                    return recovery
             return self._surface_failure(request, session, step.id, error, lease_version)
+
+    def _attempt_recovery(
+        self,
+        request: ReplayRequest,
+        session: SurfaceSession,
+        step: Step,
+        inputs: dict[str, Any],
+        outputs: dict[str, Any],
+        recovery_uses: dict[str, int],
+        lease_version: int,
+    ) -> RunResult | RecoveryResume | None:
+        indexed = {recovery.id: recovery for recovery in request.artifact.recoveries}
+        for recovery_id in step.recovery_refs:
+            recovery = indexed[recovery_id]
+            if not session.evaluate(recovery.trigger, outputs, inputs):
+                continue
+            uses = recovery_uses.get(recovery.id, 0)
+            if uses >= recovery.max_uses:
+                self.recorder.record(
+                    "recovery_exhausted",
+                    request.run_id,
+                    step_id=step.id,
+                    details={"recovery_id": recovery.id, "uses": uses},
+                )
+                return self._failure(
+                    request,
+                    "recovery_exhausted",
+                    "A declared recovery did not restore the expected UI state.",
+                    False,
+                    step.id,
+                    session=session,
+                )
+            recovery_uses[recovery.id] = uses + 1
+            self.recorder.record(
+                "recovery_started",
+                request.run_id,
+                step_id=step.id,
+                details={"recovery_id": recovery.id, "use": uses + 1},
+            )
+            result = self._execute_recovery(
+                request,
+                session,
+                recovery,
+                inputs,
+                outputs,
+                recovery_uses,
+                lease_version,
+            )
+            if result is not None:
+                return result
+            self.recorder.record(
+                "recovery_completed",
+                request.run_id,
+                step_id=step.id,
+                details={"recovery_id": recovery.id, "resume_at": recovery.resume_at},
+            )
+            return RecoveryResume(recovery.resume_at)
+        return None
+
+    def _execute_recovery(
+        self,
+        request: ReplayRequest,
+        session: SurfaceSession,
+        recovery: Recovery,
+        inputs: dict[str, Any],
+        outputs: dict[str, Any],
+        recovery_uses: dict[str, int],
+        lease_version: int,
+    ) -> RunResult | None:
+        for recovery_step in recovery.steps:
+            result = self._execute_step(
+                request,
+                session,
+                recovery_step,
+                inputs,
+                outputs,
+                recovery_uses,
+                lease_version,
+                allow_recovery=False,
+                allow_intervention=False,
+            )
+            if isinstance(result, RecoveryResume):
+                raise RuntimeError("nested recovery control flow is not allowed")
+            if result is not None:
+                return result
+        return None
 
     @staticmethod
     def _detect_outcome(
@@ -455,6 +617,7 @@ class ReplayEngine:
         session: SurfaceSession,
         inputs: dict[str, Any],
         outputs: dict[str, Any],
+        recovery_uses: dict[str, int],
         interrupted_step_index: int,
     ) -> None:
         if self.continuation_sink is None:
@@ -467,6 +630,7 @@ class ReplayEngine:
                 session=session,
                 inputs=dict(inputs),
                 outputs=dict(outputs),
+                recovery_uses=dict(recovery_uses),
                 interrupted_step_index=interrupted_step_index,
                 initial_fingerprint=observation.fingerprint,
             )

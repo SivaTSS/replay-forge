@@ -369,7 +369,7 @@ class Step(ArtifactModel):
 
 
 class Recovery(ArtifactModel):
-    id: str
+    id: str = Field(pattern=r"^[a-z][a-z0-9_.-]+$")
     trigger: Condition
     max_uses: int = Field(ge=1, le=3)
     steps: tuple[Step, ...] = Field(min_length=1)
@@ -485,30 +485,48 @@ class CapabilityArtifact(ArtifactModel):
         step_ids = [step.id for step in self.steps]
         if len(step_ids) != len(set(step_ids)):
             raise ValueError("step IDs must be unique")
+        main_step_ids = set(step_ids)
         recovery_ids = {recovery.id for recovery in self.recoveries}
+        if len(recovery_ids) != len(self.recoveries):
+            raise ValueError("recovery IDs must be unique")
         outcome_codes = {outcome.code for outcome in self.outcomes}
 
         bound_outputs: set[str] = set()
-        for step in self.steps:
+        recovery_steps = tuple(
+            recovery_step for recovery in self.recoveries for recovery_step in recovery.steps
+        )
+        all_step_ids = [*step_ids, *(step.id for step in recovery_steps)]
+        if len(all_step_ids) != len(set(all_step_ids)):
+            raise ValueError("main and recovery step IDs must be unique")
+        for step in (*self.steps, *recovery_steps):
+            is_recovery_step = step.id not in main_step_ids
             if step.action.kind not in self.policy.allowed_action_types:
                 raise ValueError(f"step {step.id} uses a disallowed action type")
             if RISK_RANK[step.risk] > RISK_RANK[self.policy.maximum_risk]:
                 raise ValueError(f"step {step.id} exceeds the capability risk ceiling")
+            if is_recovery_step and RISK_RANK[step.risk] >= RISK_RANK[Risk.SENSITIVE]:
+                raise ValueError(f"recovery step {step.id} cannot require human approval")
             if (
                 isinstance(step.action, NavigateAction)
                 and step.action.entry_point not in self.policy.allowed_entry_points
             ):
                 raise ValueError(f"step {step.id} uses a disallowed entry point")
-            if (
-                isinstance(step.action, TypeAction)
-                and isinstance(step.action.value, InputValue)
-                and step.action.value.path.split(".", 1)[0] not in self.inputs.properties
+            input_source = (
+                step.action.value
+                if isinstance(step.action, TypeAction)
+                else step.action.option
+                if isinstance(step.action, SelectAction)
+                else None
+            )
+            if isinstance(input_source, InputValue) and (
+                input_source.path.split(".", 1)[0] not in self.inputs.properties
             ):
                 raise ValueError(f"step {step.id} references an unknown input")
             if isinstance(step.action, ExtractAction):
                 if step.action.output not in self.outputs.properties:
                     raise ValueError(f"step {step.id} binds an unknown output")
-                bound_outputs.add(step.action.output)
+                if not is_recovery_step:
+                    bound_outputs.add(step.action.output)
             if not set(step.recovery_refs) <= recovery_ids:
                 raise ValueError(f"step {step.id} references an unknown recovery")
             if not set(step.outcome_refs) <= outcome_codes:
@@ -524,8 +542,10 @@ class CapabilityArtifact(ArtifactModel):
                 f"checkpoint does not validate required outputs: {sorted(missing_checks)}"
             )
 
-        known_steps = set(step_ids)
+        known_steps = main_step_ids
         for recovery in self.recoveries:
+            if any(step.recovery_refs for step in recovery.steps):
+                raise ValueError(f"recovery {recovery.id} cannot invoke a nested recovery")
             if recovery.resume_at not in known_steps:
                 raise ValueError(f"recovery {recovery.id} resumes at an unknown step")
         for outcome in self.outcomes:

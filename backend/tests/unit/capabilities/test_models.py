@@ -12,6 +12,30 @@ from replayforge.capabilities.models import (
 )
 
 
+def add_recovery(artifact: dict[str, Any]) -> dict[str, Any]:
+    recovery = {
+        "id": "dismiss.notice",
+        "trigger": {"kind": "text", "value": "Important notice", "match": "exact"},
+        "max_uses": 1,
+        "steps": [
+            {
+                "id": "recovery.dismiss_notice",
+                "name": "Dismiss notice",
+                "action": {"kind": "click"},
+                "target": {
+                    "description": "Continue notice",
+                    "candidates": [{"strategy": "role_name", "role": "link", "name": "Continue"}],
+                },
+                "risk": "read_only",
+            }
+        ],
+        "resume_at": "account.extract_balance",
+    }
+    artifact["recoveries"] = [recovery]
+    artifact["steps"][1]["recovery_refs"] = [recovery["id"]]
+    return recovery
+
+
 def test_lowercase_is_an_explicit_extraction_transform(
     valid_artifact_data: dict[str, Any],
 ) -> None:
@@ -49,6 +73,48 @@ def test_duplicate_step_ids_are_rejected(valid_artifact_data: dict[str, Any]) ->
     valid_artifact_data["steps"][1]["id"] = valid_artifact_data["steps"][0]["id"]
 
     with pytest.raises(ValidationError, match="step IDs must be unique"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("duplicate_recovery", "recovery IDs must be unique"),
+        ("duplicate_step", "main and recovery step IDs must be unique"),
+        ("disallowed_action", "uses a disallowed action type"),
+        ("unknown_select_input", "references an unknown input"),
+        ("nested_recovery", "cannot invoke a nested recovery"),
+        ("sensitive_recovery", "cannot require human approval"),
+    ],
+)
+def test_recovery_steps_obey_artifact_safety_invariants(
+    valid_artifact_data: dict[str, Any], mutation: str, message: str
+) -> None:
+    recovery = add_recovery(valid_artifact_data)
+    recovery_step = recovery["steps"][0]
+    if mutation == "duplicate_recovery":
+        valid_artifact_data["recoveries"].append(dict(recovery))
+    elif mutation == "duplicate_step":
+        recovery_step["id"] = "search.submit"
+    elif mutation == "disallowed_action":
+        recovery_step["action"] = {
+            "kind": "select",
+            "option": {"source": "literal", "value": "Normal"},
+        }
+    elif mutation == "unknown_select_input":
+        valid_artifact_data["policy"]["allowed_action_types"].append("select")
+        recovery_step["action"] = {
+            "kind": "select",
+            "option": {"source": "input", "path": "missing"},
+        }
+    elif mutation == "sensitive_recovery":
+        valid_artifact_data["capability"]["risk"] = "sensitive"
+        valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+        recovery_step["risk"] = "sensitive"
+    else:
+        recovery_step["recovery_refs"] = ["dismiss.notice"]
+
+    with pytest.raises(ValidationError, match=message):
         CapabilityArtifact.model_validate(valid_artifact_data)
 
 
