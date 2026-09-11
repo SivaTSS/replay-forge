@@ -111,6 +111,7 @@ class ReplayEngine:
                         "precondition_mismatch",
                         "A capability precondition was not satisfied.",
                         False,
+                        session=session,
                     )
 
             for step_index, step in enumerate(request.artifact.steps):
@@ -264,6 +265,7 @@ class ReplayEngine:
                         "A step precondition was not satisfied.",
                         False,
                         step.id,
+                        session=session,
                     )
             observation = session.observe()
             target = session.resolve(step.target, step.timeout_ms) if step.target else None
@@ -294,7 +296,12 @@ class ReplayEngine:
             )
             if decision.decision is Decision.DENY:
                 return self._failure(
-                    request, "policy_blocked", decision.explanation, False, step.id
+                    request,
+                    "policy_blocked",
+                    decision.explanation,
+                    False,
+                    step.id,
+                    session=session,
                 )
             if decision.decision is Decision.REQUIRE_HUMAN_APPROVAL:
                 return self._intervene(
@@ -328,6 +335,7 @@ class ReplayEngine:
                         "The action completed but its declared effect was not observed.",
                         False,
                         step.id,
+                        session=session,
                     )
                 outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
                 if outcome is not None:
@@ -415,11 +423,18 @@ class ReplayEngine:
                 "checkpoint_mismatch",
                 "The final success checkpoint was not satisfied.",
                 False,
+                session=session,
             )
         try:
             validated_outputs = validate_object(request.artifact.outputs, outputs)
         except ContractValidationError as error:
-            return self._failure(request, "output_validation_failed", str(error), False)
+            return self._failure(
+                request,
+                "output_validation_failed",
+                str(error),
+                False,
+                session=session,
+            )
         self.recorder.record("checkpoint_verified", request.run_id)
         return SuccessResult(
             status="success",
@@ -487,6 +502,7 @@ class ReplayEngine:
             step_id,
             error.expected,
             error.observed,
+            session,
         )
 
     def _intervene(
@@ -546,9 +562,20 @@ class ReplayEngine:
         step_id: str | None = None,
         expected: dict[str, object] | None = None,
         observed: dict[str, object] | None = None,
+        session: SurfaceSession | None = None,
     ) -> FailureResult:
+        evidence_frame = "not_applicable"
+        if session is not None:
+            try:
+                self._attach_failure_frame(request.run_id, session)
+                evidence_frame = "captured"
+            except (OSError, RuntimeError, ValueError):
+                evidence_frame = "unavailable"
         self.recorder.record(
-            "replay_failed", request.run_id, step_id=step_id, details={"code": code}
+            "replay_failed",
+            request.run_id,
+            step_id=step_id,
+            details={"code": code, "evidence_frame": evidence_frame},
         )
         return FailureResult(
             status="failure",
@@ -560,6 +587,14 @@ class ReplayEngine:
             expected=expected,
             observed=observed,
             evidence_manifest=self.recorder.evidence_manifest_key,
+        )
+
+    def _attach_failure_frame(self, run_id: str, session: SurfaceSession) -> None:
+        frame = session.capture_sanitized_evidence_frame()
+        self.recorder.attach_sanitized(
+            "failure-state",
+            SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+            RetentionClass.FAILURE,
         )
 
     @staticmethod

@@ -124,6 +124,11 @@ The successful discovery directory also includes provider/model metadata and the
 7. Tenant reuse: base artifact replays on the second variant through a narrow overlay.
 8. Agent invocation: capability API validates typed arguments and returns the replay result.
 
+For any replay failure after a browser session opens, the engine attempts a masked `failure-state`
+capture before teardown and records whether that capture was `captured` or `unavailable` on the
+typed failure event. Pre-browser contract failures are explicitly `not_applicable`; a screenshot
+adapter failure never replaces the original business-relevant failure code.
+
 ## 6. Evidence integrity
 
 - Manifest lists SHA-256 for every file.

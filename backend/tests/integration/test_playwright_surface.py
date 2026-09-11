@@ -43,6 +43,7 @@ from replayforge.policy.types import Risk
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.runs.results import (
     BusinessOutcomeResult,
+    FailureResult,
     InterventionRequiredResult,
     SuccessResult,
 )
@@ -298,6 +299,73 @@ def test_registered_artifact_returns_real_member_not_found_outcome(
             result.evidence_manifest,
         )
         assert verification.terminal_result_verified
+    finally:
+        runtime.close()
+
+
+def test_real_output_failure_retains_masked_state_before_teardown(
+    demo_bank: str, tmp_path: Path
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    artifact = load_artifact_yaml(
+        (repository / "capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
+    )
+    properties = dict(artifact.outputs.properties)
+    properties["available_balance"] = properties["available_balance"].model_copy(
+        update={"pattern": "^999\\.99$"}
+    )
+    modified = artifact.model_copy(
+        update={
+            "outputs": artifact.outputs.model_copy(update={"properties": properties}),
+            "provenance": artifact.provenance.model_copy(update={"artifact_content_hash": None}),
+        }
+    )
+    modified = modified.model_copy(
+        update={
+            "provenance": modified.provenance.model_copy(
+                update={"artifact_content_hash": artifact_content_hash(modified)}
+            )
+        }
+    )
+    artifact_path = tmp_path / "capabilities/member.lookup_savings_balance/1.0.0.yaml"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text(dump_artifact_yaml(modified))
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=tmp_path / "capabilities",
+            evidence_directory=tmp_path / "evidence",
+            demo_base_url=demo_bank,
+        )
+    )
+    try:
+        result = runtime.service.invoke(
+            "member.lookup_savings_balance",
+            "1.0.0",
+            "harbor",
+            {"member_id": "12345"},
+        )
+
+        assert isinstance(result, FailureResult)
+        assert result.code == "output_validation_failed"
+        verification = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
+            result.evidence_manifest,
+        )
+        assert verification.attachment_count == 1
+        manifest_path = tmp_path / "evidence" / result.evidence_manifest.removeprefix("evidence://")
+        manifest = json.loads(manifest_path.read_text())
+        attachment = manifest["attachments"][0]
+        assert attachment["retention_class"] == "failure"
+        assert attachment["redaction_directives"] == [
+            "mask:form-controls",
+            "mask:customer-details",
+            "mask:account-table-cells",
+        ]
+        screenshot = (
+            tmp_path / "evidence" / attachment["key"].removeprefix("evidence://")
+        ).read_bytes()
+        assert screenshot.startswith(b"\x89PNG\r\n\x1a\n")
+        assert runtime.live_sessions == {}
     finally:
         runtime.close()
 

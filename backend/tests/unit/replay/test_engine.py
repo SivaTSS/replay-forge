@@ -61,6 +61,7 @@ class FakeSurfaceSession:
     observation_count: int = 0
     route: str = "/members/search"
     postconditions_valid: bool = True
+    evidence_capture_error: SurfaceError | None = None
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     origin: str = "http://demo.local:3001"
 
@@ -84,6 +85,8 @@ class FakeSurfaceSession:
         return b"\x89PNG\r\n\x1a\nsynthetic-frame"
 
     def capture_sanitized_evidence_frame(self) -> SanitizedSurfaceFrame:
+        if self.evidence_capture_error is not None:
+            raise self.evidence_capture_error
         return SanitizedSurfaceFrame(
             b"\x89PNG\r\n\x1a\nmasked-synthetic-frame",
             ("mask:synthetic-fields",),
@@ -161,6 +164,7 @@ class MemoryRecorder:
     evidence_manifest_key: str = "evidence://test/manifest.json"
     events: list[tuple[str, str | None]] = field(default_factory=list)
     attachments: list[tuple[str, SanitizedEvidence, RetentionClass]] = field(default_factory=list)
+    recorded_details: list[dict[str, object]] = field(default_factory=list)
 
     def record(
         self,
@@ -171,6 +175,7 @@ class MemoryRecorder:
         details: dict[str, object] | None = None,
     ) -> None:
         self.events.append((event_type, step_id))
+        self.recorded_details.append(details or {})
 
     def attach_sanitized(
         self,
@@ -303,13 +308,15 @@ def test_invalid_input_fails_before_opening_surface(
     valid_artifact_data: dict[str, Any],
 ) -> None:
     session = FakeSurfaceSession()
-    engine, _, _ = build_engine(session)
+    engine, recorder, _ = build_engine(session)
 
     result = engine.execute(request_for(valid_artifact_data, "bad"))
 
     assert isinstance(result, FailureResult)
     assert result.code == "invalid_input"
     assert session.closed is False
+    assert recorder.attachments == []
+    assert recorder.recorded_details[-1]["evidence_frame"] == "not_applicable"
 
 
 def test_incompatible_tenant_fails_before_opening_surface(
@@ -331,13 +338,36 @@ def test_checkpoint_mismatch_never_returns_outputs(
     valid_artifact_data: dict[str, Any],
 ) -> None:
     session = FakeSurfaceSession(checkpoint_valid=False)
-    engine, _, _ = build_engine(session)
+    engine, recorder, _ = build_engine(session)
 
     result = engine.execute(request_for(valid_artifact_data))
 
     assert isinstance(result, FailureResult)
     assert result.code == "checkpoint_mismatch"
     assert not hasattr(result, "outputs")
+    assert [kind for kind, _, _ in recorder.attachments] == ["failure-state"]
+    assert recorder.attachments[0][2] is RetentionClass.FAILURE
+    assert recorder.recorded_details[-1]["evidence_frame"] == "captured"
+
+
+def test_failure_capture_error_preserves_original_typed_failure(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    session = FakeSurfaceSession(
+        checkpoint_valid=False,
+        evidence_capture_error=SurfaceError(
+            "evidence_screenshot_failed",
+            "A sanitized evidence frame could not be captured.",
+        ),
+    )
+    engine, recorder, _ = build_engine(session)
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "checkpoint_mismatch"
+    assert recorder.attachments == []
+    assert recorder.recorded_details[-1]["evidence_frame"] == "unavailable"
 
 
 def test_target_ambiguity_returns_step_debug_context(
