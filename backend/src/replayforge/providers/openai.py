@@ -39,7 +39,9 @@ When frame_titles is non-empty, controls represented by the inner application ob
 use target.scope.frame_path with a title locator matching the relevant frame title exactly.
 Never exceed maximum_risk. Typing into a search/query field whose operation only retrieves data,
 clicking controls that only navigate to retrieved data, and extracting displayed data are
-read_only. Target descriptions must name only the control or displayed value, not broader data."""
+read_only. Target descriptions must name only the control or displayed value, not broader data.
+Never click a static displayed value. On a details view, use extract once for each required
+output field, then complete only after every required field has been captured."""
 
 
 class ProviderModel(BaseModel):
@@ -70,25 +72,26 @@ class ProviderRoleNameCandidate(ProviderModel):
     expected_count: Literal[1] = 1
 
 
-class ProviderValueCandidate(ProviderModel):
-    strategy: Literal["label", "text", "placeholder", "title"]
+class ProviderInputCandidate(ProviderModel):
+    strategy: Literal["label", "placeholder"]
     value: str = Field(min_length=1, max_length=200)
     match: Literal["exact", "contains"] = "exact"
     expected_count: Literal[1] = 1
 
 
-class ProviderRelativeTextCandidate(ProviderModel):
-    strategy: Literal["relative_text"]
-    anchor: str = Field(min_length=1, max_length=200)
-    relation: Literal["form_submit", "following_value"]
-    element: str = Field(min_length=1, max_length=100)
-    text: str | None = Field(default=None, max_length=200)
+class ProviderDisplayedTextCandidate(ProviderModel):
+    strategy: Literal["text", "title"]
+    value: str = Field(min_length=1, max_length=200)
+    match: Literal["exact", "contains"] = "exact"
     expected_count: Literal[1] = 1
 
 
-ProviderLocatorCandidate = (
-    ProviderRoleNameCandidate | ProviderValueCandidate | ProviderRelativeTextCandidate
-)
+class ProviderFollowingValueCandidate(ProviderModel):
+    strategy: Literal["relative_text"]
+    anchor: str = Field(min_length=1, max_length=200)
+    relation: Literal["following_value"]
+    element: str = Field(min_length=1, max_length=100)
+    expected_count: Literal[1] = 1
 
 
 class ProviderFrameTitleCandidate(ProviderModel):
@@ -107,24 +110,61 @@ class ProviderLocatorScope(ProviderModel):
     frame_path: tuple[ProviderFrameLocator, ...] = Field(default=(), max_length=4)
 
 
-class ProviderLocatorBundle(ProviderModel):
+class ProviderLocatorBundleBase(ProviderModel):
     description: str = Field(min_length=1, max_length=200)
     scope: ProviderLocatorScope = Field(default_factory=ProviderLocatorScope)
-    candidates: tuple[ProviderLocatorCandidate, ...] = Field(min_length=1, max_length=5)
 
 
-class ProviderActProposal(ProviderModel):
+class ProviderClickLocatorBundle(ProviderLocatorBundleBase):
+    candidates: tuple[ProviderRoleNameCandidate, ...] = Field(min_length=1, max_length=5)
+
+
+class ProviderTypeLocatorBundle(ProviderLocatorBundleBase):
+    candidates: tuple[ProviderRoleNameCandidate | ProviderInputCandidate, ...] = Field(
+        min_length=1, max_length=5
+    )
+
+
+class ProviderExtractLocatorBundle(ProviderLocatorBundleBase):
+    candidates: tuple[
+        ProviderRoleNameCandidate
+        | ProviderDisplayedTextCandidate
+        | ProviderFollowingValueCandidate,
+        ...,
+    ] = Field(min_length=1, max_length=5)
+
+
+class ProviderActProposalBase(ProviderModel):
     kind: Literal["act"]
-    action: ProviderClickAction | ProviderTypeAction | ProviderExtractAction
-    target: ProviderLocatorBundle | None = None
     rationale: str = Field(min_length=1, max_length=500)
     expected_effect: str = Field(min_length=1, max_length=500)
     declared_risk: Risk
     confidence: float = Field(ge=0, le=1)
 
 
+class ProviderClickProposal(ProviderActProposalBase):
+    action: ProviderClickAction
+    target: ProviderClickLocatorBundle
+
+
+class ProviderTypeProposal(ProviderActProposalBase):
+    action: ProviderTypeAction
+    target: ProviderTypeLocatorBundle
+
+
+class ProviderExtractProposal(ProviderActProposalBase):
+    action: ProviderExtractAction
+    target: ProviderExtractLocatorBundle
+
+
 class ProposalEnvelope(ProviderModel):
-    proposal: ProviderActProposal | CompleteProposal | EscalateProposal
+    proposal: (
+        ProviderClickProposal
+        | ProviderTypeProposal
+        | ProviderExtractProposal
+        | CompleteProposal
+        | EscalateProposal
+    )
 
 
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)

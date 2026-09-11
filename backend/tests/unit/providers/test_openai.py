@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from openai.lib._pydantic import to_strict_json_schema
+from pydantic import ValidationError
 
 from replayforge.capabilities.models import InputValue
 from replayforge.discovery.models import ActProposal, CompleteProposal, ProviderContext
@@ -17,13 +18,13 @@ from replayforge.policy.types import Risk
 from replayforge.providers.openai import (
     OpenAIModelProvider,
     ProposalEnvelope,
-    ProviderActProposal,
     ProviderFrameLocator,
     ProviderFrameTitleCandidate,
-    ProviderLocatorBundle,
+    ProviderInputCandidate,
     ProviderLocatorScope,
     ProviderTypeAction,
-    ProviderValueCandidate,
+    ProviderTypeLocatorBundle,
+    ProviderTypeProposal,
 )
 from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
 from replayforge.shared.ids import EntityKind, new_id
@@ -178,12 +179,12 @@ def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> Non
 def test_provider_converts_constrained_wire_locator_to_domain_proposal() -> None:
     responses = FakeResponses(
         ProposalEnvelope(
-            proposal=ProviderActProposal(
+            proposal=ProviderTypeProposal(
                 kind="act",
                 action=ProviderTypeAction(
                     kind="type", value=InputValue(source="input", path="member_id")
                 ),
-                target=ProviderLocatorBundle(
+                target=ProviderTypeLocatorBundle(
                     description="Member ID field",
                     scope=ProviderLocatorScope(
                         frame_path=(
@@ -194,7 +195,7 @@ def test_provider_converts_constrained_wire_locator_to_domain_proposal() -> None
                             ),
                         )
                     ),
-                    candidates=(ProviderValueCandidate(strategy="label", value="Member ID"),),
+                    candidates=(ProviderInputCandidate(strategy="label", value="Member ID"),),
                 ),
                 rationale="The search field is visible.",
                 expected_effect="The member identifier is entered.",
@@ -211,6 +212,35 @@ def test_provider_converts_constrained_wire_locator_to_domain_proposal() -> None
     assert proposal.target is not None
     assert proposal.target.candidates[0].strategy.value == "label"
     assert proposal.target.scope.frame_path[0].locator.value == "Member operations"
+
+
+def test_provider_rejects_clicking_a_static_following_value() -> None:
+    with pytest.raises(ValidationError):
+        ProposalEnvelope.model_validate(
+            {
+                "proposal": {
+                    "kind": "act",
+                    "action": {"kind": "click"},
+                    "target": {
+                        "description": "Displayed balance",
+                        "scope": {"window": "primary", "frame_path": []},
+                        "candidates": [
+                            {
+                                "strategy": "relative_text",
+                                "anchor": "Available balance",
+                                "relation": "following_value",
+                                "element": "dd",
+                                "expected_count": 1,
+                            }
+                        ],
+                    },
+                    "rationale": "The value is visible.",
+                    "expected_effect": "The value remains visible.",
+                    "declared_risk": "read_only",
+                    "confidence": 1,
+                }
+            }
+        )
 
 
 @pytest.mark.parametrize("frame", [b"", b"x" * (5 * 1024 * 1024 + 1)])
