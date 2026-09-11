@@ -93,6 +93,7 @@ def context() -> ProviderContext:
             viewport=Viewport(1280, 800),
             fingerprint="state-1",
             landmarks=("Member Search", "Member ID"),
+            frame_titles=("Member operations",),
         ),
         screenshot_png=b"\x89PNG\r\n\x1a\nsynthetic-frame",
         action_history=("opened search",),
@@ -133,6 +134,7 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
         "available_balance",
         "as_of",
     ]
+    assert sent["observation"]["frame_titles"] == ["Member operations"]
     assert "12345" not in content[0]["text"]
     assert content[1]["image_url"].startswith("data:image/png;base64,")
     assert telemetry.metrics[0].outcome == "success"

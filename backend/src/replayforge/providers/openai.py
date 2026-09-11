@@ -34,7 +34,9 @@ Return only the provided structured proposal. Use symbolic input paths, never li
 values. Prefer semantic locators (role/name, label, relative text), never coordinate-only
 targets. Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
 Declare risk conservatively. Extract every required output using its exact field name, and
-complete only when every required output and the requested result are visibly verified."""
+complete only when every required output and the requested result are visibly verified.
+When frame_titles is non-empty, controls represented by the inner application observation must
+use target.scope.frame_path with a title locator matching the relevant frame title exactly."""
 
 
 class ProviderModel(BaseModel):
@@ -148,6 +150,7 @@ class OpenAIModelProvider:
                 },
                 "fingerprint": context.observation.fingerprint,
                 "landmarks": list(context.observation.landmarks),
+                "frame_titles": list(context.observation.frame_titles),
                 "active_element": context.observation.active_element,
                 "dialog_text": context.observation.dialog_text,
             },

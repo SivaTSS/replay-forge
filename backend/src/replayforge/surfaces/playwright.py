@@ -182,7 +182,7 @@ class PlaywrightSurfaceSession:
     def observe(self) -> NormalizedObservation:
         for attempt in range(_OBSERVATION_ATTEMPTS):
             try:
-                route, landmarks, active = self._read_observation_state()
+                route, landmarks, frame_titles, active = self._read_observation_state()
                 break
             except PlaywrightError as exc:
                 if attempt == _OBSERVATION_ATTEMPTS - 1 or not _is_navigation_race(exc):
@@ -194,7 +194,7 @@ class PlaywrightSurfaceSession:
         else:  # pragma: no cover - the bounded loop always returns or raises
             raise AssertionError("observation retry loop exhausted without a result")
         dialog_text = None
-        fingerprint_source = "|".join((route, *landmarks, str(active or "")))
+        fingerprint_source = "|".join((route, *landmarks, *frame_titles, str(active or "")))
         fingerprint = hashlib.sha256(fingerprint_source.encode()).hexdigest()
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}
         return NormalizedObservation(
@@ -205,11 +205,14 @@ class PlaywrightSurfaceSession:
             viewport=Viewport(viewport["width"], viewport["height"]),
             fingerprint=fingerprint,
             landmarks=landmarks,
+            frame_titles=frame_titles,
             active_element=str(active) if active else None,
             dialog_text=dialog_text,
         )
 
-    def _read_observation_state(self) -> tuple[str, tuple[str, ...], object]:
+    def _read_observation_state(
+        self,
+    ) -> tuple[str, tuple[str, ...], tuple[str, ...], object]:
         frame = self._application_frame()
         raw_route = urlsplit(frame.url if frame is not None else self.page.url).path
         route = self._normalize_route(raw_route)
@@ -219,11 +222,13 @@ class PlaywrightSurfaceSession:
             for text in root.locator("h1,h2,h3,label,th").all_inner_texts()
             if text.strip()
         )[:40]
+        frame_title = frame.frame_element().get_attribute("title") if frame is not None else None
+        frame_titles = (frame_title,) if frame_title else ()
         active = root.evaluate(
             "() => document.activeElement?.getAttribute('aria-label') || "
             "document.activeElement?.getAttribute('name') || document.activeElement?.tagName"
         )
-        return route, landmarks, active
+        return route, landmarks, frame_titles, active
 
     def capture_provider_frame(self) -> bytes:
         try:

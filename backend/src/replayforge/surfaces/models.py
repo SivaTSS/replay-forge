@@ -129,6 +129,7 @@ class NormalizedObservation:
     viewport: Viewport
     fingerprint: str
     landmarks: tuple[str, ...]
+    frame_titles: tuple[str, ...] = ()
     active_element: str | None = None
     dialog_text: str | None = None
     screenshot_evidence_key: str | None = None
