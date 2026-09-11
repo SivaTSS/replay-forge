@@ -86,12 +86,15 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/export_evidence.py 
 
 ## Live model-driven discovery
 
-Set both values only in the ignored local `.env`:
+Create the ignored, owner-readable `.secrets/openai.env`, then replace the placeholder locally:
 
-```dotenv
-REPLAYFORGE_OPENAI_API_KEY=<runtime credential>
-REPLAYFORGE_OPENAI_MODEL=<structured-output-capable model ID>
+```bash
+install -D -m 600 config/openai.env.example .secrets/openai.env
 ```
+
+The reviewed [model policy](config/model-policy.yaml) is the only authority for model choice and
+budgets. Environment variables and API requests cannot override the cost-sensitive model, low
+reasoning effort, output-token ceiling, per-run call ceiling, or provider timeout.
 
 Restart the API, then capture the genuine run and its hash-verified compiled artifact to a new
 file (the command refuses to overwrite an existing review artifact):

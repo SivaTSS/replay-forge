@@ -558,9 +558,9 @@ def build_runtime(settings: object) -> LocalRuntime:
     service = ReplayApplicationService(registry, executor_factory, (target_ready,), finalize_replay)
     provider = (
         OpenAIModelProvider.from_api_key(
-            settings.openai_api_key.get_secret_value(), settings.openai_model
+            settings.openai_api_key.get_secret_value(), settings.model_policy
         )
-        if settings.openai_api_key is not None and settings.openai_model is not None
+        if settings.openai_api_key is not None
         else None
     )
 
@@ -583,7 +583,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         worker = SerialSessionWorker(run_id)
         engine = DiscoveryEngine(
             driver,
-            provider,
+            provider.for_run(),
             SavingsBalanceCompiler(clock),
             PolicyEvaluator(clock),
             EffectivePolicy.intersect(

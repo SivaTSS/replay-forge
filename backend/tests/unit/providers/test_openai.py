@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 from replayforge.discovery.models import CompleteProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
 from replayforge.providers.openai import OpenAIModelProvider, ProposalEnvelope
+from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, Viewport
 
@@ -35,6 +37,11 @@ class FakeResponses:
 @dataclass
 class FakeClient:
     responses: FakeResponses
+
+
+def model_policy(**changes: object) -> ModelPolicy:
+    policy = load_model_policy(Path("config/model-policy.yaml"))
+    return policy.model_copy(update=changes)
 
 
 def context() -> ProviderContext:
@@ -67,7 +74,7 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     responses = FakeResponses(
         ProposalEnvelope(proposal=CompleteProposal(kind="complete", rationale="Verified."))
     )
-    provider = OpenAIModelProvider(FakeClient(responses), "gpt-test")
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy())
 
     proposal = provider.decide(context())
 
@@ -75,7 +82,9 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     assert responses.request["text_format"] is ProposalEnvelope
     assert responses.request["store"] is False
     assert responses.request["tools"] == []
-    assert responses.request["max_output_tokens"] == 2_000
+    assert responses.request["model"] == "gpt-5.6-luna"
+    assert responses.request["reasoning"] == {"effort": "low"}
+    assert responses.request["max_output_tokens"] == 600
     content = responses.request["input"][0]["content"]
     sent = json.loads(content[0]["text"])
     assert sent["input_fields"] == ["member_id"]
@@ -92,7 +101,7 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
 
 @pytest.mark.parametrize("frame", [b"", b"x" * (5 * 1024 * 1024 + 1)])
 def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
-    provider = OpenAIModelProvider(FakeClient(FakeResponses()), "gpt-test")
+    provider = OpenAIModelProvider(FakeClient(FakeResponses()), model_policy())
     provider_context = context()
 
     with pytest.raises(ModelProviderError) as captured:
@@ -119,7 +128,7 @@ def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
     ],
 )
 def test_provider_errors_are_safe_and_classified(responses: FakeResponses, code: str) -> None:
-    provider = OpenAIModelProvider(FakeClient(responses), "gpt-test")
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy())
 
     with pytest.raises(ModelProviderError) as captured:
         provider.decide(context())
@@ -128,14 +137,15 @@ def test_provider_errors_are_safe_and_classified(responses: FakeResponses, code:
     assert "raw provider failure" not in captured.value.safe_message
 
 
-@pytest.mark.parametrize(
-    ("kwargs", "message"),
-    [
-        ({"model_name": ""}, "model name"),
-        ({"model_name": "gpt-test", "max_output_tokens": 10}, "output budget"),
-        ({"model_name": "gpt-test", "timeout_seconds": 0}, "timeout"),
-    ],
-)
-def test_provider_configuration_is_bounded(kwargs: dict[str, Any], message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        OpenAIModelProvider(FakeClient(FakeResponses()), **kwargs)
+def test_provider_enforces_per_run_call_budget() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(proposal=CompleteProposal(kind="complete", rationale="Verified."))
+    )
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy(max_model_calls_per_run=1))
+
+    provider.decide(context())
+
+    with pytest.raises(ModelProviderError) as captured:
+        provider.decide(context())
+    assert captured.value.code == "provider_budget_exceeded"
+    assert provider.for_run().decide(context()).kind == "complete"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from base64 import b64encode
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
 from openai import OpenAI
@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from replayforge.discovery.models import DiscoveryProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
+from replayforge.runtime.model_policy import ModelPolicy
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
 Return only the provided structured proposal. Use symbolic input paths, never literal customer
@@ -41,33 +42,31 @@ class OpenAIClientPort(Protocol):
     def responses(self) -> ResponsesPort: ...
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class OpenAIModelProvider:
     client: OpenAIClientPort
-    model_name: str
-    max_output_tokens: int = 2_000
-    timeout_seconds: float = 30.0
-
-    def __post_init__(self) -> None:
-        if not self.model_name.strip():
-            raise ValueError("OpenAI model name is required")
-        if not 256 <= self.max_output_tokens <= 8_000:
-            raise ValueError("provider output budget must be between 256 and 8000 tokens")
-        if not 1 <= self.timeout_seconds <= 120:
-            raise ValueError("provider timeout must be between 1 and 120 seconds")
+    policy: ModelPolicy
+    _calls_made: int = field(default=0, init=False, repr=False)
 
     @classmethod
-    def from_api_key(cls, api_key: str, model_name: str) -> OpenAIModelProvider:
+    def from_api_key(cls, api_key: str, policy: ModelPolicy) -> OpenAIModelProvider:
         if not api_key:
             raise ValueError("OpenAI API key is required")
-        return cls(cast(OpenAIClientPort, OpenAI(api_key=api_key, max_retries=1)), model_name)
+        return cls(cast(OpenAIClientPort, OpenAI(api_key=api_key, max_retries=1)), policy)
+
+    def for_run(self) -> OpenAIModelProvider:
+        return OpenAIModelProvider(self.client, self.policy)
 
     @property
     def provider_name(self) -> str:
         return "openai"
 
+    @property
+    def model_name(self) -> str:
+        return self.policy.model
+
     def decide(self, context: ProviderContext) -> DiscoveryProposal:
-        if not context.screenshot_png or len(context.screenshot_png) > 5 * 1024 * 1024:
+        if not context.screenshot_png or len(context.screenshot_png) > self.policy.max_frame_bytes:
             raise ModelProviderError(
                 "provider_frame_invalid",
                 "The visual observation is empty or exceeds the provider frame limit.",
@@ -102,17 +101,24 @@ class OpenAIModelProvider:
                 "detail": "high",
             },
         ]
+        if self._calls_made >= self.policy.max_model_calls_per_run:
+            raise ModelProviderError(
+                "provider_budget_exceeded",
+                "The discovery run exhausted its reviewed model-call budget.",
+            )
+        self._calls_made += 1
         try:
             response = self.client.responses.parse(
                 model=self.model_name,
+                reasoning={"effort": self.policy.reasoning_effort},
                 instructions=_INSTRUCTIONS,
                 input=[{"role": "user", "content": input_content}],
                 text_format=ProposalEnvelope,
-                max_output_tokens=self.max_output_tokens,
+                max_output_tokens=self.policy.max_output_tokens,
                 store=False,
                 tools=[],
                 parallel_tool_calls=False,
-                timeout=self.timeout_seconds,
+                timeout=self.policy.timeout_seconds,
             )
         except Exception as error:
             raise ModelProviderError(

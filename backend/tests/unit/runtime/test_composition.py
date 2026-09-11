@@ -27,22 +27,27 @@ def test_settings_validate_origin_and_artifact_directory() -> None:
             demo_base_url="http://user:secret@127.0.0.1:3001",
         )
 
-    with pytest.raises(ValidationError, match="configured together"):
+    with pytest.raises(ValidationError, match="model policy file"):
         RuntimeSettings(
             artifact_directory=artifact_directory(),
-            openai_api_key=SecretStr("runtime-only-key"),
+            model_policy_file=Path("missing-model-policy.yaml"),
         )
 
 
-def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready() -> None:
+def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = RuntimeSettings(artifact_directory=artifact_directory())
 
     assert "runtime-only-key" not in repr(
         RuntimeSettings(
             artifact_directory=artifact_directory(),
             openai_api_key=SecretStr("runtime-only-key"),
-            openai_model="gpt-test",
         )
+    )
+    monkeypatch.setenv("REPLAYFORGE_OPENAI_MODEL", "gpt-6-astra")
+    assert RuntimeSettings(artifact_directory=artifact_directory()).model_policy.model == (
+        "gpt-5.6-luna"
     )
     from replayforge.runtime.composition import build_runtime
 
