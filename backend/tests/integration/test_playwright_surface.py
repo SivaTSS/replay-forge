@@ -335,6 +335,53 @@ def test_registered_artifact_replays_end_to_end(demo_bank: str, tmp_path: Path) 
         runtime.close()
 
 
+def test_registered_artifact_recovers_from_known_interstitial(
+    demo_bank: str, tmp_path: Path
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=repository / "capabilities",
+            evidence_directory=tmp_path / "evidence",
+            demo_base_url=demo_bank,
+        )
+    )
+    try:
+        result = runtime.service.invoke(
+            "member.lookup_savings_balance",
+            "1.0.1",
+            "harbor",
+            {"member_id": "12345"},
+        )
+
+        assert isinstance(result, SuccessResult)
+        assert result.outputs["available_balance"] == "1420.57"
+        assert result.checkpoint.verified
+        events = runtime.journals[result.run_id].events()
+        recovery_events = [event for event in events if event.event_type.startswith("recovery_")]
+        assert [event.event_type for event in recovery_events] == [
+            "recovery_started",
+            "recovery_completed",
+        ]
+        assert recovery_events[0].step_id == "search.submit"
+        assert recovery_events[0].details == {
+            "recovery_id": "dismiss_known_notice",
+            "use": 1,
+        }
+        assert recovery_events[1].details == {
+            "recovery_id": "dismiss_known_notice",
+            "resume_at": "account.open_savings",
+        }
+        verification = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
+            result.evidence_manifest,
+        )
+        assert verification.terminal_result_verified
+        assert runtime.live_sessions == {}
+    finally:
+        runtime.close()
+
+
 def test_registered_artifact_returns_real_member_not_found_outcome(
     demo_bank: str, tmp_path: Path
 ) -> None:
