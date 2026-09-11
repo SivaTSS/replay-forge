@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from replayforge.capabilities.models import Action, Condition, LocatorBundle
-from replayforge.surfaces.models import ActionReceipt, NormalizedObservation, ResolvedTarget
+from replayforge.surfaces.models import (
+    ActionReceipt,
+    NormalizedObservation,
+    ResolvedTarget,
+    SanitizedSurfaceFrame,
+)
 
 
 class SurfaceSession(Protocol):
@@ -18,6 +23,8 @@ class SurfaceSession(Protocol):
     def observe(self) -> NormalizedObservation: ...
 
     def capture_provider_frame(self) -> bytes: ...
+
+    def capture_sanitized_evidence_frame(self) -> SanitizedSurfaceFrame: ...
 
     def resolve(self, target: LocatorBundle, timeout_ms: int) -> ResolvedTarget: ...
 

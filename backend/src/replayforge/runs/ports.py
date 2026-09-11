@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
 from replayforge.surfaces.models import NormalizedObservation
 
 
@@ -19,6 +20,13 @@ class RunRecorder(Protocol):
         step_id: str | None = None,
         details: dict[str, object] | None = None,
     ) -> None: ...
+
+    def attach_sanitized(
+        self,
+        kind: str,
+        payload: SanitizedEvidence,
+        retention_class: RetentionClass,
+    ) -> EvidenceRecord: ...
 
 
 class InterventionRouter(Protocol):

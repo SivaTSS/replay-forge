@@ -124,6 +124,13 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
     try:
         assert session.observe().route == "/members/search"
         assert session.capture_provider_frame().startswith(b"\x89PNG\r\n\x1a\n")
+        sanitized_frame = session.capture_sanitized_evidence_frame()
+        assert sanitized_frame.content.startswith(b"\x89PNG\r\n\x1a\n")
+        assert sanitized_frame.redaction_directives == (
+            "mask:form-controls",
+            "mask:customer-details",
+            "mask:account-table-cells",
+        )
         frame = driver.capture_active_frame()
         assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
         assert frame.viewport == Viewport(1280, 800)
@@ -469,5 +476,23 @@ def test_replay_resumes_after_validated_same_session_handoff(
             completed.result.evidence_manifest,
         )
         assert verification.terminal_result_verified
+        assert verification.attachment_count == 2
+        manifest_path = (
+            tmp_path / "evidence" / completed.result.evidence_manifest.removeprefix("evidence://")
+        )
+        manifest = json.loads(manifest_path.read_text())
+        assert [entry["retention_class"] for entry in manifest["attachments"]] == [
+            "human_audit",
+            "human_audit",
+        ]
+        assert all(
+            entry["redaction_directives"]
+            == [
+                "mask:form-controls",
+                "mask:customer-details",
+                "mask:account-table-cells",
+            ]
+            for entry in manifest["attachments"]
+        )
     finally:
         runtime.close()

@@ -3,7 +3,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from replayforge.shared.ids import EntityKind, new_id
-from replayforge.surfaces.models import ActionReceipt, ActionStatus, ResolvedTarget, Viewport
+from replayforge.surfaces.models import (
+    ActionReceipt,
+    ActionStatus,
+    ResolvedTarget,
+    SanitizedSurfaceFrame,
+    Viewport,
+)
 
 
 def test_surface_value_objects_reject_impossible_state() -> None:
@@ -25,3 +31,10 @@ def test_ids_remain_opaque_across_surface_contract() -> None:
     observation_id = new_id(EntityKind.EVENT)
 
     assert str(observation_id).startswith("evt_")
+
+
+def test_sanitized_surface_frame_requires_png_and_masking_policy() -> None:
+    with pytest.raises(ValueError, match="PNG"):
+        SanitizedSurfaceFrame(b"not-an-image", ("mask:inputs",))
+    with pytest.raises(ValueError, match="masking policy"):
+        SanitizedSurfaceFrame(b"\x89PNG\r\n\x1a\nframe", ())

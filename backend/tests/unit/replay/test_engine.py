@@ -15,6 +15,7 @@ from replayforge.capabilities.models import (
     RouteCondition,
     TextCondition,
 )
+from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
 from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
@@ -41,6 +42,7 @@ from replayforge.surfaces.models import (
     ActionStatus,
     NormalizedObservation,
     ResolvedTarget,
+    SanitizedSurfaceFrame,
     SurfaceError,
     Viewport,
 )
@@ -80,6 +82,12 @@ class FakeSurfaceSession:
 
     def capture_provider_frame(self) -> bytes:
         return b"\x89PNG\r\n\x1a\nsynthetic-frame"
+
+    def capture_sanitized_evidence_frame(self) -> SanitizedSurfaceFrame:
+        return SanitizedSurfaceFrame(
+            b"\x89PNG\r\n\x1a\nmasked-synthetic-frame",
+            ("mask:synthetic-fields",),
+        )
 
     def resolve(self, target: object, timeout_ms: int) -> ResolvedTarget:
         if self.resolve_error is not None and (self.resolve_failures_remaining != 0):
@@ -152,6 +160,7 @@ class FakeSurfaceDriver:
 class MemoryRecorder:
     evidence_manifest_key: str = "evidence://test/manifest.json"
     events: list[tuple[str, str | None]] = field(default_factory=list)
+    attachments: list[tuple[str, SanitizedEvidence, RetentionClass]] = field(default_factory=list)
 
     def record(
         self,
@@ -162,6 +171,24 @@ class MemoryRecorder:
         details: dict[str, object] | None = None,
     ) -> None:
         self.events.append((event_type, step_id))
+
+    def attach_sanitized(
+        self,
+        kind: str,
+        payload: SanitizedEvidence,
+        retention_class: RetentionClass,
+    ) -> EvidenceRecord:
+        self.attachments.append((kind, payload, retention_class))
+        return EvidenceRecord(
+            id=new_id(EntityKind.EVIDENCE),
+            key=f"evidence://test/{kind}.png",
+            media_type=payload.media_type,
+            size_bytes=len(payload.content),
+            content_hash="sha256:" + "0" * 64,
+            retention_class=retention_class,
+            redaction_directives=payload.redaction_directives,
+            created_at=datetime(2026, 9, 10, 12, 30, tzinfo=UTC),
+        )
 
 
 @dataclass
@@ -347,13 +374,14 @@ def test_unexpected_dialog_preserves_session_for_intervention(
         ),
         resolve_failures_remaining=-1,
     )
-    engine, _, router = build_engine(session)
+    engine, recorder, router = build_engine(session)
 
     result = engine.execute(request_for(valid_artifact_data))
 
     assert isinstance(result, InterventionRequiredResult)
     assert result.control_owner == "automation_paused"
     assert router.created == [result.intervention_id]
+    assert [kind for kind, _, _ in recorder.attachments] == ["handoff-before"]
     assert session.closed is False
 
 
@@ -400,6 +428,14 @@ def test_replay_continuation_revalidates_and_finishes_without_replaying_human_st
     assert session.closed is True
     assert ("resume_revalidation_started", "search.submit") in recorder.events
     assert ("resume_checkpoint_verified", "search.submit") in recorder.events
+    assert [kind for kind, _, _ in recorder.attachments] == [
+        "handoff-before",
+        "handoff-after",
+    ]
+    assert all(
+        attachment.redaction_directives == ("mask:synthetic-fields",)
+        for _, attachment, _ in recorder.attachments
+    )
 
 
 def test_replay_continuation_rejects_unchanged_human_state(
@@ -451,6 +487,10 @@ def test_replay_continuation_returns_human_discovered_business_outcome(
     assert resumed_result.details == {"member_id": "***6789"}
     assert session.closed is True
     assert ("resume_checkpoint_verified", "search.submit") in recorder.events
+    assert [kind for kind, _, _ in recorder.attachments] == [
+        "handoff-before",
+        "handoff-after",
+    ]
 
 
 def test_replay_continuation_rejects_disallowed_location(

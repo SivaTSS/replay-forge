@@ -203,6 +203,8 @@ Automation never resumes based only on an operator button click.
 
 The current replay implementation retains a typed continuation containing the interrupted step index, validated inputs, accumulated outputs, original session, and initial fingerprint. Resume revalidates the effective origin/route policy, declared business outcomes, every interrupted-step postcondition, and an observable state change on the browser-owner thread. Failure returns the intervention to `OPEN`; success returns the lease to automation, skips the already human-completed step, executes only the remaining deterministic steps, finalizes evidence exactly once, and closes the session. A subsequent escalation rebinds the same live session to its new intervention ID. Discovery-loop continuation remains a documented follow-on and safely reopens rather than pretending to resume.
 
+Replay handoff also captures bounded before/after PNG evidence from that same session. The Playwright adapter masks form controls, customer detail values, and account-table cells before screenshot bytes cross the evidence boundary. Both frames use `human_audit` retention, carry explicit masking directives, and are covered by the terminal manifest's size, media-type, and SHA-256 verification.
+
 ## 11. Resume checkpoint
 
 The checkpoint identifies acceptable post-human states. It may require:

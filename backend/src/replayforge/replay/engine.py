@@ -16,6 +16,7 @@ from replayforge.capabilities.models import (
     Step,
 )
 from replayforge.capabilities.values import ContractValidationError, validate_object
+from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import AUTOMATION_OWNER
 from replayforge.policy.evaluator import PolicyEvaluator
@@ -161,6 +162,7 @@ class ReplayEngine:
             continuation.inputs,
         )
         if outcome is not None:
+            self._attach_handoff_frame(continuation.request.run_id, session, "handoff-after")
             self.recorder.record(
                 "resume_checkpoint_verified",
                 continuation.request.run_id,
@@ -186,6 +188,7 @@ class ReplayEngine:
                 "resume_state_unchanged",
                 "The retained session has not changed since automation paused.",
             )
+        self._attach_handoff_frame(continuation.request.run_id, session, "handoff-after")
         self.recorder.record(
             "resume_checkpoint_verified",
             continuation.request.run_id,
@@ -497,6 +500,7 @@ class ReplayEngine:
     ) -> InterventionRequiredResult:
         from replayforge.shared.ids import EntityKind, new_id
 
+        self._attach_handoff_frame(request.run_id, session, "handoff-before")
         intervention_id = new_id(EntityKind.INTERVENTION)
         self.lease_service.pause(session.session_id, lease_version, intervention_id)
         routed_id = self.intervention_router.create(
@@ -518,6 +522,19 @@ class ReplayEngine:
             step_id=step_id,
             session_live=True,
             control_owner="automation_paused",
+        )
+
+    def _attach_handoff_frame(
+        self,
+        run_id: str,
+        session: SurfaceSession,
+        kind: str,
+    ) -> None:
+        frame = session.capture_sanitized_evidence_frame()
+        self.recorder.attach_sanitized(
+            kind,
+            SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+            RetentionClass.HUMAN_AUDIT,
         )
 
     def _failure(

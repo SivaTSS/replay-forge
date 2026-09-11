@@ -66,6 +66,20 @@ class SurfaceFrame:
             raise ValueError("surface frame content cannot be empty")
 
 
+@dataclass(frozen=True, slots=True)
+class SanitizedSurfaceFrame:
+    """A PNG whose sensitive regions were masked before capture."""
+
+    content: bytes
+    redaction_directives: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.content.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("sanitized surface frame must contain PNG content")
+        if not self.redaction_directives:
+            raise ValueError("sanitized surface frame must declare its masking policy")
+
+
 class HumanKey(StrEnum):
     ENTER = "Enter"
     ESCAPE = "Escape"

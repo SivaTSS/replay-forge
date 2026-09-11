@@ -70,6 +70,7 @@ from replayforge.surfaces.models import (
     HumanTextInput,
     NormalizedObservation,
     ResolvedTarget,
+    SanitizedSurfaceFrame,
     SurfaceError,
     SurfaceFrame,
     Viewport,
@@ -81,6 +82,11 @@ _NAVIGATION_RACE_MARKERS = (
     "execution context was destroyed",
     "cannot find context with specified id",
     "frame was detached",
+)
+_EVIDENCE_MASK_DIRECTIVES = (
+    "mask:form-controls",
+    "mask:customer-details",
+    "mask:account-table-cells",
 )
 
 
@@ -226,6 +232,32 @@ class PlaywrightSurfaceSession:
             raise SurfaceError(
                 "screenshot_failed", "The current UI frame could not be captured."
             ) from exc
+
+    def capture_sanitized_evidence_frame(self) -> SanitizedSurfaceFrame:
+        masks: list[Locator] = []
+        for frame in self.page.frames:
+            masks.extend(
+                (
+                    frame.locator("input,textarea,select"),
+                    frame.locator("dl dd"),
+                    frame.locator(".account-table tbody td"),
+                )
+            )
+        try:
+            content = self.page.screenshot(
+                type="png",
+                full_page=False,
+                mask=masks,
+                mask_color="#111827",
+                animations="disabled",
+                caret="hide",
+            )
+        except Exception as exc:
+            raise SurfaceError(
+                "evidence_screenshot_failed",
+                "A sanitized evidence frame could not be captured.",
+            ) from exc
+        return SanitizedSurfaceFrame(content, _EVIDENCE_MASK_DIRECTIVES)
 
     def capture_live_frame(self) -> SurfaceFrame:
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}
