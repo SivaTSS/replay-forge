@@ -41,7 +41,8 @@ Never exceed maximum_risk. Typing into a search/query field whose operation only
 clicking controls that only navigate to retrieved data, and extracting displayed data are
 read_only. Target descriptions must name only the control or displayed value, not broader data.
 Never click a static displayed value. On a details view, use extract once for each required
-output field, then complete only after every required field has been captured."""
+output field, then complete only after every required field has been captured. When selecting a
+role_name target, use the exact role and name from actionable_controls and require count one."""
 
 
 class ProviderModel(BaseModel):
@@ -245,6 +246,10 @@ class OpenAIModelProvider:
                 "fingerprint": context.observation.fingerprint,
                 "landmarks": list(context.observation.landmarks),
                 "frame_titles": list(context.observation.frame_titles),
+                "actionable_controls": [
+                    {"role": control.role, "name": control.name, "count": control.count}
+                    for control in context.observation.actionable_controls
+                ],
                 "active_element": context.observation.active_element,
                 "dialog_text": context.observation.dialog_text,
             },

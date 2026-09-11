@@ -216,6 +216,13 @@ def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> No
         assert len(provider.calls) == len(seed.steps) + 1
         assert all(call.screenshot_png.startswith(b"\x89PNG\r\n\x1a\n") for call in provider.calls)
         assert provider.calls[0].observation.frame_titles == ("Member operations",)
+        assert {
+            (control.role, control.name, control.count)
+            for control in provider.calls[0].observation.actionable_controls
+        } >= {
+            ("textbox", "Member ID", 1),
+            ("button", "Search", 1),
+        }
         assert provider.calls[0].required_output_names == (
             "member_id",
             "account_type",
@@ -234,6 +241,10 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
         observation = session.observe()
         assert observation.route == "/members/search"
         assert observation.frame_titles == ("Member operations",)
+        assert {(control.role, control.name) for control in observation.actionable_controls} >= {
+            ("textbox", "Member ID"),
+            ("button", "Search"),
+        }
         assert session.capture_provider_frame().startswith(b"\x89PNG\r\n\x1a\n")
         sanitized_frame = session.capture_sanitized_evidence_frame()
         assert sanitized_frame.content.startswith(b"\x89PNG\r\n\x1a\n")

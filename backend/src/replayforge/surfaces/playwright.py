@@ -62,6 +62,7 @@ from replayforge.capabilities.models import (
 from replayforge.policy.types import Risk
 from replayforge.shared.ids import EntityId, EntityKind, new_id
 from replayforge.surfaces.models import (
+    ActionableControl,
     ActionReceipt,
     ActionStatus,
     HumanInput,
@@ -182,7 +183,7 @@ class PlaywrightSurfaceSession:
     def observe(self) -> NormalizedObservation:
         for attempt in range(_OBSERVATION_ATTEMPTS):
             try:
-                route, landmarks, frame_titles, active = self._read_observation_state()
+                route, landmarks, frame_titles, controls, active = self._read_observation_state()
                 break
             except PlaywrightError as exc:
                 if attempt == _OBSERVATION_ATTEMPTS - 1 or not _is_navigation_race(exc):
@@ -194,7 +195,12 @@ class PlaywrightSurfaceSession:
         else:  # pragma: no cover - the bounded loop always returns or raises
             raise AssertionError("observation retry loop exhausted without a result")
         dialog_text = None
-        fingerprint_source = "|".join((route, *landmarks, *frame_titles, str(active or "")))
+        control_fingerprints = tuple(
+            f"{control.role}:{control.name}:{control.count}" for control in controls
+        )
+        fingerprint_source = "|".join(
+            (route, *landmarks, *frame_titles, *control_fingerprints, str(active or ""))
+        )
         fingerprint = hashlib.sha256(fingerprint_source.encode()).hexdigest()
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}
         return NormalizedObservation(
@@ -206,13 +212,20 @@ class PlaywrightSurfaceSession:
             fingerprint=fingerprint,
             landmarks=landmarks,
             frame_titles=frame_titles,
+            actionable_controls=controls,
             active_element=str(active) if active else None,
             dialog_text=dialog_text,
         )
 
     def _read_observation_state(
         self,
-    ) -> tuple[str, tuple[str, ...], tuple[str, ...], object]:
+    ) -> tuple[
+        str,
+        tuple[str, ...],
+        tuple[str, ...],
+        tuple[ActionableControl, ...],
+        object,
+    ]:
         frame = self._application_frame()
         raw_route = urlsplit(frame.url if frame is not None else self.page.url).path
         route = self._normalize_route(raw_route)
@@ -224,11 +237,48 @@ class PlaywrightSurfaceSession:
         )[:40]
         frame_title = frame.frame_element().get_attribute("title") if frame is not None else None
         frame_titles = (frame_title,) if frame_title else ()
+        raw_controls = root.locator("button,a[href],input,select,textarea").evaluate_all(
+            """elements => {
+                const controls = new Map();
+                for (const element of elements) {
+                    const tag = element.tagName.toLowerCase();
+                    const type = (element.getAttribute('type') || '').toLowerCase();
+                    const role = tag === 'a' ? 'link'
+                        : tag === 'button' || type === 'submit' ? 'button'
+                        : tag === 'select' ? 'combobox'
+                        : tag === 'textarea' ? 'textbox'
+                        : type === 'checkbox' ? 'checkbox'
+                        : type === 'radio' ? 'radio'
+                        : 'textbox';
+                    const name = (element.getAttribute('aria-label')
+                        || (element.labels && element.labels[0]?.innerText)
+                        || (role === 'button' || role === 'link' ? element.innerText : '')
+                        || '').trim();
+                    if (!name) continue;
+                    const key = `${role}\u0000${name}`;
+                    controls.set(key, (controls.get(key) || 0) + 1);
+                }
+                return Array.from(controls, ([key, count]) => {
+                    const [role, name] = key.split('\u0000');
+                    return {role, name, count};
+                }).slice(0, 40);
+            }"""
+        )
+        controls = tuple(
+            ActionableControl(
+                role=str(item["role"]), name=str(item["name"]), count=int(item["count"])
+            )
+            for item in raw_controls
+            if isinstance(item, dict)
+            and item.get("role")
+            and item.get("name")
+            and isinstance(item.get("count"), int)
+        )
         active = root.evaluate(
             "() => document.activeElement?.getAttribute('aria-label') || "
             "document.activeElement?.getAttribute('name') || document.activeElement?.tagName"
         )
-        return route, landmarks, frame_titles, active
+        return route, landmarks, frame_titles, controls, active
 
     def capture_provider_frame(self) -> bytes:
         try:

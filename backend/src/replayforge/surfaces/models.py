@@ -55,6 +55,17 @@ class Viewport:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionableControl:
+    role: str
+    name: str
+    count: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.role or not self.name or not 1 <= self.count <= 100:
+            raise ValueError("actionable controls require a role, name, and bounded count")
+
+
+@dataclass(frozen=True, slots=True)
 class SurfaceFrame:
     """One raster frame paired with the viewport it represents."""
 
@@ -130,6 +141,7 @@ class NormalizedObservation:
     fingerprint: str
     landmarks: tuple[str, ...]
     frame_titles: tuple[str, ...] = ()
+    actionable_controls: tuple[ActionableControl, ...] = ()
     active_element: str | None = None
     dialog_text: str | None = None
     screenshot_evidence_key: str | None = None
