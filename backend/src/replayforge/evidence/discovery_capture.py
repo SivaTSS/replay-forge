@@ -66,8 +66,8 @@ def validate_result(result: dict[str, Any]) -> CapabilityArtifact:
         raise RuntimeError("artifact provenance does not identify the OpenAI provider")
     if not provenance.model.strip() or provenance.model == "not-applicable":
         raise RuntimeError("artifact provenance omitted the OpenAI model ID")
-    if provenance.evidence_manifest_key != manifest:
-        raise RuntimeError("artifact provenance does not identify the returned evidence manifest")
+    if not provenance.evidence_manifest_key.startswith(f"evidence://{run_id}/"):
+        raise RuntimeError("artifact provenance evidence belongs to a different run")
 
     calculated_hash = artifact_content_hash(artifact)
     if provenance.artifact_content_hash != calculated_hash:
@@ -100,6 +100,7 @@ def capture(base_url: str, timeout_seconds: int, artifact_output: Path) -> dict[
     return {
         "artifact_content_hash": artifact.provenance.artifact_content_hash or "",
         "artifact_output": str(artifact_output),
+        "artifact_provenance_manifest": artifact.provenance.evidence_manifest_key,
         "capability_id": artifact.capability.id,
         "evidence_manifest": str(result["evidence_manifest"]),
         "model": artifact.provenance.model,

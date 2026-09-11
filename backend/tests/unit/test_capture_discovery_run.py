@@ -42,13 +42,14 @@ def discovery_result() -> dict[str, Any]:
     )
     run_id = "run_genuine_discovery"
     manifest = f"evidence://{run_id}/manifest.json"
+    provenance_manifest = f"evidence://{run_id}/manifest-compile-snapshot.bin"
     artifact = artifact.model_copy(
         update={
             "provenance": artifact.provenance.model_copy(
                 update={
                     "artifact_content_hash": None,
                     "discovery_run_id": run_id,
-                    "evidence_manifest_key": manifest,
+                    "evidence_manifest_key": provenance_manifest,
                     "model": "test-vision-model",
                     "provider": "openai",
                 }
@@ -124,6 +125,7 @@ def test_capture_returns_review_summary(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert summary["status"] == "success"
     assert summary["run_id"] == result["run_id"]
     assert summary["model"] == "test-vision-model"
+    assert summary["artifact_provenance_manifest"].endswith("manifest-compile-snapshot.bin")
     assert summary["artifact_output"] == str(output)
     assert output.is_file()
 
@@ -147,6 +149,16 @@ def test_rejects_non_openai_artifact() -> None:
     result["artifact"]["provenance"]["provider"] = "scripted"
 
     with pytest.raises(RuntimeError, match="OpenAI provider"):
+        validate_result(result)
+
+
+def test_rejects_cross_run_artifact_provenance() -> None:
+    result = discovery_result()
+    result["artifact"]["provenance"]["evidence_manifest_key"] = (
+        "evidence://run_different/manifest.json"
+    )
+
+    with pytest.raises(RuntimeError, match="different run"):
         validate_result(result)
 
 

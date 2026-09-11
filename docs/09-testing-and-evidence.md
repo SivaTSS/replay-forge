@@ -113,6 +113,11 @@ or one `trace.zip`; older bundles without attachments remain valid.
 
 The successful discovery directory also includes provider/model metadata and the produced YAML artifact. It excludes credentials, raw chain-of-thought, and sensitive request headers.
 
+The artifact provenance retains the immutable compile-time manifest snapshot. The discovery API
+separately returns the terminal manifest written after publication and finalization. Both keys must
+share the discovery run namespace; the reviewer bundle uses the terminal manifest and embeds the
+artifact whose provenance preserves the earlier compilation boundary.
+
 ## 5. Evidence scenarios
 
 1. Genuine discovery: model searches synthetic member, opens savings, extracts balance, and emits a valid artifact.
