@@ -9,10 +9,22 @@ from typing import Any
 import pytest
 from openai.lib._pydantic import to_strict_json_schema
 
-from replayforge.discovery.models import CompleteProposal, ProviderContext
+from replayforge.capabilities.models import InputValue
+from replayforge.discovery.models import ActProposal, CompleteProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
 from replayforge.observability.model_calls import ModelCallMetric
-from replayforge.providers.openai import OpenAIModelProvider, ProposalEnvelope
+from replayforge.policy.types import Risk
+from replayforge.providers.openai import (
+    OpenAIModelProvider,
+    ProposalEnvelope,
+    ProviderActProposal,
+    ProviderFrameLocator,
+    ProviderFrameTitleCandidate,
+    ProviderLocatorBundle,
+    ProviderLocatorScope,
+    ProviderTypeAction,
+    ProviderValueCandidate,
+)
 from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, Viewport
@@ -152,11 +164,53 @@ def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> Non
     assert "AssertAction" not in serialized
     assert "WaitForAction" not in serialized
     assert "NavigateAction" not in serialized
+    assert '"css"' not in serialized
+    assert '"coordinates"' not in serialized
+    assert '"image_anchor"' not in serialized
+    assert '"accessibility_path"' not in serialized
     assert {
         "ProviderClickAction",
         "ProviderTypeAction",
         "ProviderExtractAction",
     }.issubset(schema["$defs"])
+
+
+def test_provider_converts_constrained_wire_locator_to_domain_proposal() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(
+            proposal=ProviderActProposal(
+                kind="act",
+                action=ProviderTypeAction(
+                    kind="type", value=InputValue(source="input", path="member_id")
+                ),
+                target=ProviderLocatorBundle(
+                    description="Member ID field",
+                    scope=ProviderLocatorScope(
+                        frame_path=(
+                            ProviderFrameLocator(
+                                locator=ProviderFrameTitleCandidate(
+                                    strategy="title", value="Member operations"
+                                )
+                            ),
+                        )
+                    ),
+                    candidates=(ProviderValueCandidate(strategy="label", value="Member ID"),),
+                ),
+                rationale="The search field is visible.",
+                expected_effect="The member identifier is entered.",
+                declared_risk=Risk.READ_ONLY,
+                confidence=1,
+            )
+        )
+    )
+
+    proposal = OpenAIModelProvider(FakeClient(responses), model_policy()).decide(context())
+
+    assert isinstance(proposal, ActProposal)
+    assert proposal.action.kind == "type"
+    assert proposal.target is not None
+    assert proposal.target.candidates[0].strategy.value == "label"
+    assert proposal.target.scope.frame_path[0].locator.value == "Member operations"
 
 
 @pytest.mark.parametrize("frame", [b"", b"x" * (5 * 1024 * 1024 + 1)])

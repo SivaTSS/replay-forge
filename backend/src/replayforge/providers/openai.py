@@ -11,7 +11,7 @@ from typing import Any, Literal, Protocol, cast
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from replayforge.capabilities.models import InputValue, LiteralValue, LocatorBundle
+from replayforge.capabilities.models import InputValue, LiteralValue
 from replayforge.discovery.models import (
     CompleteProposal,
     DiscoveryProposal,
@@ -62,10 +62,61 @@ class ProviderExtractAction(ProviderModel):
     transform: Literal["text", "trim", "lowercase", "decimal", "date-time"] = "trim"
 
 
+class ProviderRoleNameCandidate(ProviderModel):
+    strategy: Literal["role_name"]
+    role: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=200)
+    match: Literal["exact", "contains"] = "exact"
+    expected_count: Literal[1] = 1
+
+
+class ProviderValueCandidate(ProviderModel):
+    strategy: Literal["label", "text", "placeholder", "title"]
+    value: str = Field(min_length=1, max_length=200)
+    match: Literal["exact", "contains"] = "exact"
+    expected_count: Literal[1] = 1
+
+
+class ProviderRelativeTextCandidate(ProviderModel):
+    strategy: Literal["relative_text"]
+    anchor: str = Field(min_length=1, max_length=200)
+    relation: Literal["form_submit", "following_value"]
+    element: str = Field(min_length=1, max_length=100)
+    text: str | None = Field(default=None, max_length=200)
+    expected_count: Literal[1] = 1
+
+
+ProviderLocatorCandidate = (
+    ProviderRoleNameCandidate | ProviderValueCandidate | ProviderRelativeTextCandidate
+)
+
+
+class ProviderFrameTitleCandidate(ProviderModel):
+    strategy: Literal["title"]
+    value: str = Field(min_length=1, max_length=200)
+    match: Literal["exact"] = "exact"
+    expected_count: Literal[1] = 1
+
+
+class ProviderFrameLocator(ProviderModel):
+    locator: ProviderFrameTitleCandidate
+
+
+class ProviderLocatorScope(ProviderModel):
+    window: Literal["primary"] = "primary"
+    frame_path: tuple[ProviderFrameLocator, ...] = Field(default=(), max_length=4)
+
+
+class ProviderLocatorBundle(ProviderModel):
+    description: str = Field(min_length=1, max_length=200)
+    scope: ProviderLocatorScope = Field(default_factory=ProviderLocatorScope)
+    candidates: tuple[ProviderLocatorCandidate, ...] = Field(min_length=1, max_length=5)
+
+
 class ProviderActProposal(ProviderModel):
     kind: Literal["act"]
     action: ProviderClickAction | ProviderTypeAction | ProviderExtractAction
-    target: LocatorBundle | None = None
+    target: ProviderLocatorBundle | None = None
     rationale: str = Field(min_length=1, max_length=500)
     expected_effect: str = Field(min_length=1, max_length=500)
     declared_risk: Risk
