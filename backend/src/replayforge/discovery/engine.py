@@ -128,7 +128,7 @@ class DiscoveryEngine:
                         screenshot_png=session.capture_provider_frame(),
                         action_history=tuple(history),
                         allowed_action_types=self.effective_policy.allowed_action_types,
-                        required_output_names=self.artifact_compiler.required_output_names,
+                        output_contract=self.artifact_compiler.output_contract,
                         maximum_risk=self.effective_policy.maximum_risk,
                     )
                 )

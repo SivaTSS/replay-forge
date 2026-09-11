@@ -11,6 +11,7 @@ from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 
 from replayforge.capabilities.models import InputValue
+from replayforge.discovery.compiler import SavingsBalanceCompiler
 from replayforge.discovery.models import ActProposal, CompleteProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
 from replayforge.observability.model_calls import ModelCallMetric
@@ -27,6 +28,7 @@ from replayforge.providers.openai import (
     ProviderTypeProposal,
 )
 from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
+from replayforge.shared.clock import SystemClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import (
     ActionableControl,
@@ -118,13 +120,7 @@ def context() -> ProviderContext:
         screenshot_png=b"\x89PNG\r\n\x1a\nsynthetic-frame",
         action_history=("opened search",),
         allowed_action_types=frozenset({"type", "click"}),
-        required_output_names=(
-            "member_id",
-            "account_type",
-            "currency",
-            "available_balance",
-            "as_of",
-        ),
+        output_contract=SavingsBalanceCompiler(SystemClock()).output_contract,
     )
 
 
@@ -148,11 +144,46 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     sent = json.loads(content[0]["text"])
     assert sent["input_fields"] == ["member_id"]
     assert sent["required_output_fields"] == [
-        "member_id",
-        "account_type",
-        "currency",
-        "available_balance",
-        "as_of",
+        {
+            "name": "member_id",
+            "type": "string",
+            "format": None,
+            "const": None,
+            "enum": [],
+            "preferred_transform": "trim",
+        },
+        {
+            "name": "account_type",
+            "type": "string",
+            "format": None,
+            "const": "savings",
+            "enum": [],
+            "preferred_transform": "lowercase",
+        },
+        {
+            "name": "currency",
+            "type": "string",
+            "format": None,
+            "const": None,
+            "enum": ["USD"],
+            "preferred_transform": "trim",
+        },
+        {
+            "name": "available_balance",
+            "type": "string",
+            "format": "decimal",
+            "const": None,
+            "enum": [],
+            "preferred_transform": "decimal",
+        },
+        {
+            "name": "as_of",
+            "type": "string",
+            "format": "date-time",
+            "const": None,
+            "enum": [],
+            "preferred_transform": "date-time",
+        },
     ]
     assert sent["observation"]["frame_titles"] == ["Member operations"]
     assert sent["observation"]["actionable_controls"] == [
@@ -268,7 +299,7 @@ def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
                 screenshot_png=frame,
                 action_history=provider_context.action_history,
                 allowed_action_types=provider_context.allowed_action_types,
-                required_output_names=provider_context.required_output_names,
+                output_contract=provider_context.output_contract,
             )
         )
 

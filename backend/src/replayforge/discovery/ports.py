@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from replayforge.capabilities.models import CapabilityArtifact
+from replayforge.capabilities.models import CapabilityArtifact, ObjectContract
 from replayforge.discovery.models import (
     DiscoveryProposal,
     ProviderContext,
@@ -34,7 +34,7 @@ class ModelProvider(Protocol):
 
 class ArtifactCompiler(Protocol):
     @property
-    def required_output_names(self) -> tuple[str, ...]: ...
+    def output_contract(self) -> ObjectContract: ...
 
     def compile(
         self,

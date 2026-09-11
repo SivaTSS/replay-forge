@@ -63,7 +63,11 @@ class SavingsBalanceCompiler:
 
     @property
     def required_output_names(self) -> tuple[str, ...]:
-        return _REQUIRED_OUTPUTS
+        return self.output_contract.required
+
+    @property
+    def output_contract(self) -> ObjectContract:
+        return self._outputs()
 
     def compile(
         self,

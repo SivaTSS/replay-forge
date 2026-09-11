@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from replayforge.capabilities.models import CapabilityArtifact
+from replayforge.capabilities.models import CapabilityArtifact, ObjectContract
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import (
     ActProposal,
@@ -60,8 +60,11 @@ class ReturningCompiler:
     calls: list[tuple[RecordedDiscoveryStep, ...]] = field(default_factory=list)
 
     @property
-    def required_output_names(self) -> tuple[str, ...]:
-        return ("available_balance",)
+    def output_contract(self) -> ObjectContract:
+        return ObjectContract(
+            required=("available_balance",),
+            properties={"available_balance": self.artifact.outputs.properties["available_balance"]},
+        )
 
     def compile(
         self,

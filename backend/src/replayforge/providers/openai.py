@@ -11,7 +11,7 @@ from typing import Any, Literal, Protocol, cast
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from replayforge.capabilities.models import InputValue, LiteralValue
+from replayforge.capabilities.models import InputValue, LiteralValue, ValueSchema
 from replayforge.discovery.models import (
     CompleteProposal,
     DiscoveryProposal,
@@ -44,7 +44,8 @@ Never click a static displayed value. On a details view, use extract once for ea
 output field, then complete only after every required field has been captured. When selecting a
 role_name target, use the exact role and name from actionable_controls and require count one.
 For a relative_text following_value extraction, use the exact anchor from extractable_fields and
-require count one. Extractable field labels are structural names only; their values are omitted."""
+require count one. Extractable field labels are structural names only; their values are omitted.
+For extract actions, use each required output field's preferred_transform exactly."""
 
 
 class ProviderModel(BaseModel):
@@ -173,6 +174,27 @@ class ProposalEnvelope(ProviderModel):
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
 
 
+def _preferred_transform(schema: ValueSchema) -> str:
+    if schema.format == "decimal":
+        return "decimal"
+    if schema.format == "date-time":
+        return "date-time"
+    if isinstance(schema.const, str) and schema.const == schema.const.lower():
+        return "lowercase"
+    return "trim"
+
+
+def _output_requirement(name: str, schema: ValueSchema) -> dict[str, object]:
+    return {
+        "name": name,
+        "type": schema.type.value,
+        "format": schema.format,
+        "const": schema.const,
+        "enum": list(schema.enum),
+        "preferred_transform": _preferred_transform(schema),
+    }
+
+
 class ParsedResponsePort(Protocol):
     @property
     def output_parsed(self) -> ProposalEnvelope | None: ...
@@ -238,7 +260,10 @@ class OpenAIModelProvider:
         request = {
             "goal": context.goal,
             "input_fields": sorted(context.inputs),
-            "required_output_fields": list(context.required_output_names),
+            "required_output_fields": [
+                _output_requirement(name, context.output_contract.properties[name])
+                for name in context.required_output_names
+            ],
             "observation": {
                 "route": context.observation.route,
                 "viewport": {

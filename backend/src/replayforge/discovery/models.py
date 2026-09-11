@@ -7,7 +7,12 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from replayforge.capabilities.models import Action, CapabilityArtifact, LocatorBundle
+from replayforge.capabilities.models import (
+    Action,
+    CapabilityArtifact,
+    LocatorBundle,
+    ObjectContract,
+)
 from replayforge.policy.types import Risk
 from replayforge.runs.results import FailureResult, InterventionRequiredResult
 from replayforge.surfaces.models import NormalizedObservation
@@ -73,5 +78,9 @@ class ProviderContext:
     screenshot_png: bytes
     action_history: tuple[str, ...]
     allowed_action_types: frozenset[str]
-    required_output_names: tuple[str, ...]
+    output_contract: ObjectContract
     maximum_risk: Risk = Risk.READ_ONLY
+
+    @property
+    def required_output_names(self) -> tuple[str, ...]:
+        return self.output_contract.required
