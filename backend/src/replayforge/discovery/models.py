@@ -73,3 +73,4 @@ class ProviderContext:
     screenshot_png: bytes
     action_history: tuple[str, ...]
     allowed_action_types: frozenset[str]
+    required_output_names: tuple[str, ...]

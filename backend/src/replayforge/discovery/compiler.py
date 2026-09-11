@@ -61,6 +61,10 @@ class SavingsBalanceCompiler:
     compiler_version: str = "1.0.0"
     surface_adapter_version: str = "web.v1"
 
+    @property
+    def required_output_names(self) -> tuple[str, ...]:
+        return _REQUIRED_OUTPUTS
+
     def compile(
         self,
         *,

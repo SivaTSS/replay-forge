@@ -33,6 +33,9 @@ class ModelProvider(Protocol):
 
 
 class ArtifactCompiler(Protocol):
+    @property
+    def required_output_names(self) -> tuple[str, ...]: ...
+
     def compile(
         self,
         *,

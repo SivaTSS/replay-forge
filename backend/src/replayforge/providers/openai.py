@@ -17,7 +17,8 @@ _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discove
 Return only the provided structured proposal. Use symbolic input paths, never literal customer
 values. Prefer semantic locators (role/name, label, relative text), never coordinate-only
 targets. Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
-Declare risk conservatively and complete only when the requested result is visibly verified."""
+Declare risk conservatively. Extract every required output using its exact field name, and
+complete only when every required output and the requested result are visibly verified."""
 
 
 class ProposalEnvelope(BaseModel):
@@ -74,6 +75,7 @@ class OpenAIModelProvider:
         request = {
             "goal": context.goal,
             "input_fields": sorted(context.inputs),
+            "required_output_fields": list(context.required_output_names),
             "observation": {
                 "route": context.observation.route,
                 "viewport": {

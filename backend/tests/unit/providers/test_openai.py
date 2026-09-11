@@ -53,6 +53,13 @@ def context() -> ProviderContext:
         screenshot_png=b"\x89PNG\r\n\x1a\nsynthetic-frame",
         action_history=("opened search",),
         allowed_action_types=frozenset({"type", "click"}),
+        required_output_names=(
+            "member_id",
+            "account_type",
+            "currency",
+            "available_balance",
+            "as_of",
+        ),
     )
 
 
@@ -72,6 +79,13 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     content = responses.request["input"][0]["content"]
     sent = json.loads(content[0]["text"])
     assert sent["input_fields"] == ["member_id"]
+    assert sent["required_output_fields"] == [
+        "member_id",
+        "account_type",
+        "currency",
+        "available_balance",
+        "as_of",
+    ]
     assert "12345" not in content[0]["text"]
     assert content[1]["image_url"].startswith("data:image/png;base64,")
 
@@ -90,6 +104,7 @@ def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
                 screenshot_png=frame,
                 action_history=provider_context.action_history,
                 allowed_action_types=provider_context.allowed_action_types,
+                required_output_names=provider_context.required_output_names,
             )
         )
 

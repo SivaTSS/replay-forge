@@ -59,6 +59,10 @@ class ReturningCompiler:
     artifact: CapabilityArtifact
     calls: list[tuple[RecordedDiscoveryStep, ...]] = field(default_factory=list)
 
+    @property
+    def required_output_names(self) -> tuple[str, ...]:
+        return ("available_balance",)
+
     def compile(
         self,
         *,
@@ -150,6 +154,7 @@ def test_successful_loop_records_action_and_compiles_verified_artifact(
     assert result.artifact == artifact
     assert len(compiler.calls) == 1
     assert len(compiler.calls[0]) == 1
+    assert provider.calls[0].required_output_names == ("available_balance",)
     assert compiler.calls[0][0].target is not extract_step.target
     assert session.closed is True
 
