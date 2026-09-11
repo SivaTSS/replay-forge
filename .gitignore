@@ -26,6 +26,11 @@ node_modules/
 # Browser automation output
 playwright-report/
 test-results/
+evidence/runtime/
+
+# Framework-generated local agent guidance
+apps/demo-bank/AGENTS.md
+apps/demo-bank/CLAUDE.md
 
 # Editors and operating systems
 .idea/
