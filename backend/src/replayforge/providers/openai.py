@@ -45,7 +45,9 @@ output field, then complete only after every required field has been captured. W
 role_name target, use the exact role and name from actionable_controls and require count one.
 For a relative_text following_value extraction, use the exact anchor from extractable_fields and
 require count one. Extractable field labels are structural names only; their values are omitted.
-For extract actions, use each required output field's preferred_transform exactly."""
+For extract actions, use each required output field's preferred_transform exactly. Extract only
+remaining_output_fields. Never extract a field listed in captured_output_fields or any undeclared
+output. Complete when remaining_output_fields is empty and the requested result is verified."""
 
 
 class ProviderModel(BaseModel):
@@ -264,6 +266,8 @@ class OpenAIModelProvider:
                 _output_requirement(name, context.output_contract.properties[name])
                 for name in context.required_output_names
             ],
+            "captured_output_fields": list(context.captured_output_names),
+            "remaining_output_fields": list(context.remaining_output_names),
             "observation": {
                 "route": context.observation.route,
                 "viewport": {

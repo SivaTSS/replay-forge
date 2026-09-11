@@ -121,6 +121,7 @@ def context() -> ProviderContext:
         action_history=("opened search",),
         allowed_action_types=frozenset({"type", "click"}),
         output_contract=SavingsBalanceCompiler(SystemClock()).output_contract,
+        captured_output_names=("member_id",),
     )
 
 
@@ -184,6 +185,13 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
             "enum": [],
             "preferred_transform": "date-time",
         },
+    ]
+    assert sent["captured_output_fields"] == ["member_id"]
+    assert sent["remaining_output_fields"] == [
+        "account_type",
+        "currency",
+        "available_balance",
+        "as_of",
     ]
     assert sent["observation"]["frame_titles"] == ["Member operations"]
     assert sent["observation"]["actionable_controls"] == [
@@ -300,6 +308,7 @@ def test_provider_rejects_empty_or_oversized_visual_frame(frame: bytes) -> None:
                 action_history=provider_context.action_history,
                 allowed_action_types=provider_context.allowed_action_types,
                 output_contract=provider_context.output_contract,
+                captured_output_names=provider_context.captured_output_names,
             )
         )
 

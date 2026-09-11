@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from replayforge.capabilities.models import CapabilityArtifact, ObjectContract
+from replayforge.capabilities.models import CapabilityArtifact, ExtractAction, ObjectContract
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import (
     ActProposal,
@@ -381,6 +381,77 @@ def test_recoverable_effect_absent_locator_failure_is_replanned_without_raw_deta
     assert "raw selector diagnostics" not in repr(provider.calls)
     assert isinstance(engine.recorder, MemoryRecorder)
     assert ("proposal_rejected", None) in engine.recorder.events
+
+
+def test_undeclared_extraction_is_rejected_before_execution(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    extract_step = artifact.steps[2]
+    assert isinstance(extract_step.action, ExtractAction)
+    valid = ActProposal(
+        kind="act",
+        action=extract_step.action,
+        target=extract_step.target,
+        rationale="Capture the declared balance.",
+        expected_effect="Bind the required balance output.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    undeclared = valid.model_copy(
+        update={"action": extract_step.action.model_copy(update={"output": "status"})}
+    )
+    provider = QueueModelProvider(
+        [undeclared, valid, CompleteProposal(kind="complete", rationale="Verified.")]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, DiscoverySuccess)
+    assert provider.calls[1].action_history == (
+        "Previous proposal was not executed (output_not_declared); choose a different safe target.",
+    )
+    assert provider.calls[1].captured_output_names == ()
+    assert provider.calls[1].remaining_output_names == ("available_balance",)
+    assert isinstance(engine.recorder, MemoryRecorder)
+    assert engine.recorder.events.count(("policy_evaluated", None)) == 1
+    assert engine.recorder.events.count(("action_intent", None)) == 1
+
+
+def test_duplicate_extraction_is_rejected_and_captured_state_is_exposed(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    extract_step = artifact.steps[2]
+    proposal = ActProposal(
+        kind="act",
+        action=extract_step.action,
+        target=extract_step.target,
+        rationale="Capture the declared balance.",
+        expected_effect="Bind the required balance output.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    provider = QueueModelProvider(
+        [proposal, proposal, CompleteProposal(kind="complete", rationale="Verified.")]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, DiscoverySuccess)
+    assert provider.calls[1].captured_output_names == ("available_balance",)
+    assert provider.calls[1].remaining_output_names == ()
+    assert provider.calls[2].action_history[-1] == (
+        "Previous proposal was not executed (output_already_captured); "
+        "choose a different safe target."
+    )
+    assert isinstance(engine.recorder, MemoryRecorder)
+    assert engine.recorder.events.count(("policy_evaluated", None)) == 1
+    assert engine.recorder.events.count(("action_intent", None)) == 1
 
 
 def test_nonrecoverable_locator_failure_remains_terminal(

@@ -129,6 +129,11 @@ class DiscoveryEngine:
                         action_history=tuple(history),
                         allowed_action_types=self.effective_policy.allowed_action_types,
                         output_contract=self.artifact_compiler.output_contract,
+                        captured_output_names=tuple(
+                            name
+                            for name in self.artifact_compiler.output_contract.required
+                            if name in outputs
+                        ),
                         maximum_risk=self.effective_policy.maximum_risk,
                     )
                 )
@@ -256,6 +261,22 @@ class DiscoveryEngine:
         before: NormalizedObservation,
         outputs: dict[str, Any],
     ) -> tuple[RecordedDiscoveryStep, str] | FailureResult | InterventionRequiredResult:
+        if isinstance(proposal.action, ExtractAction):
+            output_name = proposal.action.output
+            if output_name not in self.artifact_compiler.output_contract.required:
+                raise SurfaceError(
+                    "output_not_declared",
+                    "Extraction output is not declared by the capability contract.",
+                    recoverable=True,
+                    effect_absent=True,
+                )
+            if output_name in outputs:
+                raise SurfaceError(
+                    "output_already_captured",
+                    "Extraction output was already captured in this run.",
+                    recoverable=True,
+                    effect_absent=True,
+                )
         target = session.resolve(proposal.target, 10_000) if proposal.target else None
         stable_target = session.capture_locator(target) if target else None
         decision = self.policy_evaluator.evaluate(

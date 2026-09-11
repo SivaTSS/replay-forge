@@ -79,8 +79,21 @@ class ProviderContext:
     action_history: tuple[str, ...]
     allowed_action_types: frozenset[str]
     output_contract: ObjectContract
+    captured_output_names: tuple[str, ...] = ()
     maximum_risk: Risk = Risk.READ_ONLY
+
+    def __post_init__(self) -> None:
+        captured = set(self.captured_output_names)
+        if len(captured) != len(self.captured_output_names):
+            raise ValueError("captured output names must be unique")
+        if not captured.issubset(self.output_contract.required):
+            raise ValueError("captured outputs must be declared by the output contract")
 
     @property
     def required_output_names(self) -> tuple[str, ...]:
         return self.output_contract.required
+
+    @property
+    def remaining_output_names(self) -> tuple[str, ...]:
+        captured = set(self.captured_output_names)
+        return tuple(name for name in self.required_output_names if name not in captured)
