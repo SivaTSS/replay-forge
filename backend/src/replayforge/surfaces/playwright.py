@@ -65,6 +65,7 @@ from replayforge.surfaces.models import (
     ActionableControl,
     ActionReceipt,
     ActionStatus,
+    ExtractableField,
     HumanInput,
     HumanKeyInput,
     HumanPointerInput,
@@ -183,7 +184,9 @@ class PlaywrightSurfaceSession:
     def observe(self) -> NormalizedObservation:
         for attempt in range(_OBSERVATION_ATTEMPTS):
             try:
-                route, landmarks, frame_titles, controls, active = self._read_observation_state()
+                route, landmarks, frame_titles, controls, fields, active = (
+                    self._read_observation_state()
+                )
                 break
             except PlaywrightError as exc:
                 if attempt == _OBSERVATION_ATTEMPTS - 1 or not _is_navigation_race(exc):
@@ -198,8 +201,16 @@ class PlaywrightSurfaceSession:
         control_fingerprints = tuple(
             f"{control.role}:{control.name}:{control.count}" for control in controls
         )
+        field_fingerprints = tuple(f"{field.label}:{field.count}" for field in fields)
         fingerprint_source = "|".join(
-            (route, *landmarks, *frame_titles, *control_fingerprints, str(active or ""))
+            (
+                route,
+                *landmarks,
+                *frame_titles,
+                *control_fingerprints,
+                *field_fingerprints,
+                str(active or ""),
+            )
         )
         fingerprint = hashlib.sha256(fingerprint_source.encode()).hexdigest()
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}
@@ -213,6 +224,7 @@ class PlaywrightSurfaceSession:
             landmarks=landmarks,
             frame_titles=frame_titles,
             actionable_controls=controls,
+            extractable_fields=fields,
             active_element=str(active) if active else None,
             dialog_text=dialog_text,
         )
@@ -224,6 +236,7 @@ class PlaywrightSurfaceSession:
         tuple[str, ...],
         tuple[str, ...],
         tuple[ActionableControl, ...],
+        tuple[ExtractableField, ...],
         object,
     ]:
         frame = self._application_frame()
@@ -274,11 +287,26 @@ class PlaywrightSurfaceSession:
             and item.get("name")
             and isinstance(item.get("count"), int)
         )
+        raw_fields = root.locator("dl dt").evaluate_all(
+            """elements => {
+                const fields = new Map();
+                for (const element of elements) {
+                    const label = (element.textContent || '').trim();
+                    if (label) fields.set(label, (fields.get(label) || 0) + 1);
+                }
+                return Array.from(fields, ([label, count]) => ({label, count})).slice(0, 40);
+            }"""
+        )
+        fields = tuple(
+            ExtractableField(label=str(item["label"]), count=int(item["count"]))
+            for item in raw_fields
+            if isinstance(item, dict) and item.get("label") and isinstance(item.get("count"), int)
+        )
         active = root.evaluate(
             "() => document.activeElement?.getAttribute('aria-label') || "
             "document.activeElement?.getAttribute('name') || document.activeElement?.tagName"
         )
-        return route, landmarks, frame_titles, controls, active
+        return route, landmarks, frame_titles, controls, fields, active
 
     def capture_provider_frame(self) -> bytes:
         try:

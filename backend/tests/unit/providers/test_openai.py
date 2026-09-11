@@ -28,7 +28,12 @@ from replayforge.providers.openai import (
 )
 from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
 from replayforge.shared.ids import EntityKind, new_id
-from replayforge.surfaces.models import ActionableControl, NormalizedObservation, Viewport
+from replayforge.surfaces.models import (
+    ActionableControl,
+    ExtractableField,
+    NormalizedObservation,
+    Viewport,
+)
 
 
 @dataclass
@@ -108,6 +113,7 @@ def context() -> ProviderContext:
             landmarks=("Member Search", "Member ID"),
             frame_titles=("Member operations",),
             actionable_controls=(ActionableControl("textbox", "Member ID"),),
+            extractable_fields=(ExtractableField("Available balance"),),
         ),
         screenshot_png=b"\x89PNG\r\n\x1a\nsynthetic-frame",
         action_history=("opened search",),
@@ -152,6 +158,7 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     assert sent["observation"]["actionable_controls"] == [
         {"role": "textbox", "name": "Member ID", "count": 1}
     ]
+    assert sent["observation"]["extractable_fields"] == [{"label": "Available balance", "count": 1}]
     assert sent["maximum_risk"] == "read_only"
     assert "12345" not in content[0]["text"]
     assert content[1]["image_url"].startswith("data:image/png;base64,")

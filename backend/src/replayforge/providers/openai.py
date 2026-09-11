@@ -42,7 +42,9 @@ clicking controls that only navigate to retrieved data, and extracting displayed
 read_only. Target descriptions must name only the control or displayed value, not broader data.
 Never click a static displayed value. On a details view, use extract once for each required
 output field, then complete only after every required field has been captured. When selecting a
-role_name target, use the exact role and name from actionable_controls and require count one."""
+role_name target, use the exact role and name from actionable_controls and require count one.
+For a relative_text following_value extraction, use the exact anchor from extractable_fields and
+require count one. Extractable field labels are structural names only; their values are omitted."""
 
 
 class ProviderModel(BaseModel):
@@ -249,6 +251,10 @@ class OpenAIModelProvider:
                 "actionable_controls": [
                     {"role": control.role, "name": control.name, "count": control.count}
                     for control in context.observation.actionable_controls
+                ],
+                "extractable_fields": [
+                    {"label": field.label, "count": field.count}
+                    for field in context.observation.extractable_fields
                 ],
                 "active_element": context.observation.active_element,
                 "dialog_text": context.observation.dialog_text,

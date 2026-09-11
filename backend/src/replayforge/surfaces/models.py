@@ -66,6 +66,16 @@ class ActionableControl:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtractableField:
+    label: str
+    count: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.label or not 1 <= self.count <= 100:
+            raise ValueError("extractable fields require a label and bounded count")
+
+
+@dataclass(frozen=True, slots=True)
 class SurfaceFrame:
     """One raster frame paired with the viewport it represents."""
 
@@ -142,6 +152,7 @@ class NormalizedObservation:
     landmarks: tuple[str, ...]
     frame_titles: tuple[str, ...] = ()
     actionable_controls: tuple[ActionableControl, ...] = ()
+    extractable_fields: tuple[ExtractableField, ...] = ()
     active_element: str | None = None
     dialog_text: str | None = None
     screenshot_evidence_key: str | None = None

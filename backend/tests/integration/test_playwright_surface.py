@@ -302,6 +302,15 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
         assert session.wait_until(
             RouteCondition(kind="route", pattern="/accounts/*/details"), {}, {}, 5_000
         )
+        details_observation = session.observe()
+        assert {(field.label, field.count) for field in details_observation.extractable_fields} == {
+            ("Member ID", 1),
+            ("Account type", 1),
+            ("Currency", 1),
+            ("Available balance", 1),
+            ("As of", 1),
+            ("Status", 1),
+        }
         balance = in_member_frame(
             LocatorBundle(
                 description="Available balance",
