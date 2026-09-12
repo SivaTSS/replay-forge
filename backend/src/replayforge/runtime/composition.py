@@ -70,7 +70,7 @@ from replayforge.runs.results import (
 from replayforge.runs.service import ReplayApplicationService, ReplayExecutor
 from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
-from replayforge.surfaces.models import HumanInput, SurfaceError, SurfaceFrame
+from replayforge.surfaces.models import HumanInput, SurfaceError, SurfaceFrame, Viewport
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
 
@@ -541,6 +541,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             settings.demo_base_url,
             settings.browser_headless,
             VisionGrounder(text_recognizer, capability_assets),
+            viewport=Viewport(settings.browser_viewport_width, settings.browser_viewport_height),
         )
         worker = SerialSessionWorker(run_id)
         engine: ReplayEngine
@@ -618,6 +619,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             settings.browser_headless,
             VisionGrounder(text_recognizer, capability_assets),
             allow_transient_coordinates=True,
+            viewport=Viewport(settings.browser_viewport_width, settings.browser_viewport_height),
         )
         worker = SerialSessionWorker(run_id)
         engine = DiscoveryEngine(

@@ -246,11 +246,27 @@ class VisionGrounder:
         frame_hash: str,
     ) -> VisualTargetData:
         image = self._edge_map(self._decode(png))
-        search = (
-            self._normalized_region(candidate.search_region, viewport)
-            if candidate.search_region
-            else ScreenRegion(0, 0, viewport.width, viewport.height)
-        )
+        if candidate.context_anchor is not None:
+            assert candidate.relative_search_region is not None
+            anchors = self._matching_tokens(
+                png,
+                candidate.context_anchor.value,
+                candidate.context_anchor.match,
+                candidate.context_anchor.minimum_confidence,
+                candidate.context_anchor.search_region,
+                viewport,
+            )
+            if len(anchors) != 1:
+                raise self._cardinality_error(len(anchors), "visual context anchor")
+            search = self._relative_region(
+                anchors[0].region, candidate.relative_search_region, viewport
+            )
+        else:
+            search = (
+                self._normalized_region(candidate.search_region, viewport)
+                if candidate.search_region
+                else ScreenRegion(0, 0, viewport.width, viewport.height)
+            )
         search = self._clip_region(search, Viewport(image.shape[1], image.shape[0]))
         haystack = image[search.y : search.y + search.height, search.x : search.x + search.width]
         try:
@@ -265,6 +281,7 @@ class VisionGrounder:
         if template is None:
             raise SurfaceError("template_invalid", "The visual template could not be decoded.")
         scored: list[tuple[float, int, int, int, int]] = []
+        peak_floor = candidate.minimum_score - candidate.uniqueness_margin
         scale = candidate.minimum_scale
         while scale <= candidate.maximum_scale + 1e-9:
             width = max(1, round(template.shape[1] * scale))
@@ -272,8 +289,14 @@ class VisionGrounder:
             if width <= haystack.shape[1] and height <= haystack.shape[0]:
                 resized = cv2.resize(template, (width, height), interpolation=cv2.INTER_AREA)
                 response = cv2.matchTemplate(haystack, resized, cv2.TM_CCOEFF_NORMED)
-                _min_value, max_value, _min_at, max_at = cv2.minMaxLoc(response)
-                scored.append((float(max_value), max_at[0], max_at[1], width, height))
+                scored.extend(
+                    self._template_peaks(
+                        response,
+                        width,
+                        height,
+                        peak_floor,
+                    )
+                )
             scale += candidate.scale_step
         if not scored:
             raise SurfaceError(
@@ -281,13 +304,13 @@ class VisionGrounder:
                 "The visual template exceeded the search region.",
                 effect_absent=True,
             )
-        scored.sort(reverse=True)
-        best = scored[0]
-        alternatives = [
-            item
-            for item in scored[1:]
-            if abs(item[1] - best[1]) > best[3] // 2 or abs(item[2] - best[2]) > best[4] // 2
-        ]
+        distinct: list[tuple[float, int, int, int, int]] = []
+        for detection in sorted(scored, reverse=True):
+            if any(self._same_template_location(detection, existing) for existing in distinct):
+                continue
+            distinct.append(detection)
+        best = distinct[0]
+        alternatives = distinct[1:]
         second_score = alternatives[0][0] if alternatives else 0.0
         if best[0] < candidate.minimum_score:
             raise SurfaceError(
@@ -308,6 +331,45 @@ class VisionGrounder:
         return VisualTargetData(region, "image_anchor", best[0], frame_hash)
 
     @staticmethod
+    def _template_peaks(
+        response: np.ndarray,
+        width: int,
+        height: int,
+        floor: float,
+        maximum_peaks: int = 10,
+    ) -> list[tuple[float, int, int, int, int]]:
+        """Return bounded, spatially distinct response peaks for one scale."""
+
+        working = response.copy()
+        peaks: list[tuple[float, int, int, int, int]] = []
+        radius_x = max(1, width // 2)
+        radius_y = max(1, height // 2)
+        for _ in range(maximum_peaks):
+            _minimum, maximum, _minimum_at, maximum_at = cv2.minMaxLoc(working)
+            if maximum < floor:
+                break
+            x, y = maximum_at
+            peaks.append((float(maximum), x, y, width, height))
+            left = max(0, x - radius_x)
+            right = min(working.shape[1], x + radius_x + 1)
+            top = max(0, y - radius_y)
+            bottom = min(working.shape[0], y + radius_y + 1)
+            working[top:bottom, left:right] = -1.0
+        return peaks
+
+    @staticmethod
+    def _same_template_location(
+        first: tuple[float, int, int, int, int],
+        second: tuple[float, int, int, int, int],
+    ) -> bool:
+        first_center = (first[1] + first[3] / 2, first[2] + first[4] / 2)
+        second_center = (second[1] + second[3] / 2, second[2] + second[4] / 2)
+        return (
+            abs(first_center[0] - second_center[0]) <= max(first[3], second[3]) * 0.5
+            and abs(first_center[1] - second_center[1]) <= max(first[4], second[4]) * 0.5
+        )
+
+    @staticmethod
     def _has_relation(anchor: VisualToken, target: VisualToken, relation: str) -> bool:
         a, t = anchor.region, target.region
         vertical_overlap = max(0, min(a.y + a.height, t.y + t.height) - max(a.y, t.y))
@@ -324,8 +386,8 @@ class VisionGrounder:
     ) -> ScreenRegion:
         unit = anchor.height
         region = ScreenRegion(
-            round(anchor.x + spec.x * unit),
-            round(anchor.y + spec.y * unit),
+            max(0, round(anchor.x + spec.x * unit)),
+            max(0, round(anchor.y + spec.y * unit)),
             max(1, round(spec.width * unit)),
             max(1, round(spec.height * unit)),
         )
@@ -342,8 +404,8 @@ class VisionGrounder:
 
     @staticmethod
     def _clip_region(region: ScreenRegion, viewport: Viewport) -> ScreenRegion:
-        x = min(region.x, viewport.width - 1)
-        y = min(region.y, viewport.height - 1)
+        x = max(0, min(region.x, viewport.width - 1))
+        y = max(0, min(region.y, viewport.height - 1))
         return ScreenRegion(
             x, y, min(region.width, viewport.width - x), min(region.height, viewport.height - y)
         )

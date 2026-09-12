@@ -148,7 +148,7 @@ The production path is rendered-surface first. Playwright is still the browser t
 
 `VisionGrounder` runs RapidOCR locally and resolves three durable strategies in artifact order: exact/contained OCR text, OCR-anchor-relative regions, and multi-scale edge-template matches. Each candidate declares confidence, cardinality, search bounds, and—where applicable—a uniqueness margin. Failure to meet those rules returns `target_absent` or `target_ambiguous`; replay never guesses.
 
-The `visual-terminal` demo route exposes the workflow as one canvas with no usable control or value nodes. Harbor and Summit change palette and horizontal placement. One Harbor-derived, content-addressed edge template opens the icon-only account action on both. Coordinates may appear only as a discovery proposal for an icon bounding box; the adapter immediately converts that region into a hashed edge template before recording the step. Published artifacts reject coordinate-only targets.
+The `visual-terminal` demo route exposes the original workflow as one canvas with no usable control or value nodes. The newer `visual-workbench` route keeps that contract while rendering three identical account-row actions and deterministic delayed, notice, permission, and ambiguity fixtures. Harbor and Summit change palette, font metrics, horizontal placement, and row order. Version `3.1.0` first resolves the rendered `Savings` label with OCR, then searches for a content-addressed edge template only inside the derived row region. Coordinates may appear only as a discovery proposal for an icon bounding box; the adapter immediately converts that region into a hashed edge template before recording the step. Published artifacts reject coordinate-only targets.
 
 ## Decisions
 

@@ -8,8 +8,8 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Live LLM loop | Evidenced | `DiscoveryEngine` + `OpenAIModelProvider` | `evidence/discovery-success` |
 | Real UI actions | Evidenced | Chromium mouse/keyboard on iframe and canvas surfaces | Local synthetic target |
 | Bias beyond clean DOM | Implemented, tested | Local OCR, relative regions, image templates | Canonical flow has no DOM targets |
-| Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Five committed immutable versions |
-| Robust control identity | Implemented | Ordered OCR/template/semantic candidates; cardinality and confidence gates | Fails closed on absent or ambiguous matches |
+| Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Six committed immutable versions |
+| Robust control identity | Implemented | Ordered OCR/template/semantic candidates; OCR-contextual template scope; bounded same-scale peak detection | Fails closed on absent or ambiguous matches |
 | Typed inputs/outputs | Implemented | Closed object contracts and runtime validation | Five outputs on success |
 | Success checkpoint | Evidenced | Route, visible text, output validity, input/output identity | `replay-success` |
 | Model-free replay | Evidenced | `ReplayEngine` has no provider import | Structural test + bundle |
@@ -25,9 +25,9 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Explicit ownership | Evidenced | TTL lease, owner, version, CAS | Conflict/race tests |
 | Safe resume | Evidenced for replay | Fresh location, postcondition, and changed-fingerprint checks | Discovery continuation is cut |
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
-| Canvas visual control | Implemented, tested | Canvas-only route and executable vision grounder | Browser transport only |
+| Canvas visual control | Implemented, tested | Two canvas-only routes; latest workbench uses OCR, relative regions, and contextual image anchors | Browser transport only |
 | Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
-| Multi-tenant reuse | Evidenced | One artifact supports Harbor and Summit | `tenant-reuse` |
+| Multi-tenant reuse | Evidenced | `3.1.0` uses one artifact across Harbor and Summit with reordered rows | 12-case visual portability matrix |
 | Per-tenant drift/overlays | Designed only | Compatibility landmarks and surface fingerprint fields | No overlay repository or automatic drift gate |
 | Human operator surface | Implemented | Next.js intervention console | No run list, auth, or WebSocket |
 | Agent-facing invocation | Implemented | `/invoke` with typed arguments and discriminated result | Capability catalog endpoint is not implemented |
@@ -51,7 +51,7 @@ goal
 | Assignment ambiguity | Alternatives | Interpretation used |
 |---|---|---|
 | “Target” | Arbitrary caller URL or registered entry point | Registered symbolic target prevents SSRF and policy bypass |
-| “Stable targeting” | Coordinates, fuzzy vision, DOM/accessibility | OCR-relative geometry and unique edge templates first; semantic locators optional |
+| “Stable targeting” | Coordinates, fuzzy vision, DOM/accessibility | OCR-relative geometry and OCR-contextual unique edge templates first; semantic locators optional |
 | “No clean DOM” | Design bias or executable proof | Canvas-only canonical flow proves the full contract from rendered pixels |
 | “Take control” | New browser, headed local window, remote input | Bounded input into the retained browser context |
 | “Replay failure” | HTTP error or typed domain result | HTTP success with discriminated automation result |

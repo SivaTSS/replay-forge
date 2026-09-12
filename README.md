@@ -12,7 +12,7 @@ flowchart LR
     R -. sensitive or stuck .-> H([Same-session human handoff])
 ```
 
-The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. Its primary `3.0.0` path operates a canvas-only UI through local OCR, relative geometry, and a content-addressed image template. DOM/accessibility targeting remains as an optional web strategy and supports the earlier failure and handoff scenarios.
+The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. Its primary `3.1.0` path operates a richer canvas-only workbench through local OCR, OCR-relative geometry, and an OCR-contextual content-addressed image template. The earlier `3.0.0` visual-terminal path remains as an immutable regression fixture. DOM/accessibility targeting remains an optional web strategy for the earlier failure and handoff scenarios.
 
 ## What is real
 
@@ -52,7 +52,7 @@ Invoke the visual-first artifact:
 ```bash
 curl --fail-with-body --silent --show-error \
   -H 'content-type: application/json' \
-  -d '{"tenant":"harbor","version":"3.0.0","inputs":{"member_id":"12345"}}' \
+  -d '{"tenant":"harbor","version":"3.1.0","inputs":{"member_id":"12345"}}' \
   http://127.0.0.1:8000/api/v1/capabilities/member.lookup_savings_balance/invoke
 ```
 
@@ -62,8 +62,13 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 
 | Behavior | How to run | Expected |
 |---|---|---|
-| Canvas-only visual path | `3.0.0`, member `12345` | `success` without DOM targets |
-| Cross-tenant visual path | `3.0.0`, tenant `summit` | Same Harbor-captured template succeeds |
+| Canvas-only visual workbench | `3.1.0`, member `12345` | `success` without DOM targets |
+| Cross-tenant visual workbench | `3.1.0`, tenant `summit` | Same artifact resolves the reordered Savings row |
+| Viewport portability | `3.1.0`, `1024×640` or `1440×900` | Same artifact succeeds at a tested scale |
+| Delayed result | `3.1.0`, member `13579` | Bounded wait, then `success` |
+| Known notice | `3.1.0`, member `67890` | One bounded recovery, then `success` |
+| Visual ambiguity | `3.1.0`, member `33333` | `failure/target_ambiguous` before a click |
+| Changed visual target | `3.1.0`, member `44444` | `failure/target_absent` |
 | Happy path | `1.0.0`, member `12345` | `success` |
 | Business outcome | `1.0.0`, member `99999` | `business_outcome/member_not_found` |
 | Second tenant | `1.0.0`, tenant `summit` | Same artifact succeeds |
@@ -71,7 +76,7 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 | Hard failure | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_hard_failure_run.py` | `failure/permission_denied` + masked frame |
 | Human handoff | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_handoff_run.py` | Claim, same-session input, resume, `success` |
 
-Omitting `version` selects the latest artifact, currently visual-first `3.0.0`. Request `2.0.0` explicitly for the approval/handoff demonstration.
+Omitting `version` selects the latest artifact, currently visual workbench `3.1.0`. Request `2.0.0` explicitly for the approval/handoff demonstration and `3.0.0` for the original visual-terminal regression path.
 
 ## Operator console
 
@@ -117,6 +122,14 @@ bash scripts/verify.sh
 
 This runs locked dependency setup, Ruff, strict mypy, unit tests with a 90% branch gate, evidence verification, TypeScript checks, both frontend builds, and real Chromium integration tests.
 
+Run the focused visual portability matrix after starting or building the demo bank:
+
+```bash
+UV_CACHE_DIR=/tmp/replayforge-uv-cache \
+PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
+uv run pytest backend/tests/integration/test_visual_portability.py -q
+```
+
 Verify only the committed evidence:
 
 ```bash
@@ -155,6 +168,7 @@ docs/                implementation-accurate design documentation
 - [Safety, evidence, and human handoff](docs/safety-and-handoff.md)
 - [Implemented API and operations](docs/operations.md)
 - [Tests and evidence](docs/verification.md)
+- [Visual portability implementation plan](docs/plans/01-demo-realism-and-portability.md)
 - [Assignment requirement matrix](docs/requirements.md)
 - [Required seven-part design report](REPORT.md)
 

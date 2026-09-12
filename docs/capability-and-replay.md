@@ -9,7 +9,7 @@ raw model exchange       recorded successful trace       published capability
      discarded        ───────── compiler ─────────►   typed, hashed, reviewable
 ```
 
-An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click coordinate. The primary example is [`3.0.0.yaml`](../capabilities/member.lookup_savings_balance/3.0.0.yaml); its Pydantic definition is [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py).
+An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click coordinate. The primary example is [`3.1.0.yaml`](../capabilities/member.lookup_savings_balance/3.1.0.yaml); its Pydantic definition is [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py). `3.0.0.yaml` remains the immutable original visual-terminal fixture.
 
 ## Shape
 
@@ -85,6 +85,21 @@ The resolver never asks a model, selects the first ambiguous result, or clicks a
 
 Coordinates exist only at discovery time for an icon bounding box. Before the action is recorded, the adapter crops an edge representation, stores it under `asset://sha256/<digest>`, and replaces the coordinate candidate with an `image_anchor`. The compiler rejects a coordinate-only recording.
 
+### Contextual image anchors
+
+Repeated-row interfaces need more than a global icon match. Version `3.1.0` first resolves the rendered `Savings` label with OCR, derives a search rectangle from that fresh anchor, and only then searches for the hashed chevron inside the rectangle. Three identical account icons therefore remain safe: a global template search is ambiguous, while the contextual search has one permitted match. The context and relative region are part of the typed artifact; the resulting click region is still transient and tied to the current frame hash.
+
+| Repeated-icon option | Decision | Reason |
+|---|---|---|
+| Click the first template match | Rejected | Identical Checking, Savings, and loan actions make ordinal selection unsafe |
+| Persist the Savings-row coordinates | Rejected | Layout and viewport changes invalidate the recording |
+| Give each icon a different shape | Rejected | Hides the ambiguity instead of solving it |
+| OCR anchor + relative template region | **Chosen** | Preserves pixel-first operation while binding the icon to the named business row |
+
+Template matching extracts a bounded set of spatial peaks per scale and merges detections referring to the same physical icon. A close second match returns `target_ambiguous`; no first-match shortcut is used.
+
+The committed calibration keeps a `0.75` score floor and evaluates scales `0.70–1.25` in `0.025` steps. The lower bound is measured from the compact `1024×640` rendering (the chevron is approximately `0.775×` the logical template), not a blanket confidence reduction.
+
 ## Replay pipeline
 
 ```mermaid
@@ -156,8 +171,9 @@ Retry occurs only when the artifact names the error, attempts remain, and the pr
 | `1.0.2` | Hard-failure demonstration | Selects permission denial; classifies expected/observed state |
 | `2.0.0` | Handoff demonstration | Marks search submission sensitive; policy pauses before click |
 | `3.0.0` | Visual-first demonstration | Full canvas-only flow using OCR, relative geometry, and one image anchor |
+| `3.1.0` | Visual portability demonstration | Richer repeated-row canvas, contextual image anchor, viewport matrix, delayed response, recovery, and declared visual failures |
 
-No version means “latest,” currently `3.0.0`. Use `2.0.0` explicitly for human handoff.
+No version means “latest,” currently `3.1.0`. Use `2.0.0` explicitly for human handoff and `3.0.0` for the original visual-terminal fixture.
 
 ## Schema and version decisions
 

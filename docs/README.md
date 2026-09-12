@@ -55,7 +55,7 @@ Every page uses these labels consistently:
 | Same-session handoff | Implemented, evidenced | Polling PNG viewport and bounded HTTP input |
 | Two tenant variants | Implemented, evidenced | One artifact supports `harbor` and `summit` |
 | Persistence | Partly implemented | Evidence on disk; operational metadata in memory |
-| Canvas/non-DOM browser control | Implemented, tested | Canvas-only demo; OCR, relative regions, image anchors |
+| Canvas/non-DOM browser control | Implemented, tested | Canvas-only visual-terminal and visual-workbench; OCR, relative regions, contextual image anchors |
 | Native desktop control | Designed | Surface ports exist; no OS adapter executes them |
 | Full operations UI | Cut | The UI is an intervention console only |
 | Distributed runtime | Cut | One process; one thread-affine worker per browser run |

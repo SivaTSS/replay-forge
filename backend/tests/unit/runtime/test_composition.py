@@ -43,6 +43,19 @@ def test_settings_validate_origin_and_artifact_directory() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("width", "height"),
+    [(799, 800), (2561, 800), (1280, 499), (1280, 1601)],
+)
+def test_settings_reject_out_of_bounds_browser_viewport(width: int, height: int) -> None:
+    with pytest.raises(ValidationError, match="browser viewport"):
+        RuntimeSettings(
+            artifact_directory=artifact_directory(),
+            browser_viewport_width=width,
+            browser_viewport_height=height,
+        )
+
+
 def test_secret_setting_is_masked_and_unconfigured_discovery_is_not_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

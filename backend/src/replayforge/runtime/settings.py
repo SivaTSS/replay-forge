@@ -24,6 +24,8 @@ class RuntimeSettings(BaseSettings):
     evidence_directory: Path = Path("evidence/runtime")
     demo_base_url: str = "http://127.0.0.1:3001"
     browser_headless: bool = True
+    browser_viewport_width: int = 1280
+    browser_viewport_height: int = 800
     langfuse_base_url: str = "http://127.0.0.1:3100"
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
@@ -37,6 +39,10 @@ class RuntimeSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_boundaries(self) -> Self:
+        if not 800 <= self.browser_viewport_width <= 2560:
+            raise ValueError("browser viewport width must be between 800 and 2560")
+        if not 500 <= self.browser_viewport_height <= 1600:
+            raise ValueError("browser viewport height must be between 500 and 1600")
         parsed = urlsplit(self.demo_base_url)
         if (
             parsed.scheme not in {"http", "https"}

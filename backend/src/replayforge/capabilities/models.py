@@ -211,6 +211,15 @@ class RelativeRegion(ArtifactModel):
     height: float = Field(gt=0, le=40)
 
 
+class OcrAnchor(ArtifactModel):
+    """Rendered text used to scope a secondary visual target."""
+
+    value: str = Field(min_length=1, max_length=200)
+    match: MatchMode = MatchMode.EXACT
+    search_region: NormalizedRegion | None = None
+    minimum_confidence: float = Field(default=0.85, ge=0, le=1)
+
+
 class OcrTextCandidate(ArtifactModel):
     strategy: Literal["ocr_text"]
     value: str = Field(min_length=1, max_length=200)
@@ -245,6 +254,8 @@ class ImageAnchorCandidate(ArtifactModel):
     asset_key: str = Field(pattern=r"^asset://sha256/[0-9a-f]{64}$")
     content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     search_region: NormalizedRegion | None = None
+    context_anchor: OcrAnchor | None = None
+    relative_search_region: RelativeRegion | None = None
     minimum_score: float = Field(default=0.90, ge=0, le=1)
     uniqueness_margin: float = Field(default=0.08, ge=0, le=1)
     minimum_scale: float = Field(default=0.80, gt=0, le=4)
@@ -257,6 +268,12 @@ class ImageAnchorCandidate(ArtifactModel):
     def validate_scale_range(self) -> Self:
         if self.minimum_scale > self.maximum_scale:
             raise ValueError("minimum_scale cannot exceed maximum_scale")
+        if (self.context_anchor is None) != (self.relative_search_region is None):
+            raise ValueError("context_anchor and relative_search_region must be provided together")
+        if self.context_anchor is not None and self.search_region is not None:
+            raise ValueError(
+                "contextual image anchors cannot also declare a top-level search_region"
+            )
         return self
 
 
@@ -582,7 +599,7 @@ def _condition_outputs(condition: Condition) -> set[str]:
 
 
 class CapabilityArtifact(ArtifactModel):
-    schema_version: Literal["1.0", "1.1"]
+    schema_version: Literal["1.0", "1.1", "1.2"]
     capability: CapabilityMetadata
     compatibility: Compatibility
     inputs: ObjectContract

@@ -38,7 +38,7 @@ There are no implemented capability-list, run-read, event-read, evidence-downloa
 ```json
 {
   "tenant": "harbor",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "inputs": {"member_id": "12345"}
 }
 ```
@@ -68,6 +68,7 @@ Pydantic models forbid unknown request fields. Validation errors contain field l
 | `REPLAYFORGE_EVIDENCE_DIRECTORY` | `evidence/runtime` | Mutable local evidence |
 | `REPLAYFORGE_DEMO_BASE_URL` | `http://127.0.0.1:3001` | Credential-free target origin |
 | `REPLAYFORGE_BROWSER_HEADLESS` | `true` | Chromium mode |
+| `REPLAYFORGE_BROWSER_VIEWPORT_WIDTH` / `REPLAYFORGE_BROWSER_VIEWPORT_HEIGHT` | `1280` / `800` | CSS viewport used by the browser surface |
 | `REPLAYFORGE_MODEL_POLICY_FILE` | `config/model-policy.yaml` | Reviewed discovery budget |
 | `REPLAYFORGE_OPENAI_API_KEY` | unset | Enables live discovery only |
 | `REPLAYFORGE_LANGFUSE_BASE_URL` | `http://127.0.0.1:3100` | Must be loopback HTTP |
@@ -85,6 +86,8 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 | Environment-selected model | Rejected | Prevents callers from bypassing reviewed cost and reasoning limits |
 | Local evidence path in API | Rejected | Callers receive opaque `evidence://` keys rather than filesystem paths |
 | Public target | Rejected | Cannot guarantee availability, fault injection, or acceptable automation terms |
+
+The latest visual workbench is available at the registered `visual_member_workbench` entry point. It remains canvas-only and normalizes to the logical `/members/search` route for policy checks. Its focused acceptance matrix covers the `1024×640`, `1280×800`, and `1440×900` viewports; arbitrary aspect ratios and device-pixel-ratio changes are not claimed.
 
 ## Failure behavior
 

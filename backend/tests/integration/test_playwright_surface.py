@@ -1,15 +1,9 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import time
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
-from urllib.error import URLError
-from urllib.request import urlopen
 
 import pytest
 
@@ -82,41 +76,6 @@ from replayforge.surfaces.models import (
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture(scope="module")
-def demo_bank() -> Iterator[str]:
-    repository = Path(__file__).resolve().parents[3]
-    app = repository / "apps" / "demo-bank"
-    process = subprocess.Popen(
-        [
-            str(app / "node_modules" / ".bin" / "next"),
-            "start",
-            "--hostname",
-            "127.0.0.1",
-            "--port",
-            "3001",
-        ],
-        cwd=app,
-        env={**os.environ, "NEXT_TELEMETRY_DISABLED": "1"},
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT,
-    )
-    base_url = "http://127.0.0.1:3001"
-    try:
-        for _ in range(50):
-            try:
-                with urlopen(f"{base_url}/harbor", timeout=1) as response:
-                    if response.status == 200:
-                        break
-            except URLError:
-                time.sleep(0.1)
-        else:
-            raise RuntimeError("demo bank did not become ready")
-        yield base_url
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
 
 
 def in_member_frame(target: LocatorBundle) -> LocatorBundle:

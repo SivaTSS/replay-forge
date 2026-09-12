@@ -110,6 +110,7 @@ class PlaywrightSurfaceDriver:
     headless: bool = True
     vision: VisionGrounder | None = None
     allow_transient_coordinates: bool = False
+    viewport: Viewport = field(default_factory=lambda: Viewport(1280, 800))
     browser: Browser | None = field(default=None, init=False)
     playwright: Playwright | None = field(default=None, init=False)
     active_session: PlaywrightSurfaceSession | None = field(default=None, init=False)
@@ -121,18 +122,26 @@ class PlaywrightSurfaceDriver:
             raise SurfaceError("unknown_application", "Application family is not registered.")
         if tenant not in {"harbor", "summit"}:
             raise SurfaceError("unknown_tenant", "Tenant is not registered.")
-        if entry_point not in {"member_search", "visual_member_search"}:
+        if entry_point not in {
+            "member_search",
+            "visual_member_search",
+            "visual_member_workbench",
+        }:
             raise SurfaceError("unknown_entry_point", "Entry point is not registered.")
         if self.playwright is None:
             self.playwright = sync_playwright().start()
             self.browser = self.playwright.chromium.launch(headless=self.headless)
         assert self.browser is not None
-        context = self.browser.new_context(viewport={"width": 1280, "height": 800})
+        context = self.browser.new_context(
+            viewport={"width": self.viewport.width, "height": self.viewport.height}
+        )
         page = context.new_page()
         tenant_root = f"{self.base_url.rstrip('/')}/{quote(tenant, safe='')}"
         destination = (
             f"{tenant_root}/visual-terminal"
             if entry_point == "visual_member_search"
+            else f"{tenant_root}/visual-workbench"
+            if entry_point == "visual_member_workbench"
             else tenant_root
         )
         try:
@@ -159,6 +168,7 @@ class PlaywrightSurfaceDriver:
             entry_points={entry_point: destination},
             vision=self.vision,
             allow_transient_coordinates=self.allow_transient_coordinates,
+            rendered_surface=entry_point in {"visual_member_search", "visual_member_workbench"},
         )
         self.active_session = session
         return session
@@ -192,6 +202,7 @@ class PlaywrightSurfaceSession:
     entry_points: dict[str, str]
     vision: VisionGrounder | None = None
     allow_transient_coordinates: bool = False
+    rendered_surface: bool = False
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     _handles: dict[str, Locator] = field(default_factory=dict, init=False)
     _bundles: dict[str, LocatorBundle] = field(default_factory=dict, init=False)
@@ -223,7 +234,7 @@ class PlaywrightSurfaceSession:
         dialog_text = None
         visual_tokens = (
             self.vision.tokens(self._capture_grounding_frame())
-            if self.vision is not None and "/visual-terminal" in self.page.url
+            if self.vision is not None and self.rendered_surface
             else ()
         )
         control_fingerprints = tuple(
@@ -358,7 +369,7 @@ class PlaywrightSurfaceSession:
                     frame.locator(".account-table tbody td"),
                 )
             )
-        if "/visual-terminal" in self.page.url:
+        if self.rendered_surface:
             masks.append(self.page.locator("canvas"))
             directives = (*directives, "mask:rendered-canvas")
         try:
@@ -699,7 +710,12 @@ class PlaywrightSurfaceSession:
         prefix = f"/{self.tenant}"
         if route.startswith(prefix):
             route = route.removeprefix(prefix) or "/"
-        if route in {"/member-search", "/member-results", "/visual-terminal"}:
+        if route in {
+            "/member-search",
+            "/member-results",
+            "/visual-terminal",
+            "/visual-workbench",
+        }:
             return "/members/search"
         return route
 

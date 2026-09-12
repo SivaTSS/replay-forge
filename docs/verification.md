@@ -38,8 +38,9 @@ The Playwright adapter is excluded from the Python coverage percentage and teste
 | Known hard failure | Failure classification + masked screenshot checks | `evidence/replay-hard-failure` |
 | Same live browser handoff | Lease/runtime tests + captured frames | `evidence/human-handoff` |
 | Shared artifact across tenants | Chromium integration | `evidence/tenant-reuse` |
-| Canvas-only model-free replay | Chromium on Harbor and Summit | Automated `3.0.0` integration test |
-| Visual fail-closed behavior | OCR cardinality, template movement, asset integrity tests | Unit suite |
+| Canvas-only model-free replay | Chromium on Harbor and Summit | Automated `3.0.0` and `3.1.0` integration tests |
+| Visual fail-closed behavior | OCR cardinality, same-scale peak detection, contextual template, asset integrity tests | Unit suite + `test_visual_portability.py` |
+| Visual portability | One artifact across two tenants and three 16:10 viewports | 12-case matrix, all passing |
 | Artifact immutability and integrity | Registry/serialization tests | Artifact hash in every applicable bundle |
 | Redaction before retention | Redactor/journal/store tests | Manifest directives and sanitized payloads |
 
@@ -77,6 +78,20 @@ The runtime first writes mutable evidence under ignored `evidence/runtime/`. Exp
 | `replay-hard-failure` | `1.0.2` | Harbor | failure | Permission denial plus masked failure frame |
 | `human-handoff` | `2.0.0` | Harbor | success | Pause, claim, input, fresh-state validation, continuation |
 | `tenant-reuse` | `1.0.0` | Summit | success | Same artifact version and hash on a second tenant |
+
+### Visual workbench matrix
+
+`backend/tests/integration/test_visual_portability.py` runs the latest artifact against a canvas-only workbench. The ten behavior cells cover both tenants at `1280×800`, Harbor at `1024×640`, Summit at `1440×900`, a delayed response, a known notice recovery, and four declared/fail-closed outcomes. Two additional tests assert the canvas-only surface and artifact shape, for 12 pytest cases total. The suite must pass without a model call or DOM target.
+
+| Fixture | Expected terminal behavior |
+|---|---|
+| `normal` | Five typed outputs and verified checkpoint |
+| `delayed` | Existing condition polling handles the bounded delay |
+| `notice` | One recovery, then the remaining steps resume |
+| `missing` | `business_outcome/member_not_found` |
+| `restricted` | `failure/permission_denied` |
+| `duplicate_search` | `failure/target_ambiguous` before dispatch |
+| `changed_icon` | `failure/target_absent` |
 
 No Playwright trace archive is committed. This is an explicit optional evidence cut; screenshots are the richer failure/handoff signal.
 

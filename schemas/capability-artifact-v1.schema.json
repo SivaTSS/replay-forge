@@ -759,6 +759,17 @@
           "title": "Content Hash",
           "type": "string"
         },
+        "context_anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OcrAnchor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "expected_count": {
           "const": 1,
           "default": 1,
@@ -789,6 +800,17 @@
         "portability": {
           "$ref": "#/$defs/Portability",
           "default": "medium"
+        },
+        "relative_search_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelativeRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "scale_step": {
           "default": 0.05,
@@ -1375,6 +1397,45 @@
         "properties"
       ],
       "title": "ObjectContract",
+      "type": "object"
+    },
+    "OcrAnchor": {
+      "additionalProperties": false,
+      "description": "Rendered text used to scope a secondary visual target.",
+      "properties": {
+        "match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "minimum_confidence": {
+          "default": 0.85,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Minimum Confidence",
+          "type": "number"
+        },
+        "search_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NormalizedRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "OcrAnchor",
       "type": "object"
     },
     "OcrRelativeCandidate": {
@@ -2662,7 +2723,8 @@
     "schema_version": {
       "enum": [
         "1.0",
-        "1.1"
+        "1.1",
+        "1.2"
       ],
       "title": "Schema Version",
       "type": "string"

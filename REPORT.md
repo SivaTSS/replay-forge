@@ -43,7 +43,7 @@ identity/version
 
 Pydantic models reject unknown fields and invalid cross-references. Every required output must be extracted by the main flow and checked by the final checkpoint. Published `(capability ID, version)` content is immutable; discovery receives the next patch version. Symbolic values such as `input.member_id` make a recording reusable without retaining the discovery value.
 
-Target bundles contain a human-readable description, reviewed target risk, optional frame scope, ordered visual and semantic candidates, expected cardinality, state, and portability. Version `3.0.0` uses OCR text for named controls, fresh OCR-anchor-relative geometry for fields and values, and a unique multi-scale edge template for the icon-only control. Every visual rule has explicit confidence and search bounds.
+Target bundles contain a human-readable description, reviewed target risk, optional frame scope, ordered visual and semantic candidates, expected cardinality, state, and portability. Version `3.1.0` uses OCR text for named controls, fresh OCR-anchor-relative geometry for fields and values, and a content-addressed multi-scale edge template scoped by the freshly observed `Savings` label. Its workbench renders three identical account-row icons, so a global match is ambiguous and must fail closed; contextual OCR plus relative geometry selects the correct row. Every visual rule has explicit confidence and search bounds.
 
 | Option considered | Choice | Reason |
 |---|---|---|
@@ -70,7 +70,7 @@ The result contract separates four meanings:
 
 | Result | Meaning | Demonstration |
 |---|---|---|
-| `success` | Checkpoint and outputs verified | Visual-first version `3.0.0` |
+| `success` | Checkpoint and outputs verified | Visual-first versions `3.0.0` and `3.1.0` |
 | `business_outcome` | Legitimate negative answer | `member_not_found` |
 | `failure` | Known application, mechanical, policy, or verification failure | Permission denial in `1.0.2` |
 | `intervention_required` | Session is live but automation may not proceed | Sensitive submit in `2.0.0` |
@@ -83,9 +83,9 @@ The key choice was checkpoint-led correctness rather than action-led optimism: a
 
 The seam is `SurfaceDriver`/`SurfaceSession`: open, observe, resolve, act, evaluate, extract, capture evidence, and close. Normalized observations and actions contain no Playwright handles. `VisionGrounder` operates on PNG bytes and viewport dimensions, so a desktop transport can reuse the same OCR and template logic while supplying its own capture and input mechanisms.
 
-The canonical demo is DOM-hostile by construction: every control and displayed value is painted into one canvas. Harbor and Summit vary palette and horizontal placement. A Harbor-derived edge template still locates the moved Summit icon at a reviewed `0.75` confidence floor. Persistent coordinates were rejected; a model may identify a tight icon box only during discovery, where the adapter immediately converts it to a content-addressed template before recording.
+The canonical demo is DOM-hostile by construction: every control and displayed value is painted into one canvas. The immutable `3.0.0` route proves the original visual flow; `3.1.0` adds a repeated-row workbench with delayed results, a known notice, permission denial, and controlled ambiguity. Harbor and Summit vary palette, font metrics, horizontal placement, and account-row order. The same `3.1.0` artifact succeeds at `1024×640`, `1280×800`, and `1440×900`; a 12-case Chromium matrix also verifies the declared business outcome, recovery, failure, and fail-closed states. Persistent coordinates were rejected; a model may identify a tight icon box only during discovery, where the adapter immediately converts it to a content-addressed template before recording.
 
-One artifact lists both `harbor` and `summit` as supported variants. The adapter normalizes tenant-prefixed routes to one surface contract; a committed run proves the same artifact version and hash on Summit.
+One artifact lists both `harbor` and `summit` as supported variants. The adapter normalizes tenant-prefixed routes to one surface contract; the portability matrix proves the same `3.1.0` artifact version and hash on Summit and across the tested viewport scales. This is a measured reuse proof, not a claim that hundreds of tenant instances have been deployed.
 
 | Multi-tenant option | Choice | Reason |
 |---|---|---|
@@ -117,7 +117,7 @@ Each action crosses three independent controls: current lease ownership, effecti
 
 Risk is independently inferred from action type, target language, and observed target facts, then combined with the declared risk. Irreversible actions are always denied. Sensitive actions require human approval. Origins, normalized routes, and action types must be explicitly allowed.
 
-Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted DOM screenshots mask inputs and value cells; visual-terminal screenshots mask the entire canvas because its sensitive pixels have no element boundary. Atomic writes, SHA-256 metadata, and manifests make incomplete or changed evidence detectable. API errors expose stable codes and safe messages without submitted values or raw provider errors.
+Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted DOM screenshots mask inputs and value cells; both canvas-only visual routes mask the entire canvas because their sensitive pixels have no element boundary. Atomic writes, SHA-256 metadata, and manifests make incomplete or changed evidence detectable. API errors expose stable codes and safe messages without submitted values or raw provider errors.
 
 The trade-off is conservative capability: the system may stop where a broader automation could continue. That is intentional for financial operations. Authentication, operator authorization, TLS, automated evidence expiry, and durable control transactions are required before production deployment and are outside this local submission.
 
@@ -138,4 +138,4 @@ Depth was concentrated on one complete workflow and its exceptional states.
 | Open-ended model replay recovery | Declared finite recovery only | Optional single-step, policy-checked assisted fallback |
 | Automatic tenant drift/overlays | Supported variants, route normalization, recorded fingerprints | Narrow overlay schema and compatibility gate |
 
-The repository provides seven hash-verified evidence bundles: genuine discovery, replay success, member-not-found, bounded recovery, hard failure with masked screenshot, same-session handoff, and second-tenant reuse. `bash scripts/verify.sh` runs formatting, lint, strict typing, a 90% branch gate, evidence integrity, both frontend builds, and real Chromium integration tests.
+The repository provides seven hash-verified evidence bundles: genuine discovery, replay success, member-not-found, bounded recovery, hard failure with masked screenshot, same-session handoff, and second-tenant reuse. The visual workbench adds a reproducible 12-case Chromium matrix without persisting raw canvas frames. `bash scripts/verify.sh` runs formatting, lint, strict typing, a 90% branch gate, evidence integrity, both frontend builds, and real Chromium integration tests.

@@ -6,7 +6,11 @@ from pydantic import ValidationError
 from replayforge.capabilities.models import (
     CapabilityArtifact,
     ExtractAction,
+    ImageAnchorCandidate,
     LocatorCandidate,
+    NormalizedRegion,
+    OcrAnchor,
+    RelativeRegion,
     RetryPolicy,
     ValueSchema,
 )
@@ -194,6 +198,32 @@ def test_schema_forbids_additional_top_level_properties() -> None:
     schema = CapabilityArtifact.model_json_schema()
 
     assert schema["additionalProperties"] is False
+
+
+def test_contextual_image_anchor_requires_both_context_fields() -> None:
+    base = {
+        "strategy": "image_anchor",
+        "asset_key": "asset://sha256/" + "a" * 64,
+        "content_hash": "sha256:" + "a" * 64,
+    }
+    with pytest.raises(ValidationError, match="provided together"):
+        ImageAnchorCandidate.model_validate({**base, "context_anchor": {"value": "Savings"}})
+    with pytest.raises(ValidationError, match="provided together"):
+        ImageAnchorCandidate.model_validate(
+            {**base, "relative_search_region": {"x": 1, "y": 0, "width": 4, "height": 2}}
+        )
+
+
+def test_contextual_image_anchor_cannot_have_two_search_regions() -> None:
+    with pytest.raises(ValidationError, match="top-level search_region"):
+        ImageAnchorCandidate(
+            strategy="image_anchor",
+            asset_key="asset://sha256/" + "a" * 64,
+            content_hash="sha256:" + "a" * 64,
+            search_region=NormalizedRegion(x=0, y=0, width=1, height=1),
+            context_anchor=OcrAnchor(value="Savings"),
+            relative_search_region=RelativeRegion(x=1, y=0, width=4, height=2),
+        )
 
 
 @pytest.mark.parametrize(
