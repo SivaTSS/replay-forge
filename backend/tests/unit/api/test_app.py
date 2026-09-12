@@ -189,7 +189,12 @@ def test_machine_schema_endpoint_returns_versioned_contract() -> None:
     response = client().get("/api/v1/capabilities/schema")
 
     assert response.status_code == 200
-    assert response.json()["properties"]["schema_version"]["enum"] == ["1.0", "1.1", "1.2"]
+    assert response.json()["properties"]["schema_version"]["enum"] == [
+        "1.0",
+        "1.1",
+        "1.2",
+        "1.3",
+    ]
 
 
 def test_artifact_validation_returns_identity_and_hash(

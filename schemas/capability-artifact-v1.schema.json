@@ -13,6 +13,7 @@
                 "identity_matches": "#/$defs/IdentityMatchesCondition",
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
+                "rendered_text": "#/$defs/RenderedTextCondition",
                 "route": "#/$defs/RouteCondition",
                 "text": "#/$defs/TextCondition",
                 "visual_text": "#/$defs/VisualTextCondition"
@@ -25,6 +26,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/RenderedTextCondition"
               },
               {
                 "$ref": "#/$defs/VisualTextCondition"
@@ -79,6 +83,7 @@
                 "identity_matches": "#/$defs/IdentityMatchesCondition",
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
+                "rendered_text": "#/$defs/RenderedTextCondition",
                 "route": "#/$defs/RouteCondition",
                 "text": "#/$defs/TextCondition",
                 "visual_text": "#/$defs/VisualTextCondition"
@@ -91,6 +96,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/RenderedTextCondition"
               },
               {
                 "$ref": "#/$defs/VisualTextCondition"
@@ -162,6 +170,7 @@
               "identity_matches": "#/$defs/IdentityMatchesCondition",
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
+              "rendered_text": "#/$defs/RenderedTextCondition",
               "route": "#/$defs/RouteCondition",
               "text": "#/$defs/TextCondition",
               "visual_text": "#/$defs/VisualTextCondition"
@@ -174,6 +183,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/RenderedTextCondition"
             },
             {
               "$ref": "#/$defs/VisualTextCondition"
@@ -238,6 +250,7 @@
               "identity_matches": "#/$defs/IdentityMatchesCondition",
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
+              "rendered_text": "#/$defs/RenderedTextCondition",
               "route": "#/$defs/RouteCondition",
               "text": "#/$defs/TextCondition",
               "visual_text": "#/$defs/VisualTextCondition"
@@ -250,6 +263,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/RenderedTextCondition"
             },
             {
               "$ref": "#/$defs/VisualTextCondition"
@@ -317,6 +333,7 @@
               "identity_matches": "#/$defs/IdentityMatchesCondition",
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
+              "rendered_text": "#/$defs/RenderedTextCondition",
               "route": "#/$defs/RouteCondition",
               "text": "#/$defs/TextCondition",
               "visual_text": "#/$defs/VisualTextCondition"
@@ -329,6 +346,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/RenderedTextCondition"
             },
             {
               "$ref": "#/$defs/VisualTextCondition"
@@ -482,6 +502,7 @@
               "identity_matches": "#/$defs/IdentityMatchesCondition",
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
+              "rendered_text": "#/$defs/RenderedTextCondition",
               "route": "#/$defs/RouteCondition",
               "text": "#/$defs/TextCondition",
               "visual_text": "#/$defs/VisualTextCondition"
@@ -494,6 +515,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/RenderedTextCondition"
             },
             {
               "$ref": "#/$defs/VisualTextCondition"
@@ -982,7 +1006,11 @@
               "mapping": {
                 "image_anchor": "#/$defs/ImageAnchorCandidate",
                 "ocr_relative": "#/$defs/OcrRelativeCandidate",
-                "ocr_text": "#/$defs/OcrTextCandidate"
+                "ocr_text": "#/$defs/OcrTextCandidate",
+                "rendered_field_value": "#/$defs/RenderedFieldValueCandidate",
+                "rendered_group_image": "#/$defs/RenderedGroupImageCandidate",
+                "rendered_labeled_control": "#/$defs/RenderedLabeledControlCandidate",
+                "rendered_text": "#/$defs/RenderedTextCandidate"
               },
               "propertyName": "strategy"
             },
@@ -995,6 +1023,18 @@
               },
               {
                 "$ref": "#/$defs/ImageAnchorCandidate"
+              },
+              {
+                "$ref": "#/$defs/RenderedTextCandidate"
+              },
+              {
+                "$ref": "#/$defs/RenderedLabeledControlCandidate"
+              },
+              {
+                "$ref": "#/$defs/RenderedFieldValueCandidate"
+              },
+              {
+                "$ref": "#/$defs/RenderedGroupImageCandidate"
               }
             ]
           },
@@ -1312,6 +1352,7 @@
               "identity_matches": "#/$defs/IdentityMatchesCondition",
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
+              "rendered_text": "#/$defs/RenderedTextCondition",
               "route": "#/$defs/RouteCondition",
               "text": "#/$defs/TextCondition",
               "visual_text": "#/$defs/VisualTextCondition"
@@ -1324,6 +1365,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/RenderedTextCondition"
             },
             {
               "$ref": "#/$defs/VisualTextCondition"
@@ -1781,6 +1825,7 @@
               "identity_matches": "#/$defs/IdentityMatchesCondition",
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
+              "rendered_text": "#/$defs/RenderedTextCondition",
               "route": "#/$defs/RouteCondition",
               "text": "#/$defs/TextCondition",
               "visual_text": "#/$defs/VisualTextCondition"
@@ -1793,6 +1838,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/RenderedTextCondition"
             },
             {
               "$ref": "#/$defs/VisualTextCondition"
@@ -1865,6 +1913,159 @@
         "height"
       ],
       "title": "RelativeRegion",
+      "type": "object"
+    },
+    "RenderedFieldValueCandidate": {
+      "additionalProperties": false,
+      "description": "Value associated with a rendered field label.",
+      "properties": {
+        "label": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "label_match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "strategy": {
+          "const": "rendered_field_value",
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "label"
+      ],
+      "title": "RenderedFieldValueCandidate",
+      "type": "object"
+    },
+    "RenderedGroupImageCandidate": {
+      "additionalProperties": false,
+      "description": "Image identity scoped to the semantic group containing a label.",
+      "properties": {
+        "asset_key": {
+          "pattern": "^asset://sha256/[0-9a-f]{64}$",
+          "title": "Asset Key",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "group_label": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Group Label",
+          "type": "string"
+        },
+        "group_label_match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "strategy": {
+          "const": "rendered_group_image",
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "group_label",
+        "asset_key",
+        "content_hash"
+      ],
+      "title": "RenderedGroupImageCandidate",
+      "type": "object"
+    },
+    "RenderedLabeledControlCandidate": {
+      "additionalProperties": false,
+      "description": "Visual control associated with a rendered label.",
+      "properties": {
+        "control_kind": {
+          "const": "text_input",
+          "title": "Control Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "label_match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "strategy": {
+          "const": "rendered_labeled_control",
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "label",
+        "control_kind"
+      ],
+      "title": "RenderedLabeledControlCandidate",
+      "type": "object"
+    },
+    "RenderedTextCandidate": {
+      "additionalProperties": false,
+      "description": "Semantic text target resolved from the current rendered frame.",
+      "properties": {
+        "match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "strategy": {
+          "const": "rendered_text",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "value"
+      ],
+      "title": "RenderedTextCandidate",
+      "type": "object"
+    },
+    "RenderedTextCondition": {
+      "additionalProperties": false,
+      "description": "Semantic text condition resolved from the current rendered frame.",
+      "properties": {
+        "kind": {
+          "const": "rendered_text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "value": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "RenderedTextCondition",
       "type": "object"
     },
     "RetryPolicy": {
@@ -2097,6 +2298,7 @@
                 "identity_matches": "#/$defs/IdentityMatchesCondition",
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
+                "rendered_text": "#/$defs/RenderedTextCondition",
                 "route": "#/$defs/RouteCondition",
                 "text": "#/$defs/TextCondition",
                 "visual_text": "#/$defs/VisualTextCondition"
@@ -2109,6 +2311,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/RenderedTextCondition"
               },
               {
                 "$ref": "#/$defs/VisualTextCondition"
@@ -2147,6 +2352,7 @@
                 "identity_matches": "#/$defs/IdentityMatchesCondition",
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
+                "rendered_text": "#/$defs/RenderedTextCondition",
                 "route": "#/$defs/RouteCondition",
                 "text": "#/$defs/TextCondition",
                 "visual_text": "#/$defs/VisualTextCondition"
@@ -2159,6 +2365,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/RenderedTextCondition"
               },
               {
                 "$ref": "#/$defs/VisualTextCondition"
@@ -2572,6 +2781,7 @@
               "identity_matches": "#/$defs/IdentityMatchesCondition",
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
+              "rendered_text": "#/$defs/RenderedTextCondition",
               "route": "#/$defs/RouteCondition",
               "text": "#/$defs/TextCondition",
               "visual_text": "#/$defs/VisualTextCondition"
@@ -2584,6 +2794,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/RenderedTextCondition"
             },
             {
               "$ref": "#/$defs/VisualTextCondition"
@@ -2670,6 +2883,7 @@
             "identity_matches": "#/$defs/IdentityMatchesCondition",
             "not": "#/$defs/NotCondition",
             "output_valid": "#/$defs/OutputValidCondition",
+            "rendered_text": "#/$defs/RenderedTextCondition",
             "route": "#/$defs/RouteCondition",
             "text": "#/$defs/TextCondition",
             "visual_text": "#/$defs/VisualTextCondition"
@@ -2682,6 +2896,9 @@
           },
           {
             "$ref": "#/$defs/TextCondition"
+          },
+          {
+            "$ref": "#/$defs/RenderedTextCondition"
           },
           {
             "$ref": "#/$defs/VisualTextCondition"
@@ -2724,7 +2941,8 @@
       "enum": [
         "1.0",
         "1.1",
-        "1.2"
+        "1.2",
+        "1.3"
       ],
       "title": "Schema Version",
       "type": "string"

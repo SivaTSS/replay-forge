@@ -277,8 +277,49 @@ class ImageAnchorCandidate(ArtifactModel):
         return self
 
 
+class RenderedTextCandidate(ArtifactModel):
+    """Semantic text target resolved from the current rendered frame."""
+
+    strategy: Literal["rendered_text"]
+    value: str = Field(min_length=1, max_length=200)
+    match: MatchMode = MatchMode.EXACT
+
+
+class RenderedLabeledControlCandidate(ArtifactModel):
+    """Visual control associated with a rendered label."""
+
+    strategy: Literal["rendered_labeled_control"]
+    label: str = Field(min_length=1, max_length=200)
+    label_match: MatchMode = MatchMode.EXACT
+    control_kind: Literal["text_input"]
+
+
+class RenderedFieldValueCandidate(ArtifactModel):
+    """Value associated with a rendered field label."""
+
+    strategy: Literal["rendered_field_value"]
+    label: str = Field(min_length=1, max_length=200)
+    label_match: MatchMode = MatchMode.EXACT
+
+
+class RenderedGroupImageCandidate(ArtifactModel):
+    """Image identity scoped to the semantic group containing a label."""
+
+    strategy: Literal["rendered_group_image"]
+    group_label: str = Field(min_length=1, max_length=200)
+    group_label_match: MatchMode = MatchMode.EXACT
+    asset_key: str = Field(pattern=r"^asset://sha256/[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
 VisualLocatorCandidate = Annotated[
-    OcrTextCandidate | OcrRelativeCandidate | ImageAnchorCandidate,
+    OcrTextCandidate
+    | OcrRelativeCandidate
+    | ImageAnchorCandidate
+    | RenderedTextCandidate
+    | RenderedLabeledControlCandidate
+    | RenderedFieldValueCandidate
+    | RenderedGroupImageCandidate,
     Field(discriminator="strategy"),
 ]
 
@@ -321,6 +362,14 @@ class RouteCondition(ArtifactModel):
 class TextCondition(ArtifactModel):
     kind: Literal["text"]
     value: str = Field(min_length=1)
+    match: MatchMode = MatchMode.EXACT
+
+
+class RenderedTextCondition(ArtifactModel):
+    """Semantic text condition resolved from the current rendered frame."""
+
+    kind: Literal["rendered_text"]
+    value: str = Field(min_length=1, max_length=200)
     match: MatchMode = MatchMode.EXACT
 
 
@@ -367,6 +416,7 @@ class NotCondition(ArtifactModel):
 Condition = Annotated[
     RouteCondition
     | TextCondition
+    | RenderedTextCondition
     | VisualTextCondition
     | ElementCondition
     | OutputValidCondition
@@ -598,8 +648,63 @@ def _condition_outputs(condition: Condition) -> set[str]:
     return set()
 
 
+_GEOMETRY_FREE_CANDIDATE_TYPES = (
+    RenderedTextCandidate,
+    RenderedLabeledControlCandidate,
+    RenderedFieldValueCandidate,
+    RenderedGroupImageCandidate,
+)
+
+
+def _validate_geometry_free_target(target: LocatorBundle) -> None:
+    if target.candidates:
+        raise ValueError("schema 1.3 visual targets cannot contain DOM or coordinate locators")
+    if not target.visual_candidates:
+        raise ValueError("schema 1.3 visual targets require rendered candidates")
+    if not all(
+        isinstance(candidate, _GEOMETRY_FREE_CANDIDATE_TYPES)
+        for candidate in target.visual_candidates
+    ):
+        raise ValueError("schema 1.3 visual targets require geometry-free rendered candidates")
+
+
+def _validate_geometry_free_condition(condition: Condition) -> None:
+    if isinstance(condition, RenderedTextCondition):
+        return
+    if isinstance(condition, VisualTextCondition):
+        raise ValueError("schema 1.3 conditions cannot contain legacy visual geometry or tuning")
+    if isinstance(condition, ElementCondition):
+        raise ValueError("schema 1.3 conditions cannot contain DOM element locators")
+    if isinstance(condition, AllCondition | AnyCondition):
+        for nested in condition.conditions:
+            _validate_geometry_free_condition(nested)
+        return
+    if isinstance(condition, NotCondition):
+        _validate_geometry_free_condition(condition.condition)
+
+
+def _validate_geometry_free_visual_contract(artifact: CapabilityArtifact) -> None:
+    for step in (
+        *artifact.steps,
+        *(step for recovery in artifact.recoveries for step in recovery.steps),
+    ):
+        if step.target is not None:
+            _validate_geometry_free_target(step.target)
+        for condition in (*step.preconditions, *step.postconditions):
+            _validate_geometry_free_condition(condition)
+    for condition in artifact.preconditions:
+        _validate_geometry_free_condition(condition)
+    for recovery in artifact.recoveries:
+        _validate_geometry_free_condition(recovery.trigger)
+    for outcome in artifact.outcomes:
+        _validate_geometry_free_condition(outcome.detect)
+    for failure in artifact.failures:
+        _validate_geometry_free_condition(failure.detect)
+    _validate_geometry_free_condition(artifact.checkpoint.condition)
+
+
 class CapabilityArtifact(ArtifactModel):
-    schema_version: Literal["1.0", "1.1", "1.2"]
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3"]
     capability: CapabilityMetadata
     compatibility: Compatibility
     inputs: ObjectContract
@@ -615,6 +720,8 @@ class CapabilityArtifact(ArtifactModel):
 
     @model_validator(mode="after")
     def validate_semantics(self) -> Self:
+        if self.schema_version == "1.3":
+            _validate_geometry_free_visual_contract(self)
         if self.capability.application_family != self.compatibility.application_family:
             raise ValueError("capability and compatibility application families must match")
         if self.capability.risk is not self.policy.maximum_risk:

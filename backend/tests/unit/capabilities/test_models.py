@@ -11,6 +11,10 @@ from replayforge.capabilities.models import (
     NormalizedRegion,
     OcrAnchor,
     RelativeRegion,
+    RenderedFieldValueCandidate,
+    RenderedGroupImageCandidate,
+    RenderedLabeledControlCandidate,
+    RenderedTextCandidate,
     RetryPolicy,
     ValueSchema,
 )
@@ -224,6 +228,43 @@ def test_contextual_image_anchor_cannot_have_two_search_regions() -> None:
             context_anchor=OcrAnchor(value="Savings"),
             relative_search_region=RelativeRegion(x=1, y=0, width=4, height=2),
         )
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        RenderedTextCandidate(strategy="rendered_text", value="Search"),
+        RenderedLabeledControlCandidate(
+            strategy="rendered_labeled_control",
+            label="Member ID",
+            control_kind="text_input",
+        ),
+        RenderedFieldValueCandidate(strategy="rendered_field_value", label="Currency"),
+        RenderedGroupImageCandidate(
+            strategy="rendered_group_image",
+            group_label="Savings",
+            asset_key="asset://sha256/" + "a" * 64,
+            content_hash="sha256:" + "a" * 64,
+        ),
+    ],
+)
+def test_geometry_free_candidates_accept_semantic_identity(candidate: object) -> None:
+    assert candidate
+
+
+def test_geometry_free_candidate_rejects_layout_fields() -> None:
+    with pytest.raises(ValidationError):
+        RenderedTextCandidate.model_validate(
+            {"strategy": "rendered_text", "value": "Search", "x": 10}
+        )
+
+
+def test_schema_one_point_three_rejects_legacy_target(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["schema_version"] = "1.3"
+    with pytest.raises(ValidationError, match="cannot contain DOM"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
 
 
 @pytest.mark.parametrize(
