@@ -14,17 +14,24 @@ An artifact contains no Python, JavaScript, selector callback, or model transcri
 ## Shape
 
 ```mermaid
-flowchart TD
-    A[Capability identity + semantic version]
-    A --> C[Compatibility: family, tenants, entry point, landmarks]
-    A --> I[Typed inputs]
-    A --> O[Typed outputs]
-    A --> P[Preconditions]
-    A --> S[Ordered steps]
-    A --> E[Outcomes / failures / recoveries]
-    A --> K[Final checkpoint]
-    A --> G[Policy ceiling]
-    A --> V[Provenance + SHA-256]
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart LR
+    A[(Capability identity + semantic version)]
+
+    A --> C0[Interface contract]
+    C0 --> C[Compatibility]
+    C0 --> I[Typed inputs]
+    C0 --> O[Typed outputs]
+    C0 --> P[Preconditions]
+
+    A --> E0[Execution contract]
+    E0 --> S[Ordered steps]
+    E0 --> E[Outcomes, failures and recoveries]
+    E0 --> K[Final checkpoint]
+
+    A --> G0[Governance]
+    G0 --> G[Policy ceiling]
+    G0 --> V[Provenance + SHA-256]
 ```
 
 For `member.lookup_savings_balance`, the external contract is:
@@ -79,27 +86,48 @@ The resolver never asks a model, selects the first ambiguous result, or clicks a
 ## Replay pipeline
 
 ```mermaid
-flowchart TD
-    Q[Invocation] --> IV{Input valid?}
-    IV -- no --> IF[invalid_input]
-    IV -- yes --> TV{Tenant supported?}
-    TV -- no --> TF[incompatible_tenant]
-    TV -- yes --> B[Open isolated browser + automation lease]
-    B --> PC[Verify artifact preconditions]
-    PC --> ST[Resolve next target]
-    ST --> PO{Policy decision}
-    PO -- deny --> PF[policy_blocked]
-    PO -- human --> H[intervention_required]
-    PO -- allow --> AI[Record intent → execute → record result]
-    AI --> EX{Declared state detected?}
-    EX -- business --> BO[business_outcome]
-    EX -- failure --> HF[typed failure]
-    EX -- recovery --> RC[Bounded recovery → declared resume step]
-    EX -- expected effect --> NX{More steps?}
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart TB
+    subgraph Admission[1 · Admission]
+        direction LR
+        Q([Invocation]) --> IV{Input valid?}
+        IV -- no --> IF([invalid_input])
+        IV -- yes --> TV{Tenant supported?}
+        TV -- no --> TF([incompatible_tenant])
+        TV -- yes --> B[Open isolated browser + automation lease]
+    end
+
+    subgraph Step[2 · Execute one declared step]
+        direction LR
+        PC[Verify preconditions] --> ST[Resolve target]
+        ST --> PO{Policy decision}
+        PO -- deny --> PF([policy_blocked])
+        PO -- human --> H([intervention_required])
+        PO -- allow --> AI[Record intent, execute, record result]
+    end
+
+    subgraph State[3 · Classify observed state]
+        direction LR
+        EX{Declared state?}
+        EX -- business --> BO([business_outcome])
+        EX -- failure --> HF([typed failure])
+        EX -- recovery --> RC[Bounded recovery]
+        EX -- expected effect --> NX{More steps?}
+    end
+
+    subgraph Verify[4 · Verify completion]
+        direction LR
+        CK{Checkpoint + outputs valid?}
+        CK -- no --> VF([verification failure])
+        CK -- yes --> OK([success + outputs])
+    end
+
+    B --> PC
+    AI --> EX
+    RC -->|declared resume step| ST
     NX -- yes --> ST
-    NX -- no --> CK{Checkpoint + outputs valid?}
-    CK -- no --> VF[verification failure]
-    CK -- yes --> OK[success + outputs]
+    NX -- no --> CK
+
 ```
 
 The engine validates inputs before opening Chromium, checks ownership before each action, and records action intent separately from result. A click dispatch is not success; postconditions and the final checkpoint must be observable.

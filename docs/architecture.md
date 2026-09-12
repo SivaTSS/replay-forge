@@ -5,11 +5,17 @@
 ReplayForge is a modular monolith with two separate Next.js applications: one is the synthetic target, the other is the operator console.
 
 ```mermaid
-flowchart TB
-    C[Calling agent / curl] -->|JSON over HTTP| API[FastAPI adapter]
-    O[Human operator] -->|Next.js proxy + HTTP| API
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart LR
+    subgraph Clients[Clients]
+        direction TB
+        C([Calling agent or curl])
+        O([Human operator])
+    end
 
-    subgraph Runtime[Python runtime — one process]
+    subgraph Runtime[ReplayForge runtime · one Python process]
+        direction TB
+        API[FastAPI adapter]
         API --> RS[Replay application service]
         API --> DS[Discovery application service]
         API --> IS[Intervention service]
@@ -24,11 +30,23 @@ flowchart TB
         DE --> EJ
     end
 
-    MP --> OA[OpenAI adapter]
-    SP --> PW[Playwright adapter]
-    PW --> DB[Demo bank]
-    EJ --> FS[Local evidence store]
-    OA --> LF[Local Langfuse]
+    subgraph Adapters[Adapters and local dependencies]
+        direction TB
+        OA[OpenAI adapter]
+        PW[Playwright adapter]
+        DB[Demo bank]
+        FS[(Local evidence store)]
+        LF[Local Langfuse]
+    end
+
+    C -->|JSON / HTTP| API
+    O -->|Next.js proxy / HTTP| API
+    MP --> OA
+    SP --> PW
+    PW --> DB
+    EJ --> FS
+    OA --> LF
+
 ```
 
 ### Deployable units
@@ -88,11 +106,19 @@ See [Data models](data-models.md) for the objects passed across these boundaries
 ## Per-run isolation
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 sequenceDiagram
-    participant API
-    participant Service
-    participant Worker as Dedicated worker thread
-    participant Browser as Chromium context
+    autonumber
+    box Entry
+        participant API
+    end
+    box ReplayForge runtime
+        participant Service
+        participant Worker as Worker thread
+    end
+    box Browser boundary
+        participant Browser as Chromium context
+    end
     API->>Service: invoke artifact + inputs
     Service->>Worker: create executor
     Worker->>Browser: open isolated context

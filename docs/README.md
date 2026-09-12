@@ -3,16 +3,22 @@
 ReplayForge turns one model-guided UI run into a typed capability, then replays that capability without model decisions.
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
-    G[Goal + typed input] --> D[Model-guided discovery]
-    D --> A[Reviewed YAML artifact]
+    G([Goal + typed input]) --> D[Guided discovery]
+    D --> A[(Reviewed YAML artifact)]
     A --> R[Deterministic replay]
     R --> X{Result}
-    X --> S[Success + outputs]
-    X --> B[Business outcome]
-    X --> F[Failure + evidence]
-    X --> H[Human intervention]
+    X --> S([Success + outputs])
+    X --> B([Business outcome])
+    X --> F([Failure + evidence])
+    X --> H([Human intervention])
 ```
+
+Every diagram uses the same grammar: rectangles are work, cylinders are stored
+artifacts, diamonds are decisions, rounded nodes are boundaries or outcomes, and
+dashed arrows are exceptional transfers. Node colors come from the Markdown
+renderer; connectors use one neutral, high-contrast gray in light and dark modes.
 
 ## Read by question
 

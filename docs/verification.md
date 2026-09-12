@@ -7,15 +7,21 @@ bash scripts/verify.sh
 ```
 
 ```mermaid
-flowchart LR
-    V[verify.sh] --> D[Locked dependency sync]
-    V --> F[Ruff format + lint]
-    V --> M[Strict mypy]
-    V --> U[Unit tests + 90% branch gate]
-    V --> E[Evidence bundle verification]
-    V --> T[TypeScript checks]
-    V --> B[Two Next.js builds]
-    V --> I[Real Chromium integration tests]
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart TB
+    V([verify.sh]) --> PY[Python]
+    V --> WEB[Web applications]
+    V --> SYS[System evidence]
+
+    PY --> D[Locked dependency sync]
+    PY --> F[Ruff format + lint]
+    PY --> M[Strict mypy]
+    PY --> U[Unit tests + 90% branch gate]
+    WEB --> T[TypeScript checks]
+    WEB --> B[Two Next.js builds]
+    SYS --> E[Evidence bundle verification]
+    SYS --> I[Real Chromium integration tests]
+
 ```
 
 The Playwright adapter is excluded from the Python coverage percentage and tested separately through real Chromium integration tests.

@@ -3,8 +3,9 @@
 The models are split by ownership. Pydantic is used at serialized trust boundaries; frozen dataclasses are used for internal domain values; protocols define replaceable dependencies.
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
-    API[API Pydantic models] --> REQ[DiscoveryRequest / ReplayRequest]
+    API[API boundary models] --> REQ[DiscoveryRequest / ReplayRequest]
     REQ --> CAP[CapabilityArtifact]
     REQ --> SUR[Surface models]
     REQ --> POL[Policy models]
@@ -42,7 +43,9 @@ All runtime identities use a typed prefix plus 32 lowercase hexadecimal characte
 `CapabilityArtifact` is the root of the replay contract.
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 classDiagram
+    direction LR
     class CapabilityArtifact {
       schema_version
       preconditions[]
@@ -63,6 +66,7 @@ classDiagram
     Step *-- RetryPolicy
     LocatorBundle *-- LocatorScope
     LocatorBundle *-- LocatorCandidate
+
 ```
 
 | Model | Important fields | Invariant |
@@ -84,7 +88,9 @@ Action and condition models are discriminated unions. This makes invalid combina
 ## Discovery model
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 classDiagram
+    direction LR
     class ProviderContext {
       goal
       screenshot_png
@@ -113,6 +119,7 @@ classDiagram
     DiscoveryProposal <|-- CompleteProposal
     DiscoveryProposal <|-- EscalateProposal
     ActProposal --> RecordedDiscoveryStep : after policy + execution
+
 ```
 
 The provider proposal is not the recording. Only a policy-approved, successfully executed action becomes a `RecordedDiscoveryStep`. Before/after observations and the adapter-captured locator are retained separately from provider output.
@@ -153,13 +160,15 @@ active element + optional dialog/evidence reference
 ## Policy model
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
     C[ActionContext] --> E[PolicyEvaluator]
     L[EffectivePolicy] --> E
     E --> D[PolicyDecision]
-    D --> A[allow]
-    D --> N[deny]
-    D --> H[require human approval]
+    D --> A([allow])
+    D --> N([deny])
+    D --> H([require human approval])
+
 ```
 
 | Model | Contains |
@@ -174,7 +183,9 @@ The decision is data rather than an exception so the same reason can control exe
 ## Intervention and lease model
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 classDiagram
+    direction LR
     class Intervention {
       id
       run_id
@@ -205,6 +216,7 @@ classDiagram
     }
     Intervention --> ControlLease : same session
     HumanInputCommand --> InterventionFrame : must match
+
 ```
 
 `Intervention.status` is `open → claimed → resuming → resolved`, with termination allowed from open or claimed. Release returns claimed to open. Failed resume validation returns resuming to open. The lease separately tracks the actual control owner: automation, automation-paused, one named human, or none.
@@ -230,7 +242,9 @@ The `status` field is the discriminator. A caller cannot mistake “member not f
 ## Evidence model
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 classDiagram
+    direction LR
     class RunEvent {
       event_id
       run_id
@@ -256,6 +270,7 @@ classDiagram
     }
     RunEvent --> EvidenceRecord : serialized as
     RunEvidenceManifest *-- EvidenceRecord
+
 ```
 
 The journal owns monotonic event sequence and exactly-one finalization. The store owns bytes, hashes, sidecars, atomic replacement, and root confinement. The redactor produces `SanitizedEvidence`; the store does not accept an untyped raw byte payload.

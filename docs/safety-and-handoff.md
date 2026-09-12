@@ -3,16 +3,17 @@
 ## One action, three gates
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
-    A[Proposed action] --> O{Owns current lease?}
-    O -- no --> D[Deny]
+    A([Proposed action]) --> O{Owns current lease?}
+    O -- no --> D([Deny])
     O -- yes --> L{Origin, route, action allowlisted?}
     L -- no --> D
     L -- yes --> R{Effective risk}
     R -- irreversible --> D
     R -- above ceiling --> D
-    R -- sensitive --> H[Pause for human]
-    R -- allowed --> E[Record intent → execute → record result]
+    R -- sensitive --> H([Pause for human])
+    R -- allowed --> E([Record intent, execute, record result])
 ```
 
 ### Policy composition
@@ -45,16 +46,23 @@ The model and artifact therefore cannot lower an independently detected risk.
 Every browser session has one versioned lease with a 30-second TTL.
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 stateDiagram-v2
-    [*] --> Automation: session opens / v1
-    Automation --> Paused: intervention / version + 1
-    Paused --> Human: claim / version + 1
-    Human --> Human: heartbeat / version + 1
-    Human --> Paused: release or begin resume
-    Paused --> Automation: fresh state validates
-    Paused --> Paused: validation fails; intervention reopens
+    state "Automation owns session" as Automation
+    state "Paused for intervention" as Paused
+    state "Human owns session" as Human
+    state "No owner" as None
+
+    [*] --> Automation: open · v1
+    Automation --> Paused: intervene · version + 1
+    Paused --> Human: claim · version + 1
+    Human --> Human: heartbeat · version + 1
+    Human --> Paused: release / resume
+    Paused --> Automation: fresh state valid
+    Paused --> Paused: validation failed
     Paused --> None: terminate
-    Human --> None: terminate by owner
+    Human --> None: owner terminates
+
 ```
 
 Every mutation supplies the expected lease version and owner. The repository changes it with compare-and-swap. A stale operator tab, duplicate request, expired lease, or automation action after pause is rejected.
@@ -62,11 +70,19 @@ Every mutation supplies the expected lease version and owner. The repository cha
 ## Same-session handoff
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 sequenceDiagram
-    participant A as Automation
-    participant R as Runtime
-    participant O as Operator console
-    participant B as Retained browser
+    autonumber
+    box ReplayForge runtime
+        participant A as Automation
+        participant R as Session runtime
+    end
+    box Human control
+        participant O as Operator console
+    end
+    box Browser boundary
+        participant B as Retained browser
+    end
     A->>R: sensitive or stuck condition
     R->>B: capture masked before-frame
     R-->>A: intervention_required

@@ -3,12 +3,13 @@
 ReplayForge discovers a task through a rendered UI, compiles the verified run into a typed YAML capability, and replays that capability without a model in the decision loop.
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
-    G[Goal] --> D[OpenAI-guided discovery]
-    D --> A[Immutable YAML capability]
-    A --> R[Playwright replay]
-    R --> X[Typed result + redacted evidence]
-    R -. sensitive or stuck .-> H[Same-session human handoff]
+    G([Goal]) --> D[Guided discovery]
+    D --> A[(Versioned YAML capability)]
+    A --> R[Deterministic replay]
+    R --> X([Typed result + redacted evidence])
+    R -. sensitive or stuck .-> H([Same-session human handoff])
 ```
 
 The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. It demonstrates iframe targeting, two tenant variants, business outcomes, bounded recovery, a typed hard failure, policy-gated handoff, and hash-verified evidence.

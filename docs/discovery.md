@@ -20,11 +20,19 @@ Replay needs none of these model dependencies.
 ## Observe → decide → act
 
 ```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 sequenceDiagram
-    participant E as Discovery engine
-    participant S as Playwright surface
-    participant M as OpenAI adapter
-    participant P as Policy
+    autonumber
+    box ReplayForge runtime
+        participant E as Discovery engine
+        participant P as Policy evaluator
+    end
+    box Model boundary
+        participant M as OpenAI adapter
+    end
+    box Browser boundary
+        participant S as Playwright surface
+    end
     E->>S: observe + screenshot
     E->>M: goal, field names, UI facts, frame, recent actions
     M-->>E: typed act / complete / escalate proposal
@@ -35,9 +43,9 @@ sequenceDiagram
         E->>S: observe result
         E->>E: record normalized step
     else sensitive or uncertain
-        E-->>E: retain live session for intervention
+        E->>E: retain live session for intervention
     else denied
-        E-->>E: fail closed
+        E->>E: fail closed
     end
 ```
 
