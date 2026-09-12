@@ -1,55 +1,54 @@
-# ReplayForge Design Documentation
+# ReplayForge documentation
 
-Status: implemented end-to-end vertical slice with verified genuine discovery, deterministic replay, exceptional outcomes, tenant reuse, and same-session human handoff evidence.
+ReplayForge turns one model-guided UI run into a typed capability, then replays that capability without model decisions.
 
-ReplayForge turns one successful, model-driven interaction with a real user interface into a typed, reviewable capability that can be replayed without a model in the decision loop. The system is designed for stable but heterogeneous bank and credit-union back-office applications where runtime exceptions, safety, auditability, and human intervention matter more than raw browsing breadth.
+```mermaid
+flowchart LR
+    G[Goal + typed input] --> D[Model-guided discovery]
+    D --> A[Reviewed YAML artifact]
+    A --> R[Deterministic replay]
+    R --> X{Result}
+    X --> S[Success + outputs]
+    X --> B[Business outcome]
+    X --> F[Failure + evidence]
+    X --> H[Human intervention]
+```
 
-## Reading order
+## Read by question
 
-1. [Product specification](01-product-spec.md) — users, workflows, scope, and acceptance criteria.
-2. [Architecture](02-architecture.md) — system boundaries, modules, dependencies, and runtime topology.
-3. [Capability artifact](03-capability-artifact.md) — the durable capability contract and versioning model.
-4. [Discovery and replay](04-discovery-and-replay.md) — model-driven discovery and deterministic execution semantics.
-5. [Safety and data handling](05-safety-and-data.md) — policy enforcement, risk, secrets, PII, and evidence redaction.
-6. [Human handoff](06-human-handoff.md) — escalation, control ownership, same-session operation, and resumption.
-7. [Frontend and UX](07-frontend-ux.md) — the production-quality control-plane experience.
-8. [API contract](08-api-contract.md) — public HTTP, WebSocket, and result interfaces.
-9. [Testing and evidence](09-testing-and-evidence.md) — verification layers and required demonstration artifacts.
-10. [Implementation plan](10-implementation-plan.md) — ordered milestones and completion gates.
-11. [Requirement traceability](11-requirement-traceability.md) — assignment requirement to design/test/evidence mapping.
-12. [Decisions and cuts](12-decisions-and-cuts.md) — explicit trade-offs, rejected alternatives, and boundaries.
-
-## Governing principles
-
-- The model discovers; the artifact defines the reusable capability; replay executes it deterministically.
-- Every model, browser, database, storage, and transport dependency sits behind a typed port.
-- Modularity means explicit ownership and replaceable adapters, not additional deployable services.
-- Replay is correct only when it proves a checkpoint and returns a typed outcome.
-- Business outcomes, recoverable conditions, and hard failures are separate concepts.
-- Safety policy is evaluated before every action, including actions proposed during discovery.
-- Sensitive values are redacted before persistence, not only before display.
-- Human takeover uses the same live session and an explicit single-owner control lease.
-- The product should look and behave like modern operational infrastructure while remaining straightforward to run and explain.
-- No feature is added solely to appear sophisticated. Every dependency and screen must serve an evaluated requirement.
-
-## Locked baseline
-
-| Concern | Decision |
+| Question | Document |
 |---|---|
-| Architecture | Modular monolith with ports and adapters |
-| Runtime | Python 3.12, FastAPI, Pydantic, Playwright |
-| Control plane | Next.js App Router, strict TypeScript, Tailwind, shadcn/ui |
-| Target | Synthetic member-servicing web application |
-| Primary capability | Look up a member's current savings balance |
-| Discovery | Screenshot-led model loop with normalized actions |
-| Replay | Locator-led, model-free execution |
-| Artifact | Versioned YAML validated by Pydantic and JSON Schema |
-| Metadata | PostgreSQL through repository ports |
-| Evidence | Redacted files through an evidence-store port |
-| Live provider | OpenAI reference adapter; provider-neutral core |
-| Handoff | Embedded live Chromium session with an exclusive control lease |
-| Stretch scope | Cross-tenant reuse and agent-facing capability invocation |
+| What runs, and where are the boundaries? | [Architecture](architecture.md) |
+| What are the domain objects and how do they relate? | [Data models](data-models.md) |
+| What exactly is recorded and replayed? | [Capability and replay](capability-and-replay.md) |
+| What does the model see and decide? | [Discovery](discovery.md) |
+| How are unsafe actions, data, and handoff handled? | [Safety and handoff](safety-and-handoff.md) |
+| How do I run it, and what HTTP surface exists? | [Operations](operations.md) |
+| What do the tests and committed evidence prove? | [Verification](verification.md) |
+| How does the implementation map to the assignment? | [Requirements](requirements.md) |
 
-## Definition of done
+The concise assignment write-up is [REPORT.md](../REPORT.md). Setup and the shortest reviewer path are in the root [README.md](../README.md).
 
-ReplayForge is not complete because its UI renders or because a browser script succeeds once. It is complete only when a reviewer can run a genuine discovery, inspect the resulting artifact, invoke a model-free replay, observe typed error handling, take over the same session, resume it, and verify redacted evidence using documented commands from a clean clone.
+## Status vocabulary
+
+Every page uses these labels consistently:
+
+| Label | Meaning |
+|---|---|
+| **Implemented** | Executable code is present in this repository. |
+| **Evidenced** | A committed, hash-verified run bundle demonstrates it. |
+| **Designed** | A typed seam exists or the extension is explained, but the behavior is not built. |
+| **Cut** | Intentionally outside this submission. |
+
+## Scope in one table
+
+| Area | Status | Boundary |
+|---|---|---|
+| Browser discovery | Implemented, evidenced | OpenAI + screenshots + normalized DOM/accessibility facts |
+| Browser replay | Implemented, evidenced | Playwright locators; no model dependency |
+| Same-session handoff | Implemented, evidenced | Polling PNG viewport and bounded HTTP input |
+| Two tenant variants | Implemented, evidenced | One artifact supports `harbor` and `summit` |
+| Persistence | Partly implemented | Evidence on disk; operational metadata in memory |
+| Non-DOM/desktop control | Designed | Surface and locator types exist; no adapter executes them |
+| Full operations UI | Cut | The UI is an intervention console only |
+| Distributed runtime | Cut | One process; one thread-affine worker per browser run |

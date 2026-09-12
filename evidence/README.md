@@ -1,27 +1,53 @@
-# Evidence Index
+# Evidence
 
-Every directory listed as verified below was produced through the public ReplayForge API against the synthetic target using real Chromium. `manifest.json` records the exact command, source-manifest hash, reviewed artifact hash, commit SHA, redaction directives, and hashes for `events.jsonl` and `result.json`.
+These immutable reviewer bundles were exported from runtime evidence produced through the public API against real Chromium. Each `manifest.json` binds the scenario to its command, commit, artifact where applicable, source manifest, redaction directives, and SHA-256 file hashes.
 
-## Verified scenarios
+```text
+runtime action
+  → redaction / screenshot masking
+  → ignored evidence/runtime store
+  → source-manifest verification
+  → immutable reviewer bundle below
+  → independent hash verification
+```
 
-| Scenario | What it proves | Terminal status |
+| Bundle | Terminal result | What it proves |
 |---|---|---|
-| [`discovery-success`](discovery-success/) | Genuine OpenAI-driven observe-decide-act discovery against real Chromium, producing a typed eight-step artifact | `success` |
-| [`replay-success`](replay-success/) | Model-free deterministic replay, five typed outputs, and checkpoint verification on Harbor | `success` |
-| [`replay-member-not-found`](replay-member-not-found/) | Alternate UI state becomes the typed `member_not_found` business outcome | `business_outcome` |
-| [`replay-recovery`](replay-recovery/) | A known interstitial triggers one bounded declared recovery before checkpoint-verified completion | `success` |
-| [`replay-hard-failure`](replay-hard-failure/) | A rendered permission denial becomes a typed failure with a sanitized failure-state screenshot | `failure` |
-| [`human-handoff`](human-handoff/) | Approval pause, exclusive claim, same-session input, fresh-state resume, masked before/after screenshots, and terminal checkpoint | `success` |
-| [`tenant-reuse`](tenant-reuse/) | The same capability ID, version, and content hash replay successfully on Summit | `success` |
+| [`discovery-success`](discovery-success/) | `success` | Genuine OpenAI-guided discovery compiled a typed eight-step artifact |
+| [`replay-success`](replay-success/) | `success` | Version `1.0.0` replayed without model decisions and verified five outputs |
+| [`replay-member-not-found`](replay-member-not-found/) | `business_outcome` | A legitimate “no member” state is not reported as a crash |
+| [`replay-recovery`](replay-recovery/) | `success` | Version `1.0.1` used one declared interstitial recovery |
+| [`replay-hard-failure`](replay-hard-failure/) | `failure` | Version `1.0.2` classified permission denial and captured a masked frame |
+| [`human-handoff`](human-handoff/) | `success` | Version `2.0.0` paused, transferred the live session, validated fresh state, and resumed |
+| [`tenant-reuse`](tenant-reuse/) | `success` | The same `1.0.0` artifact and hash replayed on Summit |
 
-Verify every stable bundle from the repository root:
+## Verify
+
+From the repository root:
 
 ```bash
 UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bundles.py evidence
 ```
 
-## Explicitly not yet evidenced
+The verifier checks manifest schemas, hashes, event ordering, run identity, exactly one terminal result, artifact integrity, source-manifest linkage, and attachment media signatures.
 
-- Playwright trace archives.
+## Bundle shape
 
-This optional omission remains visible by design. Unit or integration fixtures are never represented as genuine run evidence.
+```text
+<scenario>/
+├── manifest.json
+├── events.jsonl
+├── result.json
+├── artifact.yaml       discovery only
+└── screenshots/*.png  failure/handoff when required
+```
+
+Playwright trace archives are not included. Masked screenshots are the selected richer failure and handoff signal. Unit fixtures are never represented as genuine run evidence. See [Verification](../docs/verification.md) for the proof matrix and [Safety and handoff](../docs/safety-and-handoff.md) for the redaction path.
+
+## Rich evidence examples
+
+| Before handoff: values masked | After human action: values masked |
+|---|---|
+| ![Masked member search before handoff](human-handoff/screenshots/001.png) | ![Masked member results after handoff](human-handoff/screenshots/002.png) |
+
+![Rendered permission failure captured before teardown](replay-hard-failure/screenshots/001.png)
