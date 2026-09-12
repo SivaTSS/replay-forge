@@ -38,6 +38,8 @@ The Playwright adapter is excluded from the Python coverage percentage and teste
 | Known hard failure | Failure classification + masked screenshot checks | `evidence/replay-hard-failure` |
 | Same live browser handoff | Lease/runtime tests + captured frames | `evidence/human-handoff` |
 | Shared artifact across tenants | Chromium integration | `evidence/tenant-reuse` |
+| Canvas-only model-free replay | Chromium on Harbor and Summit | Automated `3.0.0` integration test |
+| Visual fail-closed behavior | OCR cardinality, template movement, asset integrity tests | Unit suite |
 | Artifact immutability and integrity | Registry/serialization tests | Artifact hash in every applicable bundle |
 | Redaction before retention | Redactor/journal/store tests | Manifest directives and sanitized payloads |
 

@@ -50,11 +50,12 @@ Every page uses these labels consistently:
 
 | Area | Status | Boundary |
 |---|---|---|
-| Browser discovery | Implemented, evidenced | OpenAI + screenshots + normalized DOM/accessibility facts |
-| Browser replay | Implemented, evidenced | Playwright locators; no model dependency |
+| Browser discovery | Implemented, evidenced | OpenAI + screenshots + local OCR; DOM facts optional |
+| Browser replay | Implemented, evidenced | OCR/templates first, semantic locators second; no model dependency |
 | Same-session handoff | Implemented, evidenced | Polling PNG viewport and bounded HTTP input |
 | Two tenant variants | Implemented, evidenced | One artifact supports `harbor` and `summit` |
 | Persistence | Partly implemented | Evidence on disk; operational metadata in memory |
-| Non-DOM/desktop control | Designed | Surface and locator types exist; no adapter executes them |
+| Canvas/non-DOM browser control | Implemented, tested | Canvas-only demo; OCR, relative regions, image anchors |
+| Native desktop control | Designed | Surface ports exist; no OS adapter executes them |
 | Full operations UI | Cut | The UI is an intervention console only |
 | Distributed runtime | Cut | One process; one thread-affine worker per browser run |

@@ -55,6 +55,45 @@ class Viewport:
 
 
 @dataclass(frozen=True, slots=True)
+class ScreenRegion:
+    x: int
+    y: int
+    width: int
+    height: int
+
+    def __post_init__(self) -> None:
+        if self.x < 0 or self.y < 0 or self.width <= 0 or self.height <= 0:
+            raise ValueError("screen region must have non-negative origin and positive size")
+
+    @property
+    def center(self) -> tuple[int, int]:
+        return self.x + self.width // 2, self.y + self.height // 2
+
+
+@dataclass(frozen=True, slots=True)
+class VisualToken:
+    text: str
+    confidence: float
+    region: ScreenRegion
+
+    def __post_init__(self) -> None:
+        if not self.text or not 0 <= self.confidence <= 1:
+            raise ValueError("visual token requires text and normalized confidence")
+
+
+@dataclass(frozen=True, slots=True)
+class VisualTargetData:
+    region: ScreenRegion
+    method: str
+    confidence: float
+    frame_hash: str
+
+    def __post_init__(self) -> None:
+        if not self.method or not 0 <= self.confidence <= 1:
+            raise ValueError("visual target requires a method and normalized confidence")
+
+
+@dataclass(frozen=True, slots=True)
 class ActionableControl:
     role: str
     name: str
@@ -153,6 +192,7 @@ class NormalizedObservation:
     frame_titles: tuple[str, ...] = ()
     actionable_controls: tuple[ActionableControl, ...] = ()
     extractable_fields: tuple[ExtractableField, ...] = ()
+    visual_tokens: tuple[VisualToken, ...] = ()
     active_element: str | None = None
     dialog_text: str | None = None
     screenshot_evidence_key: str | None = None
@@ -165,6 +205,7 @@ class ResolvedTarget:
     candidate_index: int
     observed_count: int
     registered_risk: Risk | None = None
+    visual: VisualTargetData | None = None
 
     def __post_init__(self) -> None:
         if self.candidate_index < 0 or self.observed_count != 1:

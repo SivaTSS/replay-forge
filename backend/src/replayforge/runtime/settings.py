@@ -20,6 +20,7 @@ class RuntimeSettings(BaseSettings):
     )
 
     artifact_directory: Path = Path("capabilities")
+    capability_asset_directory: Path = Path("capabilities/_assets")
     evidence_directory: Path = Path("evidence/runtime")
     demo_base_url: str = "http://127.0.0.1:3001"
     browser_headless: bool = True

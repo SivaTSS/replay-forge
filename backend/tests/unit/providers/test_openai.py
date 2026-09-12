@@ -216,7 +216,7 @@ def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> Non
     assert "WaitForAction" not in serialized
     assert "NavigateAction" not in serialized
     assert '"css"' not in serialized
-    assert '"coordinates"' not in serialized
+    assert '"coordinates"' in serialized
     assert '"image_anchor"' not in serialized
     assert '"accessibility_path"' not in serialized
     assert {

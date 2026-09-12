@@ -404,7 +404,8 @@ class DiscoveryEngine:
             "target_present": target is not None,
             "frame_depth": len(target.scope.frame_path) if target is not None else 0,
             "locator_strategies": (
-                [candidate.strategy.value for candidate in target.candidates]
+                [candidate.strategy for candidate in target.visual_candidates]
+                + [candidate.strategy.value for candidate in target.candidates]
                 if target is not None
                 else []
             ),

@@ -55,7 +55,8 @@ sequenceDiagram
 - Input **field names**, not the supplied customer values in the text instruction.
 - Required and already captured output fields.
 - Current normalized route and viewport.
-- Headings, labels, frame titles, actionable controls, and extractable field labels.
+- Local OCR tokens with confidence and bounding boxes.
+- Headings, labels, frame titles, actionable controls, and extractable field labels when present.
 - Active-element summary and state fingerprint.
 - A current PNG screenshot.
 - At most 20 recent normalized actions.
@@ -107,18 +108,19 @@ all five outputs validate
 registry publishes next immutable patch
 ```
 
-The compiler is intentionally specific to the savings-balance flow. It requires eight actions in the expected order, stable non-coordinate-only targets, read-only risk, and exactly the five declared extractions. This prevents a plausible model transcript from becoming a broad or unsafe production capability.
+The compiler is intentionally specific to the savings-balance flow. It requires eight actions in the expected order, durable targets, read-only risk, and exactly the five declared extractions. A discovery-only icon region is converted to a content-addressed edge template before recording; any coordinate-only target that survives capture is rejected.
 
 ## Perception decision
 
 | Option | Decision | Why |
 |---|---|---|
 | Full DOM sent to the model | Rejected | Large, noisy, can contain data, and overfits markup |
-| Screenshot only | Rejected for this slice | Visually general, but makes precise typed target capture harder |
-| Accessibility/DOM facts only | Rejected | Misses visual state and weakens the computer-use demonstration |
-| Screenshot + compact normalized facts | **Chosen** | Gives visual context while keeping proposals structured and targetable |
+| Screenshot only with free-form clicks | Rejected | General, but produces opaque and brittle recordings |
+| Accessibility/DOM facts only | Rejected as primary | Unavailable on canvas and remote rendered surfaces |
+| Screenshot + local OCR + typed visual targets | **Chosen primary** | Pixel-grounded while remaining structured and replayable |
+| Compact semantic facts | Chosen fallback | Useful when the target exposes trustworthy roles and labels |
 
-The current discovery mechanism still relies on Playwright to enumerate controls and resolve the model's locator bundle. It is screenshot-led, not DOM-free. A visual-only surface would need an OCR/image-grounding adapter and deterministic confidence rules; that adapter is designed but not implemented.
+On the canvas route, normalized DOM control lists are empty. The model receives the screenshot and OCR tokens, then proposes OCR targets or one transient icon region. `capture_locator` compiles that region into a hashed template before the successful step enters the trace. Replay later uses only OCR/template candidates and never calls the model.
 
 ## Provider decision
 

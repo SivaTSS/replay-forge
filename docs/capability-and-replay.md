@@ -9,7 +9,7 @@ raw model exchange       recorded successful trace       published capability
      discarded        ───────── compiler ─────────►   typed, hashed, reviewable
 ```
 
-An artifact contains no Python, JavaScript, selector callback, or model transcript. The full example is [`1.0.0.yaml`](../capabilities/member.lookup_savings_balance/1.0.0.yaml); its Pydantic definition is [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py).
+An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click coordinate. The primary example is [`3.0.0.yaml`](../capabilities/member.lookup_savings_balance/3.0.0.yaml); its Pydantic definition is [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py).
 
 ## Shape
 
@@ -50,24 +50,23 @@ A target is a description, a scope, ordered candidates, and required state.
 
 ```yaml
 target:
-  description: Search button
-  scope:
-    frame_path:
-      - locator: {strategy: title, value: Member operations}
-  candidates:
-    - {strategy: role_name, role: button, name: Search}
-  state: {visible: true}
+  description: Search button text
+  registered_risk: read_only
+  visual_candidates:
+    - strategy: ocr_text
+      value: Search
+      match: exact
+      minimum_confidence: 0.85
 ```
 
 Resolution is deterministic:
 
 ```text
-for each candidate, in artifact order
-  → resolve frame scope
-  → wait within its bounded share of the timeout
-  → require exactly one match
-  → require declared visibility/enabled state
-  → return the handle
+for each visual candidate, in artifact order
+  → capture a fresh screenshot
+  → enforce search bounds, confidence and exactly one match
+  → return a transient region handle
+otherwise try optional semantic candidates in order
 otherwise → target_absent or target_ambiguous
 ```
 
@@ -77,11 +76,14 @@ The resolver never asks a model, selects the first ambiguous result, or clicks a
 
 | Option | Outcome | Reason |
 |---|---|---|
-| Absolute coordinates | Schema-only extension; not executed | Not stable enough for the implemented replay path |
-| Generated CSS selector | Supported but not used by the main artifact | Often encodes incidental markup |
-| Text alone | Available | Can be ambiguous without role or scope |
-| Role/label + iframe scope | **Chosen first** | Human-readable and robust on the selected target |
-| Relative label/value relationship | **Chosen for extraction** | Stable for definition-list data without generated IDs |
+| Persisted coordinates | Rejected | Not stable across viewport and layout changes |
+| OCR text | **Chosen for named controls** | Human-readable and exact on rendered pixels |
+| OCR-relative region | **Chosen for fields and values** | Recomputes geometry from a fresh text anchor |
+| Edge template | **Chosen for icon-only controls** | Palette-reduced, multi-scale, hash-verified, and uniqueness-gated |
+| Role/label + iframe scope | Optional fallback | Precise when a trustworthy semantic surface exists |
+| Generated CSS selector | Supported but not primary | Often encodes incidental markup |
+
+Coordinates exist only at discovery time for an icon bounding box. Before the action is recorded, the adapter crops an edge representation, stores it under `asset://sha256/<digest>`, and replaces the coordinate candidate with an `image_anchor`. The compiler rejects a coordinate-only recording.
 
 ## Replay pipeline
 
@@ -153,8 +155,9 @@ Retry occurs only when the artifact names the error, attempts remain, and the pr
 | `1.0.1` | Recovery demonstration | Selects a known interstitial; dismisses it once |
 | `1.0.2` | Hard-failure demonstration | Selects permission denial; classifies expected/observed state |
 | `2.0.0` | Handoff demonstration | Marks search submission sensitive; policy pauses before click |
+| `3.0.0` | Visual-first demonstration | Full canvas-only flow using OCR, relative geometry, and one image anchor |
 
-No version means “latest,” currently `2.0.0`. Use `1.0.0` for unattended happy-path replay.
+No version means “latest,” currently `3.0.0`. Use `2.0.0` explicitly for human handoff.
 
 ## Schema and version decisions
 

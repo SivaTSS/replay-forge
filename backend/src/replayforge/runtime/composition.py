@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from replayforge.api.services import ApiServices
+from replayforge.capabilities.assets import LocalCapabilityAssetStore
 from replayforge.capabilities.models import BusinessOutcome
 from replayforge.capabilities.registry import (
     CapabilityRegistry,
@@ -71,6 +72,7 @@ from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
 from replayforge.surfaces.models import HumanInput, SurfaceError, SurfaceFrame
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
+from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
 
 _ALLOWED_ROUTES = frozenset({"/members/search", "/accounts/:account_id/details"})
 _PLATFORM_ACTIONS = frozenset({"type", "click", "select", "extract", "wait_for", "assert"})
@@ -502,6 +504,8 @@ def build_runtime(settings: object) -> LocalRuntime:
         raise TypeError("settings must be RuntimeSettings")
     clock = SystemClock()
     registry = load_registry(settings.artifact_directory)
+    capability_assets = LocalCapabilityAssetStore(settings.capability_asset_directory)
+    text_recognizer = RapidOcrTextRecognizer()
     evidence_store = LocalEvidenceStore(settings.evidence_directory, clock)
     configured_secrets = tuple(
         secret.get_secret_value()
@@ -533,7 +537,11 @@ def build_runtime(settings: object) -> LocalRuntime:
                 "expected": DataClassification.PERSONAL,
                 "observed": DataClassification.PERSONAL,
             }
-        driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
+        driver = PlaywrightSurfaceDriver(
+            settings.demo_base_url,
+            settings.browser_headless,
+            VisionGrounder(text_recognizer, capability_assets),
+        )
         worker = SerialSessionWorker(run_id)
         engine: ReplayEngine
 
@@ -605,7 +613,12 @@ def build_runtime(settings: object) -> LocalRuntime:
                 "expected": DataClassification.PERSONAL,
                 "observed": DataClassification.PERSONAL,
             }
-        driver = PlaywrightSurfaceDriver(settings.demo_base_url, settings.browser_headless)
+        driver = PlaywrightSurfaceDriver(
+            settings.demo_base_url,
+            settings.browser_headless,
+            VisionGrounder(text_recognizer, capability_assets),
+            allow_transient_coordinates=True,
+        )
         worker = SerialSessionWorker(run_id)
         engine = DiscoveryEngine(
             driver,

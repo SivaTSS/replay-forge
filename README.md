@@ -12,17 +12,17 @@ flowchart LR
     R -. sensitive or stuck .-> H([Same-session human handoff])
 ```
 
-The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. It demonstrates iframe targeting, two tenant variants, business outcomes, bounded recovery, a typed hard failure, policy-gated handoff, and hash-verified evidence.
+The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. Its primary `3.0.0` path operates a canvas-only UI through local OCR, relative geometry, and a content-addressed image template. DOM/accessibility targeting remains as an optional web strategy and supports the earlier failure and handoff scenarios.
 
 ## What is real
 
 | Path | Model? | Surface | Result |
 |---|---:|---|---|
-| Discovery | Yes | Real Chromium against the local demo bank | Publishes the next immutable patch artifact |
-| Replay | **No** | Real Chromium against the local demo bank | Success, business outcome, failure, or intervention |
+| Discovery | Yes | Screenshot + local OCR tokens; compact DOM facts when available | Publishes an immutable artifact |
+| Replay | **No** | Pixels first; optional semantic DOM candidates second | Success, business outcome, failure, or intervention |
 | Handoff | No | The same retained Chromium context | Operator input followed by deterministic replay continuation |
 
-Replay is DOM/accessibility-locator-led today. Discovery also receives screenshots, but this repository does not claim canvas, remote-desktop, or native-desktop automation. See [Architecture](docs/architecture.md#surface-reality).
+The canonical flow never queries a DOM control: the target exposes one canvas, and all typing, clicking, extraction, and verification are grounded from rendered pixels. Playwright supplies the browser, screenshot, mouse, and keyboard—not element targeting. See [Architecture](docs/architecture.md#surface-reality).
 
 ## Run the core replay
 
@@ -47,12 +47,12 @@ Start the runtime in another terminal:
 PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run uvicorn replayforge.main:app --host 127.0.0.1 --port 8000
 ```
 
-Invoke the normal artifact:
+Invoke the visual-first artifact:
 
 ```bash
 curl --fail-with-body --silent --show-error \
   -H 'content-type: application/json' \
-  -d '{"tenant":"harbor","version":"1.0.0","inputs":{"member_id":"12345"}}' \
+  -d '{"tenant":"harbor","version":"3.0.0","inputs":{"member_id":"12345"}}' \
   http://127.0.0.1:8000/api/v1/capabilities/member.lookup_savings_balance/invoke
 ```
 
@@ -62,6 +62,8 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 
 | Behavior | How to run | Expected |
 |---|---|---|
+| Canvas-only visual path | `3.0.0`, member `12345` | `success` without DOM targets |
+| Cross-tenant visual path | `3.0.0`, tenant `summit` | Same Harbor-captured template succeeds |
 | Happy path | `1.0.0`, member `12345` | `success` |
 | Business outcome | `1.0.0`, member `99999` | `business_outcome/member_not_found` |
 | Second tenant | `1.0.0`, tenant `summit` | Same artifact succeeds |
@@ -69,7 +71,7 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 | Hard failure | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_hard_failure_run.py` | `failure/permission_denied` + masked frame |
 | Human handoff | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_handoff_run.py` | Claim, same-session input, resume, `success` |
 
-Omitting `version` selects the latest artifact, currently sensitive `2.0.0`, and therefore pauses for human approval.
+Omitting `version` selects the latest artifact, currently visual-first `3.0.0`. Request `2.0.0` explicitly for the approval/handoff demonstration.
 
 ## Operator console
 
@@ -158,4 +160,4 @@ docs/                implementation-accurate design documentation
 
 ## Deliberate cuts
 
-Operational metadata is in memory; only evidence is durable. The control plane is an intervention console, not a complete run or capability UI. There is no PostgreSQL adapter, WebSocket, distributed queue, authentication layer, visual/OCR replay adapter, native desktop adapter, or discovery continuation after human takeover. These boundaries are documented rather than presented as implemented.
+Operational metadata is in memory; only evidence is durable. The control plane is an intervention console, not a complete run or capability UI. There is no PostgreSQL adapter, WebSocket, distributed queue, authentication layer, native desktop adapter, or discovery continuation after human takeover. The visual adapter is implemented for browser-rendered surfaces; Citrix and native desktop transport remain outside this slice.

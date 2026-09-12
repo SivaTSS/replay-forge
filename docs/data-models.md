@@ -142,10 +142,11 @@ route + viewport + fingerprint
 landmarks + frame titles
 actionable controls(role, name, count)
 extractable fields(label, count)
+visual tokens(text, confidence, screen region)
 active element + optional dialog/evidence reference
 ```
 
-`ResolvedTarget` does not expose a Playwright locator. It contains an adapter-owned opaque handle, description, chosen candidate index, observed count, and optional registered risk. `ActionReceipt` reports dispatched/completed/failed timing and a stable error code.
+`ResolvedTarget` does not expose a Playwright locator. It contains an adapter-owned opaque handle, description, chosen candidate index, observed count, reviewed risk, and optional transient visual region. Durable visual candidates contain text/relative rules or a content-addressed template—never the resolved screen coordinates.
 
 `SurfaceError` carries only safe, classified data: code, safe message, recoverability, whether the prior effect is absent, whether intervention is recommended, and sanitized expected/observed facts.
 
@@ -155,7 +156,7 @@ active element + optional dialog/evidence reference
 |---|---|---|
 | Pass Playwright objects into engines | Rejected | Prevents fake, visual, or desktop adapters |
 | Serialize full DOM | Rejected | Large, sensitive, and web-specific |
-| Compact normalized facts + opaque target handle | **Chosen** | Keeps domain logic portable while the adapter owns technology details |
+| Compact normalized facts + OCR tokens + opaque handle | **Chosen** | Keeps domain logic portable while the adapter owns grounding technology |
 
 ## Policy model
 

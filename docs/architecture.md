@@ -136,19 +136,19 @@ Playwright's synchronous objects are thread-affine. `SerialSessionWorker` theref
 
 ## Surface reality
 
-The assignment permits DOM-level automation but asks for a design that does not assume a clean DOM. The implementation makes a deliberate, narrower choice:
+The production path is rendered-surface first. Playwright is still the browser transport, but the canonical capability uses it only for screenshots and input dispatch; it never asks Playwright for a target element.
 
 | Option considered | Decision | Reason |
 |---|---|---|
-| Screenshot coordinates for all replay | Rejected | Easy to discover, brittle across viewport, font, and layout changes |
+| Persisted coordinates | Rejected | Couple replay to one viewport and layout |
 | Raw CSS/XPath recording | Rejected as primary | Couples artifacts to markup shape and generated identifiers |
-| Semantic DOM/accessibility locators | **Chosen for implemented web replay** | Deterministic, inspectable, and stable for the selected target |
-| OCR/image-anchor replay | Designed, not built | Needed for canvas/remote surfaces; adds confidence and calibration problems |
+| Semantic DOM/accessibility locators | Optional fallback | Cheap and precise when a trustworthy semantic surface exists |
+| Local OCR + relative regions + edge templates | **Chosen primary** | Works on rendered pixels, remains deterministic, and survives tenant layout/palette drift |
 | OS accessibility/desktop driver | Designed, not built | Fits the surface port, but the assignment requires only one concrete surface |
 
-Discovery sees a screenshot plus compact normalized facts. Replay currently resolves frame title, role/name, label, text, placeholder, CSS, and relative-text locators. The schema also models accessibility-path, image-anchor, and coordinate candidates, but the Playwright adapter intentionally rejects or skips unsupported visual strategies. This repository does **not** claim canvas, Citrix, remote-desktop, or native-desktop replay.
+`VisionGrounder` runs RapidOCR locally and resolves three durable strategies in artifact order: exact/contained OCR text, OCR-anchor-relative regions, and multi-scale edge-template matches. Each candidate declares confidence, cardinality, search bounds, and—where applicable—a uniqueness margin. Failure to meet those rules returns `target_absent` or `target_ambiguous`; replay never guesses.
 
-The demo target is legacy-style rather than DOM-hostile: iframe nesting, tables, no test IDs, and server navigation are present, but useful labels and roles still exist. That is a deliberate implementation cut, not proof of non-DOM automation.
+The `visual-terminal` demo route exposes the workflow as one canvas with no usable control or value nodes. Harbor and Summit change palette and horizontal placement. One Harbor-derived, content-addressed edge template opens the icon-only account action on both. Coordinates may appear only as a discovery proposal for an icon bounding box; the adapter immediately converts that region into a hashed edge template before recording the step. Published artifacts reject coordinate-only targets.
 
 ## Decisions
 
@@ -167,9 +167,9 @@ The demo target is legacy-style rather than DOM-hostile: iframe nesting, tables,
 Capability semantics stay stable
   inputs → ordered actions → outputs → checkpoint
                          │
-                         ├── web.v1: Playwright locators          [implemented]
-                         ├── visual.v1: OCR/image anchors         [designed]
+                         ├── web.v1: OCR + image anchors          [primary]
+                         ├── web.v1: semantic Playwright locators [optional]
                          └── desktop.v1: accessibility/window IDs [designed]
 ```
 
-A new surface adapter must define observation normalization, supported locator strategies, action receipts, screenshots, and condition evaluation. The current artifact model can identify a different `surface_contract`; it does not yet provide calibration, confidence thresholds, or a working non-web resolver.
+A new transport must define observation normalization, input dispatch, screenshots, and condition evaluation. The visual grounding layer is transport-independent over PNG frames and viewport dimensions; a native desktop adapter can reuse it, but no native transport is claimed here.

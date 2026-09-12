@@ -258,6 +258,8 @@ def test_value_schema_rejects_invalid_shapes(schema: dict[str, Any], message: st
                 "strategy": "coordinates",
                 "x": 1,
                 "y": 2,
+                "width": 10,
+                "height": 10,
                 "viewport_width": 100,
                 "viewport_height": 100,
             },

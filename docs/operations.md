@@ -38,7 +38,7 @@ There are no implemented capability-list, run-read, event-read, evidence-downloa
 ```json
 {
   "tenant": "harbor",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "inputs": {"member_id": "12345"}
 }
 ```
@@ -64,6 +64,7 @@ Pydantic models forbid unknown request fields. Validation errors contain field l
 | Setting | Default | Purpose |
 |---|---|---|
 | `REPLAYFORGE_ARTIFACT_DIRECTORY` | `capabilities` | Startup YAML registry |
+| `REPLAYFORGE_CAPABILITY_ASSET_DIRECTORY` | `capabilities/_assets` | Content-addressed visual templates |
 | `REPLAYFORGE_EVIDENCE_DIRECTORY` | `evidence/runtime` | Mutable local evidence |
 | `REPLAYFORGE_DEMO_BASE_URL` | `http://127.0.0.1:3001` | Credential-free target origin |
 | `REPLAYFORGE_BROWSER_HEADLESS` | `true` | Chromium mode |

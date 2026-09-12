@@ -141,6 +141,8 @@ class LocatorCandidate(ArtifactModel):
     text: str | None = None
     x: int | None = Field(default=None, ge=0)
     y: int | None = Field(default=None, ge=0)
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
     viewport_width: int | None = Field(default=None, gt=0)
     viewport_height: int | None = Field(default=None, gt=0)
     portability: Portability = Portability.HIGH
@@ -165,11 +167,103 @@ class LocatorCandidate(ArtifactModel):
         if self.strategy in value_strategies and not self.value:
             raise ValueError(f"{self.strategy.value} locator requires value")
         if self.strategy is LocatorStrategy.COORDINATES:
-            if None in (self.x, self.y, self.viewport_width, self.viewport_height):
-                raise ValueError("coordinate locator requires point and viewport dimensions")
+            if None in (
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+                self.viewport_width,
+                self.viewport_height,
+            ):
+                raise ValueError("coordinate locator requires a region and viewport dimensions")
+            assert self.x is not None and self.y is not None
+            assert self.width is not None and self.height is not None
+            assert self.viewport_width is not None and self.viewport_height is not None
+            if (
+                self.x + self.width > self.viewport_width
+                or self.y + self.height > self.viewport_height
+            ):
+                raise ValueError("coordinate region must fit inside the recorded viewport")
             if self.portability is not Portability.LOW:
                 raise ValueError("coordinate locator must declare low portability")
         return self
+
+
+class NormalizedRegion(ArtifactModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> Self:
+        if self.x + self.width > 1 or self.y + self.height > 1:
+            raise ValueError("normalized region must fit inside the viewport")
+        return self
+
+
+class RelativeRegion(ArtifactModel):
+    """Region expressed in multiples of the freshly observed anchor height."""
+
+    x: float = Field(ge=-20, le=20)
+    y: float = Field(ge=-20, le=20)
+    width: float = Field(gt=0, le=40)
+    height: float = Field(gt=0, le=40)
+
+
+class OcrTextCandidate(ArtifactModel):
+    strategy: Literal["ocr_text"]
+    value: str = Field(min_length=1, max_length=200)
+    match: MatchMode = MatchMode.EXACT
+    search_region: NormalizedRegion | None = None
+    minimum_confidence: float = Field(default=0.85, ge=0, le=1)
+    expected_count: Literal[1] = 1
+    portability: Portability = Portability.HIGH
+
+
+class OcrRelativeCandidate(ArtifactModel):
+    strategy: Literal["ocr_relative"]
+    anchor: str = Field(min_length=1, max_length=200)
+    anchor_match: MatchMode = MatchMode.EXACT
+    target_text: str | None = Field(default=None, min_length=1, max_length=200)
+    relation: Literal["right_of", "below", "same_row"]
+    relative_region: RelativeRegion | None = None
+    search_region: NormalizedRegion | None = None
+    minimum_confidence: float = Field(default=0.85, ge=0, le=1)
+    expected_count: Literal[1] = 1
+    portability: Portability = Portability.HIGH
+
+    @model_validator(mode="after")
+    def validate_target(self) -> Self:
+        if (self.target_text is None) == (self.relative_region is None):
+            raise ValueError("ocr_relative requires exactly one target_text or relative_region")
+        return self
+
+
+class ImageAnchorCandidate(ArtifactModel):
+    strategy: Literal["image_anchor"]
+    asset_key: str = Field(pattern=r"^asset://sha256/[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    search_region: NormalizedRegion | None = None
+    minimum_score: float = Field(default=0.90, ge=0, le=1)
+    uniqueness_margin: float = Field(default=0.08, ge=0, le=1)
+    minimum_scale: float = Field(default=0.80, gt=0, le=4)
+    maximum_scale: float = Field(default=1.25, gt=0, le=4)
+    scale_step: float = Field(default=0.05, gt=0, le=0.5)
+    expected_count: Literal[1] = 1
+    portability: Portability = Portability.MEDIUM
+
+    @model_validator(mode="after")
+    def validate_scale_range(self) -> Self:
+        if self.minimum_scale > self.maximum_scale:
+            raise ValueError("minimum_scale cannot exceed maximum_scale")
+        return self
+
+
+VisualLocatorCandidate = Annotated[
+    OcrTextCandidate | OcrRelativeCandidate | ImageAnchorCandidate,
+    Field(discriminator="strategy"),
+]
 
 
 class FrameLocator(ArtifactModel):
@@ -188,10 +282,18 @@ class TargetState(ArtifactModel):
 
 class LocatorBundle(ArtifactModel):
     description: str = Field(min_length=1)
+    registered_risk: Risk | None = None
     scope: LocatorScope = Field(default_factory=LocatorScope)
-    candidates: tuple[LocatorCandidate, ...] = Field(min_length=1)
+    visual_candidates: tuple[VisualLocatorCandidate, ...] = ()
+    candidates: tuple[LocatorCandidate, ...] = ()
     state: TargetState = Field(default_factory=TargetState)
     tenant_overrides_allowed: bool = False
+
+    @model_validator(mode="after")
+    def validate_candidates(self) -> Self:
+        if not self.visual_candidates and not self.candidates:
+            raise ValueError("a locator bundle requires at least one candidate")
+        return self
 
 
 class RouteCondition(ArtifactModel):
@@ -203,6 +305,14 @@ class TextCondition(ArtifactModel):
     kind: Literal["text"]
     value: str = Field(min_length=1)
     match: MatchMode = MatchMode.EXACT
+
+
+class VisualTextCondition(ArtifactModel):
+    kind: Literal["visual_text"]
+    value: str = Field(min_length=1)
+    match: MatchMode = MatchMode.EXACT
+    search_region: NormalizedRegion | None = None
+    minimum_confidence: float = Field(default=0.85, ge=0, le=1)
 
 
 class ElementCondition(ArtifactModel):
@@ -240,6 +350,7 @@ class NotCondition(ArtifactModel):
 Condition = Annotated[
     RouteCondition
     | TextCondition
+    | VisualTextCondition
     | ElementCondition
     | OutputValidCondition
     | IdentityMatchesCondition
@@ -406,7 +517,7 @@ class Checkpoint(ArtifactModel):
 
 
 class Landmark(ArtifactModel):
-    kind: Literal["heading", "field", "text"]
+    kind: Literal["heading", "field", "text", "visual_text"]
     value: str
 
 
@@ -471,7 +582,7 @@ def _condition_outputs(condition: Condition) -> set[str]:
 
 
 class CapabilityArtifact(ArtifactModel):
-    schema_version: Literal["1.0"]
+    schema_version: Literal["1.0", "1.1"]
     capability: CapabilityMetadata
     compatibility: Compatibility
     inputs: ObjectContract

@@ -9,6 +9,7 @@ from replayforge.capabilities.models import (
     ExtractAction,
     InputValue,
     LocatorBundle,
+    OcrTextCandidate,
     TypeAction,
 )
 from replayforge.capabilities.serialization import artifact_content_hash
@@ -118,6 +119,32 @@ def test_compiler_rejects_partial_trace(valid_artifact_data: dict[str, Any]) -> 
         compile_trace(trace[:3])
 
 
+def test_compiler_emits_visual_schema_and_conditions(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    trace = tuple(
+        recording(
+            item.action,
+            LocatorBundle(
+                description=item.target.description if item.target else "Visual target",
+                registered_risk=Risk.READ_ONLY,
+                visual_candidates=(OcrTextCandidate(strategy="ocr_text", value=f"Target {index}"),),
+            ),
+            index,
+        )
+        for index, item in enumerate(complete_trace(valid_artifact_data))
+    )
+
+    artifact = compile_trace(trace)
+
+    assert artifact.schema_version == "1.1"
+    assert artifact.capability.version == "3.0.0"
+    assert artifact.compatibility.fingerprint.required_landmarks[0].kind == "visual_text"
+    assert artifact.steps[1].postconditions[0].kind == "visual_text"
+    assert artifact.steps[2].postconditions[0].kind == "visual_text"
+    assert artifact.provenance.artifact_content_hash == artifact_content_hash(artifact)
+
+
 def test_compiler_rejects_literal_member_identifier(
     valid_artifact_data: dict[str, Any],
 ) -> None:
@@ -160,6 +187,8 @@ def test_compiler_rejects_coordinate_only_target(
                     "strategy": "coordinates",
                     "x": 10,
                     "y": 20,
+                    "width": 30,
+                    "height": 40,
                     "viewport_width": 1280,
                     "viewport_height": 800,
                     "portability": "low",

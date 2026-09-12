@@ -34,6 +34,7 @@ from replayforge.capabilities.models import (
     TextCondition,
     TypeAction,
     ValueSchema,
+    VisualTextCondition,
 )
 from replayforge.capabilities.serialization import artifact_content_hash
 from replayforge.discovery.models import RecordedDiscoveryStep
@@ -84,12 +85,13 @@ class SavingsBalanceCompiler:
         evidence_manifest: str,
     ) -> CapabilityArtifact:
         self._validate_trace(steps)
-        compiled_steps = self._compile_steps(steps)
+        visual_mode = any(step.target and step.target.visual_candidates for step in steps)
+        compiled_steps = self._compile_steps(steps, visual_mode=visual_mode)
         artifact = CapabilityArtifact(
-            schema_version="1.0",
+            schema_version=("1.1" if visual_mode else "1.0"),
             capability=CapabilityMetadata(
                 id="member.lookup_savings_balance",
-                version="1.0.0",
+                version="3.0.0" if visual_mode else "1.0.0",
                 name="Lookup savings balance",
                 description=goal.strip(),
                 application_family=application_family,
@@ -104,7 +106,12 @@ class SavingsBalanceCompiler:
                 surface_contract="web.v1",
                 entry_point=entry_point,
                 fingerprint=SurfaceFingerprint(
-                    required_landmarks=(Landmark(kind="heading", value="Member Search"),),
+                    required_landmarks=(
+                        Landmark(
+                            kind="visual_text" if visual_mode else "heading",
+                            value="Member Search",
+                        ),
+                    ),
                     forbidden_landmarks=(Landmark(kind="text", value="System maintenance"),),
                 ),
             ),
@@ -112,8 +119,8 @@ class SavingsBalanceCompiler:
             outputs=self._outputs(),
             preconditions=(RouteCondition(kind="route", pattern="/members/search"),),
             steps=compiled_steps,
-            outcomes=(self._member_not_found_outcome(),),
-            checkpoint=self._checkpoint(),
+            outcomes=(self._member_not_found_outcome(visual_mode=visual_mode),),
+            checkpoint=self._checkpoint(visual_mode=visual_mode),
             policy=CapabilityPolicy(
                 allowed_action_types=frozenset({"type", "click", "extract"}),
                 allowed_entry_points=frozenset({entry_point}),
@@ -165,14 +172,16 @@ class SavingsBalanceCompiler:
         for step in steps:
             if step.target is None:
                 raise CompilationError("every recorded action requires a stable target")
-            if all(
+            if not step.target.visual_candidates and all(
                 candidate.strategy is LocatorStrategy.COORDINATES
                 for candidate in step.target.candidates
             ):
                 raise CompilationError("coordinate-only targets cannot be published")
 
     @staticmethod
-    def _compile_steps(recordings: tuple[RecordedDiscoveryStep, ...]) -> tuple[Step, ...]:
+    def _compile_steps(
+        recordings: tuple[RecordedDiscoveryStep, ...], *, visual_mode: bool
+    ) -> tuple[Step, ...]:
         compiled: list[Step] = []
         for index, recording in enumerate(recordings):
             action = recording.action
@@ -185,12 +194,26 @@ class SavingsBalanceCompiler:
             elif isinstance(action, ClickAction) and index == 1:
                 step_id = "search.submit"
                 postconditions = (
-                    TextCondition(kind="text", value="Member Results", match=MatchMode.EXACT),
+                    VisualTextCondition(
+                        kind="visual_text", value="Member Results", match=MatchMode.EXACT
+                    )
+                    if visual_mode
+                    else TextCondition(kind="text", value="Member Results", match=MatchMode.EXACT),
                 )
                 outcome_refs = ("member_not_found",)
             elif isinstance(action, ClickAction) and index == 2:
                 step_id = "account.open_savings"
-                postconditions = (RouteCondition(kind="route", pattern="/accounts/*/details"),)
+                postconditions = (
+                    (
+                        VisualTextCondition(
+                            kind="visual_text",
+                            value="Savings Account Details",
+                            match=MatchMode.EXACT,
+                        ),
+                    )
+                    if visual_mode
+                    else (RouteCondition(kind="route", pattern="/accounts/*/details"),)
+                )
                 outcome_refs = ()
             elif isinstance(action, ExtractAction):
                 step_id = f"account.extract_{action.output}"
@@ -279,14 +302,18 @@ class SavingsBalanceCompiler:
         return ObjectContract(required=_REQUIRED_OUTPUTS, properties=schemas)
 
     @staticmethod
-    def _member_not_found_outcome() -> BusinessOutcome:
+    def _member_not_found_outcome(*, visual_mode: bool = False) -> BusinessOutcome:
         return BusinessOutcome(
             code="member_not_found",
             description="The search completed and no matching member exists.",
             detect=AllCondition(
                 kind="all",
                 conditions=(
-                    TextCondition(kind="text", value="No member found", match=MatchMode.EXACT),
+                    VisualTextCondition(
+                        kind="visual_text", value="No member found", match=MatchMode.EXACT
+                    )
+                    if visual_mode
+                    else TextCondition(kind="text", value="No member found", match=MatchMode.EXACT),
                     RouteCondition(kind="route", pattern="/members/search"),
                 ),
             ),
@@ -297,7 +324,7 @@ class SavingsBalanceCompiler:
         )
 
     @staticmethod
-    def _checkpoint() -> Checkpoint:
+    def _checkpoint(*, visual_mode: bool = False) -> Checkpoint:
         output_checks = tuple(
             OutputValidCondition(kind="output_valid", output=name) for name in _REQUIRED_OUTPUTS
         )
@@ -306,8 +333,14 @@ class SavingsBalanceCompiler:
             condition=AllCondition(
                 kind="all",
                 conditions=(
-                    RouteCondition(kind="route", pattern="/accounts/*/details"),
-                    TextCondition(kind="text", value="Savings", match=MatchMode.EXACT),
+                    VisualTextCondition(
+                        kind="visual_text", value="Savings Account Details", match=MatchMode.EXACT
+                    )
+                    if visual_mode
+                    else RouteCondition(kind="route", pattern="/accounts/*/details"),
+                    VisualTextCondition(kind="visual_text", value="Savings", match=MatchMode.EXACT)
+                    if visual_mode
+                    else TextCondition(kind="text", value="Savings", match=MatchMode.EXACT),
                     *output_checks,
                     IdentityMatchesCondition(
                         kind="identity_matches",

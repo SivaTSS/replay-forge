@@ -6,10 +6,10 @@ This matrix distinguishes implementation from design. It does not credit planned
 |---|---|---|---|
 | Goal + target input | Implemented | `DiscoveryInvocation` accepts goal, family, tenant, entry point, inputs, limits | Target is registered, not an arbitrary URL |
 | Live LLM loop | Evidenced | `DiscoveryEngine` + `OpenAIModelProvider` | `evidence/discovery-success` |
-| Real UI actions | Evidenced | Chromium clicks, types, navigates, and extracts through iframe | Local synthetic target |
-| Bias beyond clean DOM | Partial by design | Screenshot + normalized facts; surface port | Replay still uses DOM/accessibility locators |
-| Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Four committed immutable versions |
-| Robust control identity | Implemented | Ordered scoped locators; exactly-one/state checks | No visual resolver implemented |
+| Real UI actions | Evidenced | Chromium mouse/keyboard on iframe and canvas surfaces | Local synthetic target |
+| Bias beyond clean DOM | Implemented, tested | Local OCR, relative regions, image templates | Canonical flow has no DOM targets |
+| Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Five committed immutable versions |
+| Robust control identity | Implemented | Ordered OCR/template/semantic candidates; cardinality and confidence gates | Fails closed on absent or ambiguous matches |
 | Typed inputs/outputs | Implemented | Closed object contracts and runtime validation | Five outputs on success |
 | Success checkpoint | Evidenced | Route, visible text, output validity, input/output identity | `replay-success` |
 | Model-free replay | Evidenced | `ReplayEngine` has no provider import | Structural test + bundle |
@@ -25,7 +25,8 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Explicit ownership | Evidenced | TTL lease, owner, version, CAS | Conflict/race tests |
 | Safe resume | Evidenced for replay | Fresh location, postcondition, and changed-fingerprint checks | Discovery continuation is cut |
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
-| Desktop/visual extension | Designed | Surface contract and locator discriminators | No executable adapter |
+| Canvas visual control | Implemented, tested | Canvas-only route and executable vision grounder | Browser transport only |
+| Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
 | Multi-tenant reuse | Evidenced | One artifact supports Harbor and Summit | `tenant-reuse` |
 | Per-tenant drift/overlays | Designed only | Compatibility landmarks and surface fingerprint fields | No overlay repository or automatic drift gate |
 | Human operator surface | Implemented | Next.js intervention console | No run list, auth, or WebSocket |
@@ -50,16 +51,16 @@ goal
 | Assignment ambiguity | Alternatives | Interpretation used |
 |---|---|---|
 | “Target” | Arbitrary caller URL or registered entry point | Registered symbolic target prevents SSRF and policy bypass |
-| “Stable targeting” | Coordinates, fuzzy vision, DOM/accessibility | Ordered semantic locators for the concrete web surface |
-| “No clean DOM” | Mandatory DOM-free implementation or design bias | The brief explicitly permits DOM; non-DOM support is a designed extension |
+| “Stable targeting” | Coordinates, fuzzy vision, DOM/accessibility | OCR-relative geometry and unique edge templates first; semantic locators optional |
+| “No clean DOM” | Design bias or executable proof | Canvas-only canonical flow proves the full contract from rendered pixels |
 | “Take control” | New browser, headed local window, remote input | Bounded input into the retained browser context |
 | “Replay failure” | HTTP error or typed domain result | HTTP success with discriminated automation result |
 | “Scale” | Build queues/database or preserve seams | Ports and immutable IDs now; distributed infrastructure cut |
 
 ## Important non-claims
 
-- The demo is legacy-style, not a truly DOM-less surface.
-- Image-anchor and accessibility-path locator values validate in the schema but are not executed by the Playwright adapter.
+- The canonical demo surface is one canvas; Playwright still provides browser transport and input dispatch.
+- OCR and image anchors execute today; accessibility-path and native desktop adapters do not.
 - Compatibility fingerprints are recorded; startup/runtime drift enforcement is not implemented.
 - Operational metadata is not durable across process restart.
 - The control plane is not a complete product UI.

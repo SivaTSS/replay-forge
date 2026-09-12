@@ -11,7 +11,13 @@ from typing import Any, Literal, Protocol, cast
 from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from replayforge.capabilities.models import InputValue, LiteralValue, ValueSchema
+from replayforge.capabilities.models import (
+    InputValue,
+    LiteralValue,
+    MatchMode,
+    RelativeRegion,
+    ValueSchema,
+)
 from replayforge.discovery.models import (
     CompleteProposal,
     DiscoveryProposal,
@@ -31,8 +37,11 @@ from replayforge.runtime.model_policy import ModelPolicy
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
 Return only the provided structured proposal. Use symbolic input paths, never literal customer
-values. Prefer semantic locators (role/name, label, relative text), never coordinate-only
-targets. Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
+values. When visual_tokens is non-empty, use OCR-based visual candidates before semantic
+locators. For an icon-only click target that OCR cannot name, you may provide one coordinates
+candidate covering its tight bounding box; discovery converts that transient region into a
+content-addressed image template before recording it. Never use coordinates for type or extract.
+Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
 Declare risk conservatively. Extract every required output using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
 When frame_titles is non-empty, controls represented by the inner application observation must
@@ -100,10 +109,41 @@ class ProviderFollowingValueCandidate(ProviderModel):
     expected_count: Literal[1] = 1
 
 
+class ProviderOcrTextCandidate(ProviderModel):
+    strategy: Literal["ocr_text"]
+    value: str = Field(min_length=1, max_length=200)
+    match: MatchMode = MatchMode.EXACT
+    minimum_confidence: float = Field(default=0.85, ge=0, le=1)
+    expected_count: Literal[1] = 1
+
+
+class ProviderOcrRelativeCandidate(ProviderModel):
+    strategy: Literal["ocr_relative"]
+    anchor: str = Field(min_length=1, max_length=200)
+    anchor_match: MatchMode = MatchMode.EXACT
+    target_text: str | None = Field(default=None, min_length=1, max_length=200)
+    relation: Literal["right_of", "below", "same_row"]
+    relative_region: RelativeRegion | None = None
+    minimum_confidence: float = Field(default=0.85, ge=0, le=1)
+    expected_count: Literal[1] = 1
+
+
 class ProviderFrameTitleCandidate(ProviderModel):
     strategy: Literal["title"]
     value: str = Field(min_length=1, max_length=200)
     match: Literal["exact"] = "exact"
+    expected_count: Literal[1] = 1
+
+
+class ProviderCoordinateCandidate(ProviderModel):
+    strategy: Literal["coordinates"]
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    viewport_width: int = Field(gt=0)
+    viewport_height: int = Field(gt=0)
+    portability: Literal["low"] = "low"
     expected_count: Literal[1] = 1
 
 
@@ -118,26 +158,32 @@ class ProviderLocatorScope(ProviderModel):
 
 class ProviderLocatorBundleBase(ProviderModel):
     description: str = Field(min_length=1, max_length=200)
+    registered_risk: Literal["read_only"] = "read_only"
     scope: ProviderLocatorScope = Field(default_factory=ProviderLocatorScope)
 
 
 class ProviderClickLocatorBundle(ProviderLocatorBundleBase):
-    candidates: tuple[ProviderRoleNameCandidate, ...] = Field(min_length=1, max_length=5)
+    visual_candidates: tuple[ProviderOcrTextCandidate | ProviderOcrRelativeCandidate, ...] = ()
+    candidates: tuple[ProviderRoleNameCandidate | ProviderCoordinateCandidate, ...] = Field(
+        default=(), max_length=5
+    )
 
 
 class ProviderTypeLocatorBundle(ProviderLocatorBundleBase):
+    visual_candidates: tuple[ProviderOcrRelativeCandidate, ...] = ()
     candidates: tuple[ProviderRoleNameCandidate | ProviderInputCandidate, ...] = Field(
-        min_length=1, max_length=5
+        default=(), max_length=5
     )
 
 
 class ProviderExtractLocatorBundle(ProviderLocatorBundleBase):
+    visual_candidates: tuple[ProviderOcrRelativeCandidate, ...] = ()
     candidates: tuple[
         ProviderRoleNameCandidate
         | ProviderDisplayedTextCandidate
         | ProviderFollowingValueCandidate,
         ...,
-    ] = Field(min_length=1, max_length=5)
+    ] = Field(default=(), max_length=5)
 
 
 class ProviderActProposalBase(ProviderModel):
@@ -284,6 +330,19 @@ class OpenAIModelProvider:
                 "extractable_fields": [
                     {"label": field.label, "count": field.count}
                     for field in context.observation.extractable_fields
+                ],
+                "visual_tokens": [
+                    {
+                        "text": token.text,
+                        "confidence": round(token.confidence, 4),
+                        "box": {
+                            "x": token.region.x,
+                            "y": token.region.y,
+                            "width": token.region.width,
+                            "height": token.region.height,
+                        },
+                    }
+                    for token in context.observation.visual_tokens
                 ],
                 "active_element": context.observation.active_element,
                 "dialog_text": context.observation.dialog_text,

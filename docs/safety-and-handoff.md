@@ -103,7 +103,7 @@ sequenceDiagram
     end
 ```
 
-Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence.
+Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence. Before persistence, DOM-backed frames mask controls and customer values; the canvas-only surface masks the entire canvas because its sensitive pixels have no element boundary.
 
 Discovery can pause and expose the same session, but deterministic continuation after manual work is currently implemented only for replay. Discovery resume reopens safely because no continuation is available.
 

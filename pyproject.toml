@@ -13,11 +13,14 @@ authors = [{ name = "ReplayForge contributors" }]
 dependencies = [
   "fastapi==0.141.1",
   "langfuse==4.15.2",
+  "numpy==2.5.3",
+  "onnxruntime==1.30.0",
   "openai==3.11.0",
   "playwright==1.62.0",
   "pydantic==2.13.4",
   "pydantic-settings==2.15.0",
   "PyYAML==6.0.1",
+  "rapidocr==3.9.2",
   "uvicorn==0.52.4",
 ]
 

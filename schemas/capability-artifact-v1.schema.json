@@ -14,7 +14,8 @@
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
                 "route": "#/$defs/RouteCondition",
-                "text": "#/$defs/TextCondition"
+                "text": "#/$defs/TextCondition",
+                "visual_text": "#/$defs/VisualTextCondition"
               },
               "propertyName": "kind"
             },
@@ -24,6 +25,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/VisualTextCondition"
               },
               {
                 "$ref": "#/$defs/ElementCondition"
@@ -76,7 +80,8 @@
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
                 "route": "#/$defs/RouteCondition",
-                "text": "#/$defs/TextCondition"
+                "text": "#/$defs/TextCondition",
+                "visual_text": "#/$defs/VisualTextCondition"
               },
               "propertyName": "kind"
             },
@@ -86,6 +91,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/VisualTextCondition"
               },
               {
                 "$ref": "#/$defs/ElementCondition"
@@ -155,7 +163,8 @@
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
               "route": "#/$defs/RouteCondition",
-              "text": "#/$defs/TextCondition"
+              "text": "#/$defs/TextCondition",
+              "visual_text": "#/$defs/VisualTextCondition"
             },
             "propertyName": "kind"
           },
@@ -165,6 +174,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/VisualTextCondition"
             },
             {
               "$ref": "#/$defs/ElementCondition"
@@ -227,7 +239,8 @@
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
               "route": "#/$defs/RouteCondition",
-              "text": "#/$defs/TextCondition"
+              "text": "#/$defs/TextCondition",
+              "visual_text": "#/$defs/VisualTextCondition"
             },
             "propertyName": "kind"
           },
@@ -237,6 +250,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/VisualTextCondition"
             },
             {
               "$ref": "#/$defs/ElementCondition"
@@ -302,7 +318,8 @@
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
               "route": "#/$defs/RouteCondition",
-              "text": "#/$defs/TextCondition"
+              "text": "#/$defs/TextCondition",
+              "visual_text": "#/$defs/VisualTextCondition"
             },
             "propertyName": "kind"
           },
@@ -312,6 +329,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/VisualTextCondition"
             },
             {
               "$ref": "#/$defs/ElementCondition"
@@ -463,7 +483,8 @@
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
               "route": "#/$defs/RouteCondition",
-              "text": "#/$defs/TextCondition"
+              "text": "#/$defs/TextCondition",
+              "visual_text": "#/$defs/VisualTextCondition"
             },
             "propertyName": "kind"
           },
@@ -473,6 +494,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/VisualTextCondition"
             },
             {
               "$ref": "#/$defs/ElementCondition"
@@ -722,6 +746,89 @@
       "title": "IdentityMatchesCondition",
       "type": "object"
     },
+    "ImageAnchorCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_key": {
+          "pattern": "^asset://sha256/[0-9a-f]{64}$",
+          "title": "Asset Key",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "expected_count": {
+          "const": 1,
+          "default": 1,
+          "title": "Expected Count",
+          "type": "integer"
+        },
+        "maximum_scale": {
+          "default": 1.25,
+          "exclusiveMinimum": 0,
+          "maximum": 4,
+          "title": "Maximum Scale",
+          "type": "number"
+        },
+        "minimum_scale": {
+          "default": 0.8,
+          "exclusiveMinimum": 0,
+          "maximum": 4,
+          "title": "Minimum Scale",
+          "type": "number"
+        },
+        "minimum_score": {
+          "default": 0.9,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Minimum Score",
+          "type": "number"
+        },
+        "portability": {
+          "$ref": "#/$defs/Portability",
+          "default": "medium"
+        },
+        "scale_step": {
+          "default": 0.05,
+          "exclusiveMinimum": 0,
+          "maximum": 0.5,
+          "title": "Scale Step",
+          "type": "number"
+        },
+        "search_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NormalizedRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "strategy": {
+          "const": "image_anchor",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "uniqueness_margin": {
+          "default": 0.08,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Uniqueness Margin",
+          "type": "number"
+        }
+      },
+      "required": [
+        "strategy",
+        "asset_key",
+        "content_hash"
+      ],
+      "title": "ImageAnchorCandidate",
+      "type": "object"
+    },
     "InputValue": {
       "additionalProperties": false,
       "properties": {
@@ -760,7 +867,8 @@
           "enum": [
             "heading",
             "field",
-            "text"
+            "text",
+            "visual_text"
           ],
           "title": "Kind",
           "type": "string"
@@ -811,10 +919,10 @@
       "additionalProperties": false,
       "properties": {
         "candidates": {
+          "default": [],
           "items": {
             "$ref": "#/$defs/LocatorCandidate"
           },
-          "minItems": 1,
           "title": "Candidates",
           "type": "array"
         },
@@ -822,6 +930,17 @@
           "minLength": 1,
           "title": "Description",
           "type": "string"
+        },
+        "registered_risk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Risk"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "scope": {
           "$ref": "#/$defs/LocatorScope"
@@ -833,11 +952,36 @@
           "default": false,
           "title": "Tenant Overrides Allowed",
           "type": "boolean"
+        },
+        "visual_candidates": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "image_anchor": "#/$defs/ImageAnchorCandidate",
+                "ocr_relative": "#/$defs/OcrRelativeCandidate",
+                "ocr_text": "#/$defs/OcrTextCandidate"
+              },
+              "propertyName": "strategy"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/OcrTextCandidate"
+              },
+              {
+                "$ref": "#/$defs/OcrRelativeCandidate"
+              },
+              {
+                "$ref": "#/$defs/ImageAnchorCandidate"
+              }
+            ]
+          },
+          "title": "Visual Candidates",
+          "type": "array"
         }
       },
       "required": [
-        "description",
-        "candidates"
+        "description"
       ],
       "title": "LocatorBundle",
       "type": "object"
@@ -875,6 +1019,19 @@
           "minimum": 1,
           "title": "Expected Count",
           "type": "integer"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
         },
         "match": {
           "$ref": "#/$defs/MatchMode",
@@ -972,6 +1129,19 @@
           ],
           "default": null,
           "title": "Viewport Width"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width"
         },
         "x": {
           "anyOf": [
@@ -1071,6 +1241,43 @@
       "title": "NavigateAction",
       "type": "object"
     },
+    "NormalizedRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Height",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Width",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "NormalizedRegion",
+      "type": "object"
+    },
     "NotCondition": {
       "additionalProperties": false,
       "properties": {
@@ -1084,7 +1291,8 @@
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
               "route": "#/$defs/RouteCondition",
-              "text": "#/$defs/TextCondition"
+              "text": "#/$defs/TextCondition",
+              "visual_text": "#/$defs/VisualTextCondition"
             },
             "propertyName": "kind"
           },
@@ -1094,6 +1302,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/VisualTextCondition"
             },
             {
               "$ref": "#/$defs/ElementCondition"
@@ -1164,6 +1375,149 @@
         "properties"
       ],
       "title": "ObjectContract",
+      "type": "object"
+    },
+    "OcrRelativeCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Anchor",
+          "type": "string"
+        },
+        "anchor_match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "expected_count": {
+          "const": 1,
+          "default": 1,
+          "title": "Expected Count",
+          "type": "integer"
+        },
+        "minimum_confidence": {
+          "default": 0.85,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Minimum Confidence",
+          "type": "number"
+        },
+        "portability": {
+          "$ref": "#/$defs/Portability",
+          "default": "high"
+        },
+        "relation": {
+          "enum": [
+            "right_of",
+            "below",
+            "same_row"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "relative_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RelativeRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "search_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NormalizedRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "strategy": {
+          "const": "ocr_relative",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "target_text": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Text"
+        }
+      },
+      "required": [
+        "strategy",
+        "anchor",
+        "relation"
+      ],
+      "title": "OcrRelativeCandidate",
+      "type": "object"
+    },
+    "OcrTextCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_count": {
+          "const": 1,
+          "default": 1,
+          "title": "Expected Count",
+          "type": "integer"
+        },
+        "match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "minimum_confidence": {
+          "default": 0.85,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Minimum Confidence",
+          "type": "number"
+        },
+        "portability": {
+          "$ref": "#/$defs/Portability",
+          "default": "high"
+        },
+        "search_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NormalizedRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "strategy": {
+          "const": "ocr_text",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "strategy",
+        "value"
+      ],
+      "title": "OcrTextCandidate",
       "type": "object"
     },
     "OutcomeResult": {
@@ -1367,7 +1721,8 @@
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
               "route": "#/$defs/RouteCondition",
-              "text": "#/$defs/TextCondition"
+              "text": "#/$defs/TextCondition",
+              "visual_text": "#/$defs/VisualTextCondition"
             },
             "propertyName": "kind"
           },
@@ -1377,6 +1732,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/VisualTextCondition"
             },
             {
               "$ref": "#/$defs/ElementCondition"
@@ -1408,6 +1766,44 @@
         "resume_at"
       ],
       "title": "Recovery",
+      "type": "object"
+    },
+    "RelativeRegion": {
+      "additionalProperties": false,
+      "description": "Region expressed in multiples of the freshly observed anchor height.",
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 40,
+          "title": "Height",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 40,
+          "title": "Width",
+          "type": "number"
+        },
+        "x": {
+          "maximum": 20,
+          "minimum": -20,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 20,
+          "minimum": -20,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "RelativeRegion",
       "type": "object"
     },
     "RetryPolicy": {
@@ -1641,7 +2037,8 @@
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
                 "route": "#/$defs/RouteCondition",
-                "text": "#/$defs/TextCondition"
+                "text": "#/$defs/TextCondition",
+                "visual_text": "#/$defs/VisualTextCondition"
               },
               "propertyName": "kind"
             },
@@ -1651,6 +2048,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/VisualTextCondition"
               },
               {
                 "$ref": "#/$defs/ElementCondition"
@@ -1687,7 +2087,8 @@
                 "not": "#/$defs/NotCondition",
                 "output_valid": "#/$defs/OutputValidCondition",
                 "route": "#/$defs/RouteCondition",
-                "text": "#/$defs/TextCondition"
+                "text": "#/$defs/TextCondition",
+                "visual_text": "#/$defs/VisualTextCondition"
               },
               "propertyName": "kind"
             },
@@ -1697,6 +2098,9 @@
               },
               {
                 "$ref": "#/$defs/TextCondition"
+              },
+              {
+                "$ref": "#/$defs/VisualTextCondition"
               },
               {
                 "$ref": "#/$defs/ElementCondition"
@@ -2052,6 +2456,49 @@
       "title": "ValueSchema",
       "type": "object"
     },
+    "VisualTextCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "visual_text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "match": {
+          "$ref": "#/$defs/MatchMode",
+          "default": "exact"
+        },
+        "minimum_confidence": {
+          "default": 0.85,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Minimum Confidence",
+          "type": "number"
+        },
+        "search_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NormalizedRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "VisualTextCondition",
+      "type": "object"
+    },
     "WaitForAction": {
       "additionalProperties": false,
       "properties": {
@@ -2065,7 +2512,8 @@
               "not": "#/$defs/NotCondition",
               "output_valid": "#/$defs/OutputValidCondition",
               "route": "#/$defs/RouteCondition",
-              "text": "#/$defs/TextCondition"
+              "text": "#/$defs/TextCondition",
+              "visual_text": "#/$defs/VisualTextCondition"
             },
             "propertyName": "kind"
           },
@@ -2075,6 +2523,9 @@
             },
             {
               "$ref": "#/$defs/TextCondition"
+            },
+            {
+              "$ref": "#/$defs/VisualTextCondition"
             },
             {
               "$ref": "#/$defs/ElementCondition"
@@ -2159,7 +2610,8 @@
             "not": "#/$defs/NotCondition",
             "output_valid": "#/$defs/OutputValidCondition",
             "route": "#/$defs/RouteCondition",
-            "text": "#/$defs/TextCondition"
+            "text": "#/$defs/TextCondition",
+            "visual_text": "#/$defs/VisualTextCondition"
           },
           "propertyName": "kind"
         },
@@ -2169,6 +2621,9 @@
           },
           {
             "$ref": "#/$defs/TextCondition"
+          },
+          {
+            "$ref": "#/$defs/VisualTextCondition"
           },
           {
             "$ref": "#/$defs/ElementCondition"
@@ -2205,7 +2660,10 @@
       "type": "array"
     },
     "schema_version": {
-      "const": "1.0",
+      "enum": [
+        "1.0",
+        "1.1"
+      ],
       "title": "Schema Version",
       "type": "string"
     },

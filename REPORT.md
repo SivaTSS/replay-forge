@@ -23,7 +23,7 @@ The engines depend on typed ports, not FastAPI, OpenAI, Playwright, or filesyste
 | Modular monolith with ports | **Chosen** | Strong replaceable boundaries with one-process operability |
 | PostgreSQL and object storage | Deferred | Operational metadata is in memory; atomic evidence files keep the submission runnable and inspectable |
 
-The implementation is intentionally narrower than the design seam. It supports one Playwright web surface. Discovery combines screenshots with normalized DOM/accessibility facts; replay uses deterministic semantic locators. The assignment permits DOM automation and asks for a credible heterogeneous extension, not a mandatory desktop build. A future visual or desktop adapter can implement the same surface port, but canvas, Citrix, OCR, image-anchor, and native-desktop execution are not claimed here.
+The primary path is rendered-surface automation. Discovery combines screenshots with local OCR tokens and optional semantic facts. Replay resolves OCR text, OCR-relative regions, and edge templates before optional DOM/accessibility candidates. The canonical target exposes the workflow as one canvas; Playwright provides screenshots and mouse/keyboard transport, not element identity. Native desktop transport is the remaining extension seam.
 
 ## 2. Artifact schema
 
@@ -43,7 +43,7 @@ identity/version
 
 Pydantic models reject unknown fields and invalid cross-references. Every required output must be extracted by the main flow and checked by the final checkpoint. Published `(capability ID, version)` content is immutable; discovery receives the next patch version. Symbolic values such as `input.member_id` make a recording reusable without retaining the discovery value.
 
-Target bundles contain frame scope, a human-readable description, ordered candidates, expected match count, visibility/enabled state, and portability. The implemented artifact prefers role/name and label locators, then relative label/value structure for extraction. The resolver accepts only one exact match.
+Target bundles contain a human-readable description, reviewed target risk, optional frame scope, ordered visual and semantic candidates, expected cardinality, state, and portability. Version `3.0.0` uses OCR text for named controls, fresh OCR-anchor-relative geometry for fields and values, and a unique multi-scale edge template for the icon-only control. Every visual rule has explicit confidence and search bounds.
 
 | Option considered | Choice | Reason |
 |---|---|---|
@@ -70,7 +70,7 @@ The result contract separates four meanings:
 
 | Result | Meaning | Demonstration |
 |---|---|---|
-| `success` | Checkpoint and outputs verified | Version `1.0.0` |
+| `success` | Checkpoint and outputs verified | Visual-first version `3.0.0` |
 | `business_outcome` | Legitimate negative answer | `member_not_found` |
 | `failure` | Known application, mechanical, policy, or verification failure | Permission denial in `1.0.2` |
 | `intervention_required` | Session is live but automation may not proceed | Sensitive submit in `2.0.0` |
@@ -81,9 +81,9 @@ The key choice was checkpoint-led correctness rather than action-led optimism: a
 
 ## 4. Heterogeneity & multi-tenant
 
-The seam is `SurfaceDriver`/`SurfaceSession`: open, observe, resolve, act, evaluate, extract, capture evidence, and close. Normalized observations and actions contain no Playwright handles. A desktop adapter could map them to window identity and OS accessibility controls; a visual adapter could map locator candidates to OCR or image anchors. Those adapters still need deterministic confidence, calibration, and drift rules and are not implemented.
+The seam is `SurfaceDriver`/`SurfaceSession`: open, observe, resolve, act, evaluate, extract, capture evidence, and close. Normalized observations and actions contain no Playwright handles. `VisionGrounder` operates on PNG bytes and viewport dimensions, so a desktop transport can reuse the same OCR and template logic while supplying its own capture and input mechanisms.
 
-The selected demo is legacy-style but not DOM-less: it uses an iframe, table layouts, server navigation, and no test IDs, while retaining usable labels and roles. Semantic locators were chosen over coordinates because they are more stable and reviewable for this concrete target. This demonstrates the web seam, not universal non-DOM automation.
+The canonical demo is DOM-hostile by construction: every control and displayed value is painted into one canvas. Harbor and Summit vary palette and horizontal placement. A Harbor-derived edge template still locates the moved Summit icon at a reviewed `0.75` confidence floor. Persistent coordinates were rejected; a model may identify a tight icon box only during discovery, where the adapter immediately converts it to a content-addressed template before recording.
 
 One artifact lists both `harbor` and `summit` as supported variants. The adapter normalizes tenant-prefixed routes to one surface contract; a committed run proves the same artifact version and hash on Summit.
 
@@ -117,7 +117,7 @@ Each action crosses three independent controls: current lease ownership, effecti
 
 Risk is independently inferred from action type, target language, and observed target facts, then combined with the declared risk. Irreversible actions are always denied. Sensitive actions require human approval. Origins, normalized routes, and action types must be explicitly allowed.
 
-Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted screenshots mask inputs, definition values, and account-table cells before capture. Atomic writes, SHA-256 metadata, and manifests make incomplete or changed evidence detectable. API errors expose stable codes and safe messages without submitted values or raw provider errors.
+Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted DOM screenshots mask inputs and value cells; visual-terminal screenshots mask the entire canvas because its sensitive pixels have no element boundary. Atomic writes, SHA-256 metadata, and manifests make incomplete or changed evidence detectable. API errors expose stable codes and safe messages without submitted values or raw provider errors.
 
 The trade-off is conservative capability: the system may stop where a broader automation could continue. That is intentional for financial operations. Authentication, operator authorization, TLS, automated evidence expiry, and durable control transactions are required before production deployment and are outside this local submission.
 
@@ -131,7 +131,7 @@ Depth was concentrated on one complete workflow and its exceptional states.
 | S3-compatible evidence | Opaque keys over atomic local files | Object store plus authorized download service |
 | Full operations UI | Focused intervention console | Run list, capability catalog, evidence viewer, authentication |
 | WebSocket/video co-browsing | PNG polling and bounded HTTP input | Backpressured stream with durable control events |
-| Visual/native desktop execution | Surface ports and locator variants | OCR/image and OS-accessibility adapters with confidence rules |
+| Native desktop execution | Reusable PNG vision layer and surface ports | OS capture/input transport and window identity |
 | Generic discovery compiler | Fail-closed savings-balance compiler | Reviewed workflow templates or constrained compiler families |
 | Discovery continuation after handoff | Safe reopen with retained session | Serializable discovery continuation and fresh-goal validation |
 | Distributed workers/queues | One process and one browser-owner thread per run | Durable scheduling only when workload requires it |

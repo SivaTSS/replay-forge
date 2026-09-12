@@ -41,6 +41,7 @@ from replayforge.capabilities.models import (
     ElementCondition,
     ExtractAction,
     IdentityMatchesCondition,
+    ImageAnchorCandidate,
     InputValue,
     LiteralValue,
     LocatorBundle,
@@ -48,6 +49,7 @@ from replayforge.capabilities.models import (
     LocatorStrategy,
     MatchMode,
     NavigateAction,
+    NormalizedRegion,
     NotCondition,
     OutputValidCondition,
     PressKeysAction,
@@ -57,6 +59,8 @@ from replayforge.capabilities.models import (
     SwitchContextAction,
     TextCondition,
     TypeAction,
+    VisualLocatorCandidate,
+    VisualTextCondition,
     WaitForAction,
 )
 from replayforge.policy.types import Risk
@@ -73,10 +77,13 @@ from replayforge.surfaces.models import (
     NormalizedObservation,
     ResolvedTarget,
     SanitizedSurfaceFrame,
+    ScreenRegion,
     SurfaceError,
     SurfaceFrame,
     Viewport,
+    VisualTargetData,
 )
+from replayforge.surfaces.vision import VisionGrounder
 
 QueryRoot = Page | FrameLocator | Locator
 _OBSERVATION_ATTEMPTS = 3
@@ -101,6 +108,8 @@ def _is_navigation_race(error: PlaywrightError) -> bool:
 class PlaywrightSurfaceDriver:
     base_url: str
     headless: bool = True
+    vision: VisionGrounder | None = None
+    allow_transient_coordinates: bool = False
     browser: Browser | None = field(default=None, init=False)
     playwright: Playwright | None = field(default=None, init=False)
     active_session: PlaywrightSurfaceSession | None = field(default=None, init=False)
@@ -112,7 +121,7 @@ class PlaywrightSurfaceDriver:
             raise SurfaceError("unknown_application", "Application family is not registered.")
         if tenant not in {"harbor", "summit"}:
             raise SurfaceError("unknown_tenant", "Tenant is not registered.")
-        if entry_point != "member_search":
+        if entry_point not in {"member_search", "visual_member_search"}:
             raise SurfaceError("unknown_entry_point", "Entry point is not registered.")
         if self.playwright is None:
             self.playwright = sync_playwright().start()
@@ -120,12 +129,20 @@ class PlaywrightSurfaceDriver:
         assert self.browser is not None
         context = self.browser.new_context(viewport={"width": 1280, "height": 800})
         page = context.new_page()
-        destination = f"{self.base_url.rstrip('/')}/{quote(tenant, safe='')}"
+        tenant_root = f"{self.base_url.rstrip('/')}/{quote(tenant, safe='')}"
+        destination = (
+            f"{tenant_root}/visual-terminal"
+            if entry_point == "visual_member_search"
+            else tenant_root
+        )
         try:
             page.goto(destination, wait_until="domcontentloaded", timeout=15_000)
-            page.frame_locator('iframe[title="Member operations"]').get_by_role(
-                "heading", name="Member Search", exact=True
-            ).wait_for(state="visible", timeout=15_000)
+            if entry_point == "member_search":
+                page.frame_locator('iframe[title="Member operations"]').get_by_role(
+                    "heading", name="Member Search", exact=True
+                ).wait_for(state="visible", timeout=15_000)
+            else:
+                page.wait_for_timeout(500)
         except PlaywrightTimeoutError as exc:
             context.close()
             raise SurfaceError(
@@ -139,7 +156,9 @@ class PlaywrightSurfaceDriver:
             page=page,
             application_family=application_family,
             tenant=tenant,
-            entry_points={"member_search": destination},
+            entry_points={entry_point: destination},
+            vision=self.vision,
+            allow_transient_coordinates=self.allow_transient_coordinates,
         )
         self.active_session = session
         return session
@@ -171,9 +190,13 @@ class PlaywrightSurfaceSession:
     application_family: str
     tenant: str
     entry_points: dict[str, str]
+    vision: VisionGrounder | None = None
+    allow_transient_coordinates: bool = False
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     _handles: dict[str, Locator] = field(default_factory=dict, init=False)
     _bundles: dict[str, LocatorBundle] = field(default_factory=dict, init=False)
+    _visual_candidates: dict[str, VisualLocatorCandidate] = field(default_factory=dict, init=False)
+    _coordinate_candidates: dict[str, LocatorCandidate] = field(default_factory=dict, init=False)
 
     @property
     def origin(self) -> str:
@@ -198,17 +221,24 @@ class PlaywrightSurfaceSession:
         else:  # pragma: no cover - the bounded loop always returns or raises
             raise AssertionError("observation retry loop exhausted without a result")
         dialog_text = None
+        visual_tokens = (
+            self.vision.tokens(self._capture_grounding_frame())
+            if self.vision is not None and "/visual-terminal" in self.page.url
+            else ()
+        )
         control_fingerprints = tuple(
             f"{control.role}:{control.name}:{control.count}" for control in controls
         )
         field_fingerprints = tuple(f"{field.label}:{field.count}" for field in fields)
+        observed_landmarks = (*landmarks, *(token.text for token in visual_tokens))
         fingerprint_source = "|".join(
             (
                 route,
-                *landmarks,
+                *observed_landmarks,
                 *frame_titles,
                 *control_fingerprints,
                 *field_fingerprints,
+                *(f"visual:{token.text}" for token in visual_tokens),
                 str(active or ""),
             )
         )
@@ -221,10 +251,11 @@ class PlaywrightSurfaceSession:
             route=route,
             viewport=Viewport(viewport["width"], viewport["height"]),
             fingerprint=fingerprint,
-            landmarks=landmarks,
+            landmarks=observed_landmarks,
             frame_titles=frame_titles,
             actionable_controls=controls,
             extractable_fields=fields,
+            visual_tokens=visual_tokens,
             active_element=str(active) if active else None,
             dialog_text=dialog_text,
         )
@@ -318,6 +349,7 @@ class PlaywrightSurfaceSession:
 
     def capture_sanitized_evidence_frame(self) -> SanitizedSurfaceFrame:
         masks: list[Locator] = []
+        directives: tuple[str, ...] = _EVIDENCE_MASK_DIRECTIVES
         for frame in self.page.frames:
             masks.extend(
                 (
@@ -326,6 +358,9 @@ class PlaywrightSurfaceSession:
                     frame.locator(".account-table tbody td"),
                 )
             )
+        if "/visual-terminal" in self.page.url:
+            masks.append(self.page.locator("canvas"))
+            directives = (*directives, "mask:rendered-canvas")
         try:
             content = self.page.screenshot(
                 type="png",
@@ -340,7 +375,7 @@ class PlaywrightSurfaceSession:
                 "evidence_screenshot_failed",
                 "A sanitized evidence frame could not be captured.",
             ) from exc
-        return SanitizedSurfaceFrame(content, _EVIDENCE_MASK_DIRECTIVES)
+        return SanitizedSurfaceFrame(content, directives)
 
     def capture_live_frame(self) -> SurfaceFrame:
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}
@@ -374,13 +409,55 @@ class PlaywrightSurfaceSession:
             ) from exc
 
     def resolve(self, target: LocatorBundle, timeout_ms: int) -> ResolvedTarget:
-        root = self._scoped_root(target)
         failures: list[dict[str, object]] = []
-        for index, candidate in enumerate(target.candidates):
-            if candidate.strategy is LocatorStrategy.COORDINATES:
-                failures.append({"candidate": index, "reason": "coordinate_not_stable"})
-                continue
-            locator = self._locator(root, candidate)
+        if target.visual_candidates and self.vision is None:
+            failures.append({"candidate": 0, "reason": "visual_grounder_unavailable"})
+        elif self.vision is not None:
+            frame = self._capture_grounding_frame()
+            viewport = self._viewport()
+            for index, visual_candidate in enumerate(target.visual_candidates):
+                try:
+                    visual = self.vision.resolve(visual_candidate, frame, viewport)
+                except SurfaceError as error:
+                    failures.append(
+                        {
+                            "candidate": index,
+                            "strategy": visual_candidate.strategy,
+                            "reason": error.code,
+                        }
+                    )
+                    continue
+                handle = f"target_{uuid4().hex}"
+                self._visual_candidates[handle] = visual_candidate
+                self._bundles[handle] = target
+                return ResolvedTarget(
+                    handle=handle,
+                    description=target.description,
+                    candidate_index=index,
+                    observed_count=1,
+                    registered_risk=target.registered_risk,
+                    visual=visual,
+                )
+
+        root = self._scoped_root(target)
+        for index, semantic_candidate in enumerate(target.candidates):
+            if semantic_candidate.strategy is LocatorStrategy.COORDINATES:
+                if not self.allow_transient_coordinates:
+                    failures.append({"candidate": index, "reason": "coordinate_not_replayable"})
+                    continue
+                visual = self._coordinate_target(semantic_candidate)
+                handle = f"target_{uuid4().hex}"
+                self._coordinate_candidates[handle] = semantic_candidate
+                self._bundles[handle] = target
+                return ResolvedTarget(
+                    handle=handle,
+                    description=target.description,
+                    candidate_index=index,
+                    observed_count=1,
+                    registered_risk=target.registered_risk,
+                    visual=visual,
+                )
+            locator = self._locator(root, semantic_candidate)
             try:
                 locator.first.wait_for(
                     state="attached", timeout=max(100, timeout_ms // len(target.candidates))
@@ -389,7 +466,7 @@ class PlaywrightSurfaceSession:
                 failures.append({"candidate": index, "count": 0})
                 continue
             count = locator.count()
-            if count != candidate.expected_count or count != 1:
+            if count != semantic_candidate.expected_count or count != 1:
                 failures.append({"candidate": index, "count": count})
                 continue
             selected = locator.first
@@ -410,7 +487,9 @@ class PlaywrightSurfaceSession:
                 registered_risk=self._classify_target(selected),
             )
         ambiguous = any(
-            isinstance(item.get("count"), int) and cast(int, item["count"]) > 1 for item in failures
+            item.get("reason") == "target_ambiguous"
+            or (isinstance(item.get("count"), int) and cast(int, item["count"]) > 1)
+            for item in failures
         )
         raise SurfaceError(
             "target_ambiguous" if ambiguous else "target_absent",
@@ -423,18 +502,51 @@ class PlaywrightSurfaceSession:
 
     def capture_locator(self, target: ResolvedTarget) -> LocatorBundle:
         try:
-            return self._bundles[target.handle]
+            bundle = self._bundles[target.handle]
         except KeyError as exc:
             raise SurfaceError(
                 "target_handle_stale", "Resolved target is no longer available."
             ) from exc
+        candidate = self._coordinate_candidates.get(target.handle)
+        if candidate is None:
+            return bundle
+        assert target.visual is not None
+        if self.vision is None:
+            raise SurfaceError("visual_grounder_unavailable", "Template capture is unavailable.")
+        asset_key, content_hash = self.vision.create_edge_template(
+            self._capture_grounding_frame(), target.visual.region
+        )
+        template = ImageAnchorCandidate(
+            strategy="image_anchor",
+            asset_key=asset_key,
+            content_hash=content_hash,
+            search_region=self._template_search_region(target.visual.region, self._viewport()),
+            minimum_score=0.75,
+            uniqueness_margin=0.03,
+            minimum_scale=0.8,
+            maximum_scale=1.2,
+            scale_step=0.05,
+        )
+        semantic = tuple(
+            item for item in bundle.candidates if item.strategy is not LocatorStrategy.COORDINATES
+        )
+        return bundle.model_copy(
+            update={
+                "visual_candidates": (template, *bundle.visual_candidates),
+                "candidates": semantic,
+            }
+        )
 
     def execute(
         self, action: Action, target: ResolvedTarget | None, inputs: dict[str, Any]
     ) -> ActionReceipt:
         started = datetime.now(UTC)
         try:
-            locator = self._target_locator(target)
+            locator = (
+                self._target_locator(target)
+                if target is not None and target.visual is None
+                else None
+            )
             if isinstance(action, NavigateAction):
                 destination = self.entry_points.get(action.entry_point)
                 if destination is None:
@@ -443,16 +555,31 @@ class PlaywrightSurfaceSession:
                     )
                 self.page.goto(destination, wait_until="domcontentloaded", timeout=15_000)
             elif isinstance(action, ClickAction):
-                self._required(locator).click()
+                if target is not None and target.visual is not None:
+                    x, y = self._fresh_visual(target).region.center
+                    self.page.mouse.click(x, y, button="left")
+                else:
+                    self._required(locator).click()
             elif isinstance(action, TypeAction):
                 value = self._resolve_value(action.value, inputs)
-                if action.clear:
+                if target is not None and target.visual is not None:
+                    x, y = self._fresh_visual(target).region.center
+                    self.page.mouse.click(x, y, button="left")
+                    if action.clear:
+                        self.page.keyboard.press("Control+A")
+                    self.page.keyboard.type(str(value))
+                elif action.clear:
                     self._required(locator).fill(str(value))
                 else:
                     self._required(locator).press_sequentially(str(value))
             elif isinstance(action, PressKeysAction):
                 self._required(locator).press("+".join(action.keys))
             elif isinstance(action, SelectAction):
+                if target is not None and target.visual is not None:
+                    raise SurfaceError(
+                        "visual_select_unsupported",
+                        "Visual select actions require an explicit keyboard interaction flow.",
+                    )
                 self._required(locator).select_option(
                     label=str(self._resolve_value(action.option, inputs))
                 )
@@ -498,12 +625,25 @@ class PlaywrightSurfaceSession:
             root: Page | Frame = self._application_frame() or self.page
             locator = root.get_by_text(condition.value, exact=condition.match is MatchMode.EXACT)
             return locator.count() > 0
+        if isinstance(condition, VisualTextCondition):
+            if self.vision is None:
+                return False
+            return self.vision.contains_text(
+                self._capture_grounding_frame(),
+                condition.value,
+                condition.match,
+                condition.minimum_confidence,
+                condition.search_region,
+                self._viewport(),
+            )
         if isinstance(condition, ElementCondition):
             try:
                 resolved = self.resolve(condition.target, 1_000)
-                locator = self._handles[resolved.handle]
             except SurfaceError:
                 return condition.state in {"absent", "hidden"}
+            if resolved.visual is not None:
+                return condition.state in {"exists", "visible", "enabled"}
+            locator = self._handles[resolved.handle]
             states = {
                 "exists": True,
                 "absent": False,
@@ -520,6 +660,13 @@ class PlaywrightSurfaceSession:
         return True
 
     def extract(self, target: ResolvedTarget) -> str:
+        if target.visual is not None:
+            if self.vision is None:
+                raise SurfaceError(
+                    "visual_grounder_unavailable", "Visual extraction is unavailable."
+                )
+            fresh = self._fresh_visual(target)
+            return self.vision.extract(self._capture_grounding_frame(), fresh.region).strip()
         return self._target_locator(target).inner_text().strip()
 
     def wait_until(
@@ -552,7 +699,7 @@ class PlaywrightSurfaceSession:
         prefix = f"/{self.tenant}"
         if route.startswith(prefix):
             route = route.removeprefix(prefix) or "/"
-        if route in {"/member-search", "/member-results"}:
+        if route in {"/member-search", "/member-results", "/visual-terminal"}:
             return "/members/search"
         return route
 
@@ -607,6 +754,69 @@ class PlaywrightSurfaceSession:
             raise SurfaceError(
                 "target_handle_stale", "Resolved target is no longer available."
             ) from exc
+
+    def _fresh_visual(self, target: ResolvedTarget) -> Any:
+        if self.vision is None:
+            raise SurfaceError("visual_grounder_unavailable", "Visual grounding is unavailable.")
+        candidate = self._visual_candidates.get(target.handle)
+        if candidate is None:
+            if target.handle in self._coordinate_candidates and target.visual is not None:
+                return target.visual
+            raise SurfaceError("target_handle_stale", "Visual target handle is unavailable.")
+        return self.vision.resolve(candidate, self._capture_grounding_frame(), self._viewport())
+
+    def _coordinate_target(self, candidate: LocatorCandidate) -> VisualTargetData:
+        assert None not in (
+            candidate.x,
+            candidate.y,
+            candidate.width,
+            candidate.height,
+            candidate.viewport_width,
+            candidate.viewport_height,
+        )
+        viewport = self._viewport()
+        scale_x = viewport.width / cast(int, candidate.viewport_width)
+        scale_y = viewport.height / cast(int, candidate.viewport_height)
+        region = ScreenRegion(
+            round(cast(int, candidate.x) * scale_x),
+            round(cast(int, candidate.y) * scale_y),
+            max(1, round(cast(int, candidate.width) * scale_x)),
+            max(1, round(cast(int, candidate.height) * scale_y)),
+        )
+        frame = self._capture_grounding_frame()
+        return VisualTargetData(
+            region=region,
+            method="discovery_coordinates",
+            confidence=1.0,
+            frame_hash=self.vision.frame_hash(frame) if self.vision else "",
+        )
+
+    @staticmethod
+    def _template_search_region(region: ScreenRegion, viewport: Viewport) -> NormalizedRegion:
+        left = max(0, region.x - region.width * 3)
+        top = max(0, region.y - region.height * 2)
+        right = min(viewport.width, region.x + region.width * 4)
+        bottom = min(viewport.height, region.y + region.height * 3)
+        return NormalizedRegion(
+            x=left / viewport.width,
+            y=top / viewport.height,
+            width=(right - left) / viewport.width,
+            height=(bottom - top) / viewport.height,
+        )
+
+    def _capture_grounding_frame(self) -> bytes:
+        try:
+            return self.page.screenshot(
+                type="png", full_page=False, animations="disabled", caret="hide"
+            )
+        except Exception as error:
+            raise SurfaceError(
+                "screenshot_failed", "The visual frame could not be captured."
+            ) from error
+
+    def _viewport(self) -> Viewport:
+        viewport = self.page.viewport_size or {"width": 1280, "height": 800}
+        return Viewport(viewport["width"], viewport["height"])
 
     @staticmethod
     def _classify_target(locator: Locator) -> Risk | None:

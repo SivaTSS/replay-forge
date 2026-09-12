@@ -347,6 +347,19 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
         driver.close()
 
 
+def test_visual_evidence_masks_the_rendered_canvas(demo_bank: str) -> None:
+    driver = PlaywrightSurfaceDriver(demo_bank)
+    session = driver.open("northstar_member_service", "harbor", "visual_member_search")
+    try:
+        frame = session.capture_sanitized_evidence_frame()
+
+        assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
+        assert frame.redaction_directives[-1] == "mask:rendered-canvas"
+    finally:
+        session.close()
+        driver.close()
+
+
 def test_real_iframe_selects_known_runtime_scenario(demo_bank: str) -> None:
     driver = PlaywrightSurfaceDriver(demo_bank)
     session = driver.open("northstar_member_service", "harbor", "member_search")
@@ -457,6 +470,45 @@ def test_registered_artifact_replays_end_to_end(demo_bank: str, tmp_path: Path) 
         )
         assert verification.terminal_result_verified
         assert runtime.live_sessions == {}
+    finally:
+        runtime.close()
+
+
+@pytest.mark.parametrize("tenant", ["harbor", "summit"])
+def test_visual_artifact_replays_without_dom_targets(
+    demo_bank: str, tmp_path: Path, tenant: str
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=repository / "capabilities",
+            capability_asset_directory=repository / "capabilities/_assets",
+            evidence_directory=tmp_path / "evidence",
+            demo_base_url=demo_bank,
+        )
+    )
+    try:
+        artifact = load_artifact_yaml(
+            (repository / "capabilities/member.lookup_savings_balance/3.0.0.yaml").read_text()
+        )
+        assert all(not step.target.candidates for step in artifact.steps if step.target)
+
+        result = runtime.service.invoke(
+            "member.lookup_savings_balance",
+            "3.0.0",
+            tenant,
+            {"member_id": "12345"},
+        )
+
+        assert isinstance(result, SuccessResult)
+        assert result.outputs == {
+            "member_id": "12345",
+            "account_type": "savings",
+            "currency": "USD",
+            "available_balance": "1420.57",
+            "as_of": "2026-09-10T12:30:00Z",
+        }
+        assert result.checkpoint.verified
     finally:
         runtime.close()
 

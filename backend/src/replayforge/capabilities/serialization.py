@@ -53,6 +53,18 @@ def _remove_hash_neutral_schema_defaults(payload: dict[str, Any]) -> None:
     for step in steps:
         if isinstance(step, dict) and not step.get("failure_refs"):
             step.pop("failure_refs", None)
+    _remove_empty_visual_candidates(payload)
+
+
+def _remove_empty_visual_candidates(value: Any) -> None:
+    if isinstance(value, dict):
+        if not value.get("visual_candidates"):
+            value.pop("visual_candidates", None)
+        for item in value.values():
+            _remove_empty_visual_candidates(item)
+    elif isinstance(value, list):
+        for item in value:
+            _remove_empty_visual_candidates(item)
 
 
 def _canonicalize(value: Any) -> Any:
