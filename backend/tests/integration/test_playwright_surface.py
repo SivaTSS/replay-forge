@@ -8,6 +8,7 @@ from typing import cast
 
 import pytest
 
+from replayforge.applications.registry import load_application_registry
 from replayforge.capabilities.models import (
     ClickAction,
     FrameLocator,
@@ -83,6 +84,14 @@ from replayforge.surfaces.models import (
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 
 pytestmark = pytest.mark.integration
+REPOSITORY = Path(__file__).resolve().parents[3]
+
+
+def playwright_driver(base_url: str) -> PlaywrightSurfaceDriver:
+    return PlaywrightSurfaceDriver(
+        base_url,
+        application_registry=load_application_registry(REPOSITORY / "config/applications.yaml"),
+    )
 
 
 def in_member_frame(target: LocatorBundle) -> LocatorBundle:
@@ -137,7 +146,7 @@ def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> No
         )
     )
     provider = ScriptedDiscoveryProvider(proposals)
-    driver = PlaywrightSurfaceDriver(demo_bank)
+    driver = playwright_driver(demo_bank)
     clock = SystemClock()
     run_id = str(new_id(EntityKind.RUN))
     lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
@@ -202,7 +211,7 @@ def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> No
 
 
 def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Path) -> None:
-    driver = PlaywrightSurfaceDriver(demo_bank)
+    driver = playwright_driver(demo_bank)
     session = driver.open("northstar_member_service", "harbor", "member_search")
     try:
         observation = session.observe()
@@ -315,7 +324,7 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
 
 
 def test_visual_evidence_masks_the_rendered_canvas(demo_bank: str) -> None:
-    driver = PlaywrightSurfaceDriver(demo_bank)
+    driver = playwright_driver(demo_bank)
     session = driver.open("northstar_member_service", "harbor", "visual_member_search")
     try:
         frame = session.capture_sanitized_evidence_frame()
@@ -328,7 +337,7 @@ def test_visual_evidence_masks_the_rendered_canvas(demo_bank: str) -> None:
 
 
 def test_real_iframe_selects_known_runtime_scenario(demo_bank: str) -> None:
-    driver = PlaywrightSurfaceDriver(demo_bank)
+    driver = playwright_driver(demo_bank)
     session = driver.open("northstar_member_service", "harbor", "member_search")
     try:
         scenario = in_member_frame(
@@ -712,7 +721,7 @@ def test_real_output_failure_retains_masked_state_before_teardown(
 
 def test_human_input_controls_original_browser_session(demo_bank: str) -> None:
     clock = SystemClock()
-    driver = PlaywrightSurfaceDriver(demo_bank)
+    driver = playwright_driver(demo_bank)
     worker = SerialSessionWorker("handoff-integration")
     session = worker.call(
         lambda: driver.open("northstar_member_service", "harbor", "member_search")

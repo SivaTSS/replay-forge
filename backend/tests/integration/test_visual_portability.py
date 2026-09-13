@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from replayforge.applications.registry import load_application_registry
 from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
@@ -257,7 +258,10 @@ def test_visual_workbench_reports_declared_and_fail_closed_states(
 
 
 def test_visual_workbench_exposes_only_a_canvas(demo_bank: str) -> None:
-    driver = PlaywrightSurfaceDriver(demo_bank)
+    driver = PlaywrightSurfaceDriver(
+        demo_bank,
+        application_registry=load_application_registry(REPOSITORY / "config/applications.yaml"),
+    )
     session = driver.open("northstar_member_service", "harbor", "visual_member_workbench")
     try:
         observation = session.observe()

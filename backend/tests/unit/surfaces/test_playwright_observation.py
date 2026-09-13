@@ -7,7 +7,7 @@ from playwright.sync_api import BrowserContext, Page
 from playwright.sync_api import Error as PlaywrightError
 
 from replayforge.surfaces.models import ActionableControl, ExtractableField, SurfaceError
-from replayforge.surfaces.playwright import PlaywrightSurfaceSession
+from replayforge.surfaces.playwright import PlaywrightSurfaceDriver, PlaywrightSurfaceSession
 
 
 class FakePage:
@@ -28,6 +28,11 @@ def session_with(page: FakePage) -> PlaywrightSurfaceSession:
         tenant="harbor",
         entry_points={},
     )
+
+
+def test_driver_requires_explicit_application_registration() -> None:
+    with pytest.raises(ValueError, match="application registry"):
+        PlaywrightSurfaceDriver("http://127.0.0.1:3001")
 
 
 def test_observation_retries_transient_navigation_context(

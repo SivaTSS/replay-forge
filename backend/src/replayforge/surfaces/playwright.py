@@ -31,7 +31,7 @@ from playwright.sync_api import (
 )
 
 from replayforge.applications.models import SurfaceLaunch
-from replayforge.applications.registry import ApplicationRegistry, default_application_registry
+from replayforge.applications.registry import ApplicationRegistry
 from replayforge.capabilities.models import (
     Action,
     AllCondition,
@@ -120,10 +120,15 @@ class PlaywrightSurfaceDriver:
     playwright: Playwright | None = field(default=None, init=False)
     active_session: PlaywrightSurfaceSession | None = field(default=None, init=False)
 
+    def __post_init__(self) -> None:
+        if self.application_registry is None:
+            raise ValueError("Playwright surface driver requires an application registry")
+
     def open(
         self, application_family: str, tenant: str, entry_point: str
     ) -> PlaywrightSurfaceSession:
-        registry = self.application_registry or default_application_registry(self.base_url)
+        registry = self.application_registry
+        assert registry is not None
         try:
             launch = registry.resolve(application_family, tenant, entry_point)
         except ValueError as error:
