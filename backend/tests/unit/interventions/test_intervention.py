@@ -4,6 +4,8 @@ import pytest
 
 from replayforge.interventions.models import (
     Intervention,
+    InterventionContext,
+    InterventionRunMode,
     InterventionStatus,
     InterventionTransitionError,
 )
@@ -72,8 +74,52 @@ def test_illegal_transitions_fail_closed(intervention: Intervention) -> None:
         intervention.resolve("invalid")
     with pytest.raises(InterventionTransitionError):
         intervention.claim("operator-1").begin_resume().terminate("invalid")
+    with pytest.raises(InterventionTransitionError):
+        intervention.reassign("operator-1")
+    with pytest.raises(ValueError, match="operator ID"):
+        intervention.claim("operator-1").reassign("")
 
 
 def test_claim_requires_operator_identity(intervention: Intervention) -> None:
     with pytest.raises(ValueError, match="operator ID"):
         intervention.claim("")
+
+
+def test_intervention_context_separates_replay_and_discovery_metadata() -> None:
+    replay = InterventionContext(
+        run_mode=InterventionRunMode.REPLAY,
+        application_family="northstar",
+        tenant="harbor",
+        task_summary="Look up savings balance.",
+        surface_route="/members/search",
+        capability_id="member.lookup_savings_balance",
+        capability_version="2.0.0",
+        capability_name="Lookup savings balance",
+    )
+    assert replay.capability_version == "2.0.0"
+
+    with pytest.raises(ValueError, match="capability metadata"):
+        InterventionContext(
+            run_mode=InterventionRunMode.REPLAY,
+            application_family="northstar",
+            tenant="harbor",
+            task_summary="Task",
+            surface_route="/",
+        )
+    with pytest.raises(ValueError, match="cannot identify"):
+        InterventionContext(
+            run_mode=InterventionRunMode.DISCOVERY,
+            application_family="northstar",
+            tenant="harbor",
+            task_summary="Discover task",
+            surface_route="/",
+            capability_id="member.lookup",
+        )
+    with pytest.raises(ValueError, match="non-empty"):
+        InterventionContext(
+            run_mode=InterventionRunMode.DISCOVERY,
+            application_family="",
+            tenant="harbor",
+            task_summary="Discover task",
+            surface_route="/",
+        )

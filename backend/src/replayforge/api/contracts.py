@@ -92,6 +92,22 @@ class InterventionTransitionResponse(ApiModel):
     control_owner: str
     lease_version: int
     lease_expires_at: str
+    run_mode: Literal["discovery", "replay"] | None = None
+    application_family: str | None = None
+    tenant: str | None = None
+    task_summary: str | None = None
+    capability_id: str | None = None
+    capability_version: str | None = None
+    capability_name: str | None = None
+    step_id: str | None = None
+    trigger_code: str
+    explanation: str
+    surface_route: str | None = None
+    created_at: str
+
+
+class InterventionListResponse(ApiModel):
+    items: tuple[InterventionTransitionResponse, ...]
 
 
 class ResumeInterventionResponse(InterventionTransitionResponse):

@@ -4,7 +4,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from replayforge.interventions.models import InterventionStatus
+from replayforge.interventions.models import (
+    InterventionContext,
+    InterventionRunMode,
+    InterventionStatus,
+)
 from replayforge.interventions.router import (
     InMemoryInterventionRouter,
     InterventionConflictError,
@@ -38,12 +42,24 @@ def test_router_preserves_reserved_identity_and_observation() -> None:
         code="dialog_detected",
         step_id="search.submit",
         observation=observation,
+        context=InterventionContext(
+            run_mode=InterventionRunMode.REPLAY,
+            application_family="northstar",
+            tenant="harbor",
+            task_summary="Lookup balance",
+            surface_route="/members/search",
+            capability_id="member.lookup",
+            capability_version="1.0.0",
+            capability_name="Lookup",
+        ),
     )
 
     assert routed_id == intervention_id
     assert router.get(intervention_id).status is InterventionStatus.OPEN
     assert router.observation(intervention_id) is observation
     assert router.list_open() == (router.get(intervention_id),)
+    assert router.list_active(InterventionRunMode.REPLAY) == (router.get(intervention_id),)
+    assert router.list_active(InterventionRunMode.DISCOVERY) == ()
 
     with pytest.raises(InterventionConflictError):
         router.create(

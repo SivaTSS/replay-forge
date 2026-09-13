@@ -120,6 +120,47 @@ class InterventionStatus(StrEnum):
     TERMINATED = "terminated"
 
 
+class InterventionRunMode(StrEnum):
+    DISCOVERY = "discovery"
+    REPLAY = "replay"
+
+
+@dataclass(frozen=True, slots=True)
+class InterventionContext:
+    """Safe operator-routing context; invocation values never belong here."""
+
+    run_mode: InterventionRunMode
+    application_family: str
+    tenant: str
+    task_summary: str
+    surface_route: str
+    step_id: str | None = None
+    capability_id: str | None = None
+    capability_version: str | None = None
+    capability_name: str | None = None
+
+    def __post_init__(self) -> None:
+        if not all(
+            value.strip()
+            for value in (
+                self.application_family,
+                self.tenant,
+                self.task_summary,
+                self.surface_route,
+            )
+        ):
+            raise ValueError("intervention context requires non-empty routing fields")
+        capability_fields = (
+            self.capability_id,
+            self.capability_version,
+            self.capability_name,
+        )
+        if self.run_mode is InterventionRunMode.REPLAY and not all(capability_fields):
+            raise ValueError("replay intervention context requires capability metadata")
+        if self.run_mode is InterventionRunMode.DISCOVERY and any(capability_fields):
+            raise ValueError("discovery intervention context cannot identify a capability")
+
+
 class InterventionTransitionError(ValueError):
     """Raised for an illegal intervention lifecycle transition."""
 
@@ -133,6 +174,7 @@ class Intervention:
     explanation: str
     status: InterventionStatus
     created_at: datetime
+    context: InterventionContext | None = None
     operator_id: str | None = None
     resolution: str | None = None
 
@@ -147,6 +189,13 @@ class Intervention:
         if self.status is not InterventionStatus.CLAIMED:
             raise InterventionTransitionError("only a claimed intervention can be released")
         return replace(self, status=InterventionStatus.OPEN, operator_id=None)
+
+    def reassign(self, operator_id: str) -> Intervention:
+        if self.status is not InterventionStatus.CLAIMED:
+            raise InterventionTransitionError("only a claimed intervention can be reassigned")
+        if not operator_id:
+            raise ValueError("operator ID is required")
+        return replace(self, operator_id=operator_id)
 
     def begin_resume(self) -> Intervention:
         if self.status is not InterventionStatus.CLAIMED:

@@ -11,6 +11,7 @@ from replayforge.interventions.models import (
     HumanInputCommand,
     HumanInputReceipt,
     InterventionFrame,
+    InterventionRunMode,
 )
 from replayforge.interventions.service import InterventionResume, InterventionTransition
 from replayforge.runs.discovery_suite import DiscoverySuite, ScenarioKind
@@ -86,6 +87,10 @@ class DiscoverySuiteInvoker(Protocol):
 
 class InterventionInvoker(Protocol):
     def get(self, intervention_id: str) -> InterventionTransition: ...
+
+    def list_active(
+        self, run_mode: InterventionRunMode | None = None
+    ) -> tuple[InterventionTransition, ...]: ...
 
     def claim(
         self, intervention_id: str, expected_lease_version: int, operator_id: str

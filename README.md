@@ -92,7 +92,9 @@ Start it after the target and runtime:
 npm_config_cache=/tmp/replayforge-npm-cache npx --yes pnpm@10.15.1 --filter @replayforge/control-plane dev --hostname 127.0.0.1 --port 3000
 ```
 
-Open `http://127.0.0.1:3000`, enter the intervention ID returned by version `2.0.0`, claim it, operate the polled live viewport, and resume. Every transition uses an exclusive, expiring, monotonically versioned lease.
+Open `http://127.0.0.1:3000`. The replay appears in the active-intervention inbox with its capability, tenant, interrupted step, surface route, and safe pause reason. Select it, claim the retained browser, provide the manual input, and choose **Resume automation**. Direct ID lookup remains available for debugging.
+
+The console polls because this slice needs a minimal real handoff, not continuous co-browsing. Every transition uses an exclusive, expiring, monotonically versioned lease. Heartbeats preserve active ownership; an abandoned expired claim can be reclaimed without allowing an active lease to be stolen. Operator IDs are local caller-supplied labels, not authentication.
 
 ## Run genuine discovery
 

@@ -1,15 +1,34 @@
 "use client";
 
-import { FormEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  MouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 type Intervention = {
   intervention_id: string;
   run_id: string;
   session_id: string;
-  status: string;
+  status: "open" | "claimed" | "resuming" | "resolved" | "terminated";
   control_owner: string;
   lease_version: number;
   lease_expires_at: string;
+  run_mode: "discovery" | "replay" | null;
+  application_family: string | null;
+  tenant: string | null;
+  task_summary: string | null;
+  capability_id: string | null;
+  capability_version: string | null;
+  capability_name: string | null;
+  step_id: string | null;
+  trigger_code: string;
+  explanation: string;
+  surface_route: string | null;
+  created_at: string;
 };
 type RunResult = {
   status: "success" | "business_outcome" | "failure" | "intervention_required";
@@ -17,9 +36,18 @@ type RunResult = {
   intervention_id?: string;
 };
 type TransitionResponse = Intervention & { result?: RunResult | null };
-
-type ErrorBody = { code?: string; message?: string };
-type HumanKey = "Enter" | "Escape" | "Tab" | "Shift+Tab" | "Backspace" | "Delete" | "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
+type ErrorBody = { code?: string; message?: string; correlation_id?: string };
+type HumanKey =
+  | "Enter"
+  | "Escape"
+  | "Tab"
+  | "Shift+Tab"
+  | "Backspace"
+  | "Delete"
+  | "ArrowUp"
+  | "ArrowDown"
+  | "ArrowLeft"
+  | "ArrowRight";
 type HumanInput =
   | { kind: "pointer"; x: number; y: number }
   | { kind: "text"; text: string }
@@ -31,73 +59,195 @@ type ViewportFrame = {
   nextClientSequence: number;
 };
 
+class ApiError extends Error {
+  constructor(
+    readonly body: ErrorBody,
+    readonly status: number,
+  ) {
+    super(body.message ?? body.code ?? "Runtime request failed.");
+  }
+}
 async function readJson<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & ErrorBody;
-  if (!response.ok) {
-    throw new Error(body.message ?? body.code ?? "Runtime request failed.");
-  }
+  if (!response.ok) throw new ApiError(body, response.status);
   return body;
+}
+function errorMessage(cause: unknown): string {
+  if (!(cause instanceof ApiError))
+    return cause instanceof Error ? cause.message : "Runtime request failed.";
+  return `${cause.message}${cause.body.correlation_id ? ` Reference ${cause.body.correlation_id}.` : ""}`;
+}
+function expired(item: Intervention, now: number): boolean {
+  return item.status === "claimed" && Date.parse(item.lease_expires_at) <= now;
 }
 
 export default function InterventionConsole() {
+  const [inbox, setInbox] = useState<Intervention[]>([]);
   const [interventionId, setInterventionId] = useState("");
   const [operatorId, setOperatorId] = useState("operator-7");
   const [intervention, setIntervention] = useState<Intervention | null>(null);
   const [viewportUrl, setViewportUrl] = useState<string | null>(null);
-  const [viewportFrame, setViewportFrame] = useState<ViewportFrame | null>(null);
+  const [frame, setFrame] = useState<ViewportFrame | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
   const [manualText, setManualText] = useState("");
   const [manualKey, setManualKey] = useState<HumanKey>("Enter");
   const [resumeResult, setResumeResult] = useState<RunResult | null>(null);
+  const [confirmTerminate, setConfirmTerminate] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const mutationInFlight = useRef(false);
+  const frameInFlight = useRef(false);
 
-  const requestTransition = useCallback(
-    async (transition: "claim" | "release" | "resume" | "heartbeat" | "terminate") => {
+  const refreshInbox = useCallback(async (quiet = false) => {
+    try {
+      const response = await fetch(
+        "/runtime/api/v1/interventions?run_mode=replay",
+        { cache: "no-store" },
+      );
+      setInbox((await readJson<{ items: Intervention[] }>(response)).items);
+      if (!quiet) setError(null);
+    } catch (cause) {
+      if (!quiet) setError(errorMessage(cause));
+    }
+  }, []);
+
+  const loadById = useCallback(async (id: string, quiet = false) => {
+    try {
+      const response = await fetch(
+        `/runtime/api/v1/interventions/${encodeURIComponent(id)}`,
+        { cache: "no-store" },
+      );
+      const next = await readJson<Intervention>(response);
+      setIntervention(next);
+      setInterventionId(next.intervention_id);
+      if (!quiet) {
+        setError(null);
+        setResumeResult(null);
+      }
+      return next;
+    } catch (cause) {
+      if (!quiet) setError(errorMessage(cause));
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshInbox();
+    const timer = window.setInterval(() => void refreshInbox(true), 3_000);
+    return () => window.clearInterval(timer);
+  }, [refreshInbox]);
+  useEffect(() => {
+    if (
+      !intervention ||
+      ["resolved", "terminated"].includes(intervention.status)
+    )
+      return;
+    const timer = window.setInterval(
+      () => void loadById(intervention.intervention_id, true),
+      3_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [intervention?.intervention_id, intervention?.status, loadById]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const transition = useCallback(
+    async (
+      action: "claim" | "release" | "resume" | "heartbeat" | "terminate",
+      quiet = false,
+    ) => {
       if (!intervention || mutationInFlight.current) return;
       mutationInFlight.current = true;
-      setPending(true);
-      setError(null);
+      if (!quiet) {
+        setPending(action);
+        setError(null);
+        setNotice(null);
+      }
       try {
-        const payload = {
-          expected_lease_version: intervention.lease_version,
-          operator_id: operatorId,
-          ...(transition === "terminate" ? { resolution: "Terminated by operator." } : {}),
-        };
         const response = await fetch(
-          `/runtime/api/v1/interventions/${encodeURIComponent(intervention.intervention_id)}/${transition}`,
+          `/runtime/api/v1/interventions/${encodeURIComponent(intervention.intervention_id)}/${action}`,
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+              expected_lease_version: intervention.lease_version,
+              operator_id: operatorId,
+              ...(action === "terminate"
+                ? { resolution: "Terminated by operator." }
+                : {}),
+            }),
           },
         );
         const next = await readJson<TransitionResponse>(response);
         setResumeResult(next.result ?? null);
-        if (next.result?.status === "intervention_required" && next.result.intervention_id) {
-          const followUp = await fetch(
-            `/runtime/api/v1/interventions/${encodeURIComponent(next.result.intervention_id)}`,
-            { cache: "no-store" },
+        if (
+          next.result?.status === "intervention_required" &&
+          next.result.intervention_id
+        ) {
+          await loadById(next.result.intervention_id);
+          setNotice(
+            "Replay paused again. The new intervention is ready to claim.",
           );
-          setIntervention(await readJson<Intervention>(followUp));
-          setInterventionId(next.result.intervention_id);
         } else {
           setIntervention(next);
+          if (action === "claim") setNotice("Exclusive control acquired.");
+          if (action === "release") setNotice("Control released to the queue.");
+          if (action === "terminate")
+            setNotice("Intervention terminated and session closed.");
+          if (action === "resume" && !next.result)
+            setNotice(`Resume was not safe: ${next.explanation}`);
         }
+        await refreshInbox(true);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Runtime request failed.");
+        if (!quiet) setError(errorMessage(cause));
+        await loadById(intervention.intervention_id, true);
+        await refreshInbox(true);
       } finally {
         mutationInFlight.current = false;
-        setPending(false);
+        if (!quiet) setPending(null);
       }
     },
-    [intervention, operatorId],
+    [intervention, operatorId, loadById, refreshInbox],
   );
 
+  const ownerMatches = intervention?.control_owner === `human:${operatorId}`;
+  const leaseExpired = intervention ? expired(intervention, now) : false;
+  const owned = Boolean(ownerMatches && !leaseExpired);
+
   useEffect(() => {
-    if (!intervention || intervention.control_owner !== `human:${operatorId}`) return;
-    const controller = new AbortController();
+    setFrame(null);
+    setViewportUrl((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
+  }, [intervention?.intervention_id, owned]);
+
+  useEffect(() => {
+    if (!owned || !intervention) return;
+    const timer = window.setInterval(
+      () => void transition("heartbeat", true),
+      10_000,
+    );
+    const visible = () => {
+      if (document.visibilityState === "visible")
+        void loadById(intervention.intervention_id, true);
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [owned, intervention?.intervention_id, transition, loadById]);
+
+  useEffect(() => {
+    if (!owned || !intervention) return;
+    let cancelled = false;
     const loadFrame = async () => {
+      if (frameInFlight.current) return;
+      frameInFlight.current = true;
       try {
         const query = new URLSearchParams({
           expected_lease_version: String(intervention.lease_version),
@@ -105,59 +255,64 @@ export default function InterventionConsole() {
         });
         const response = await fetch(
           `/runtime/api/v1/interventions/${encodeURIComponent(intervention.intervention_id)}/viewport?${query}`,
-          { cache: "no-store", signal: controller.signal },
+          { cache: "no-store" },
         );
-        if (!response.ok) throw new Error("Live viewport is unavailable for this lease.");
-        const sequence = Number(response.headers.get("x-replayforge-frame-sequence"));
-        const width = Number(response.headers.get("x-replayforge-viewport-width"));
-        const height = Number(response.headers.get("x-replayforge-viewport-height"));
-        const nextClientSequence = Number(response.headers.get("x-replayforge-next-client-sequence"));
+        if (!response.ok)
+          throw new ApiError(
+            (await response.json()) as ErrorBody,
+            response.status,
+          );
+        const sequence = Number(
+          response.headers.get("x-replayforge-frame-sequence"),
+        );
+        const width = Number(
+          response.headers.get("x-replayforge-viewport-width"),
+        );
+        const height = Number(
+          response.headers.get("x-replayforge-viewport-height"),
+        );
+        const nextClientSequence = Number(
+          response.headers.get("x-replayforge-next-client-sequence"),
+        );
         if (
           ![sequence, width, height, nextClientSequence].every(
             (value) => Number.isSafeInteger(value) && value > 0,
           )
-        ) {
+        )
           throw new Error("Live viewport metadata is invalid.");
-        }
-        const nextUrl = URL.createObjectURL(await response.blob());
-        setViewportUrl((previous) => {
-          if (previous) URL.revokeObjectURL(previous);
-          return nextUrl;
-        });
-        setViewportFrame({ sequence, width, height, nextClientSequence });
-      } catch (cause) {
-        if (!controller.signal.aborted) {
-          setViewportFrame(null);
-          setViewportUrl((previous) => {
-            if (previous) URL.revokeObjectURL(previous);
-            return null;
+        const url = URL.createObjectURL(await response.blob());
+        if (cancelled) URL.revokeObjectURL(url);
+        else {
+          setViewportUrl((old) => {
+            if (old) URL.revokeObjectURL(old);
+            return url;
           });
-          setError(cause instanceof Error ? cause.message : "Viewport request failed.");
+          setFrame({ sequence, width, height, nextClientSequence });
         }
+      } catch (cause) {
+        if (!cancelled) {
+          if (!(cause instanceof ApiError) || cause.status !== 409) {
+            setError(errorMessage(cause));
+          }
+          await loadById(intervention.intervention_id, true);
+        }
+      } finally {
+        frameInFlight.current = false;
       }
     };
     void loadFrame();
-    const interval = window.setInterval(() => void loadFrame(), 2_000);
+    const timer = window.setInterval(() => void loadFrame(), 2_000);
     return () => {
-      controller.abort();
-      window.clearInterval(interval);
+      cancelled = true;
+      window.clearInterval(timer);
     };
-  }, [intervention, operatorId]);
-
-  useEffect(() => {
-    setViewportFrame(null);
-    setViewportUrl((previous) => {
-      if (previous) URL.revokeObjectURL(previous);
-      return null;
-    });
-  }, [intervention?.lease_version]);
-
-  useEffect(() => {
-    if (!intervention || intervention.control_owner !== `human:${operatorId}`) return;
-    const interval = window.setInterval(() => void requestTransition("heartbeat"), 10_000);
-    return () => window.clearInterval(interval);
-  }, [intervention, operatorId, requestTransition]);
-
+  }, [
+    owned,
+    intervention?.intervention_id,
+    intervention?.lease_version,
+    operatorId,
+    loadById,
+  ]);
   useEffect(
     () => () => {
       if (viewportUrl) URL.revokeObjectURL(viewportUrl);
@@ -167,9 +322,10 @@ export default function InterventionConsole() {
 
   const sendInput = useCallback(
     async (input: HumanInput) => {
-      if (!intervention || !viewportFrame || intervention.control_owner !== `human:${operatorId}` || mutationInFlight.current) return false;
+      if (!intervention || !frame || !owned || mutationInFlight.current)
+        return false;
       mutationInFlight.current = true;
-      setPending(true);
+      setPending("input");
       setError(null);
       try {
         const response = await fetch(
@@ -180,71 +336,79 @@ export default function InterventionConsole() {
             body: JSON.stringify({
               expected_lease_version: intervention.lease_version,
               operator_id: operatorId,
-              client_sequence: viewportFrame.nextClientSequence,
-              source_frame_sequence: viewportFrame.sequence,
-              viewport_width: viewportFrame.width,
-              viewport_height: viewportFrame.height,
+              client_sequence: frame.nextClientSequence,
+              source_frame_sequence: frame.sequence,
+              viewport_width: frame.width,
+              viewport_height: frame.height,
               input,
             }),
           },
         );
         await readJson(response);
-        setViewportFrame(null);
-        setViewportUrl((previous) => {
-          if (previous) URL.revokeObjectURL(previous);
+        setNotice("Input applied to the retained session.");
+        setFrame(null);
+        setViewportUrl((old) => {
+          if (old) URL.revokeObjectURL(old);
           return null;
         });
         return true;
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Human input was rejected.");
+        setError(errorMessage(cause));
+        await loadById(intervention.intervention_id, true);
         return false;
       } finally {
         mutationInFlight.current = false;
-        setPending(false);
+        setPending(null);
       }
     },
-    [intervention, operatorId, viewportFrame],
+    [intervention, frame, owned, operatorId, loadById],
   );
 
   function clickViewport(event: MouseEvent<HTMLImageElement>) {
-    if (!viewportFrame || pending) return;
+    if (!frame || pending) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    const x = Math.min(
-      viewportFrame.width - 1,
-      Math.max(0, Math.floor(((event.clientX - bounds.left) / bounds.width) * viewportFrame.width)),
-    );
-    const y = Math.min(
-      viewportFrame.height - 1,
-      Math.max(0, Math.floor(((event.clientY - bounds.top) / bounds.height) * viewportFrame.height)),
-    );
-    void sendInput({ kind: "pointer", x, y });
+    void sendInput({
+      kind: "pointer",
+      x: Math.min(
+        frame.width - 1,
+        Math.max(
+          0,
+          Math.floor(
+            ((event.clientX - bounds.left) / bounds.width) * frame.width,
+          ),
+        ),
+      ),
+      y: Math.min(
+        frame.height - 1,
+        Math.max(
+          0,
+          Math.floor(
+            ((event.clientY - bounds.top) / bounds.height) * frame.height,
+          ),
+        ),
+      ),
+    });
   }
-
   async function submitText(event: FormEvent) {
     event.preventDefault();
-    if (!manualText) return;
-    if (await sendInput({ kind: "text", text: manualText })) setManualText("");
+    if (manualText && (await sendInput({ kind: "text", text: manualText })))
+      setManualText("");
   }
-
-  async function load(event: FormEvent) {
+  async function directLookup(event: FormEvent) {
     event.preventDefault();
-    setPending(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        `/runtime/api/v1/interventions/${encodeURIComponent(interventionId)}`,
-        { cache: "no-store" },
-      );
-      setIntervention(await readJson<Intervention>(response));
-      setResumeResult(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Intervention lookup failed.");
-    } finally {
-      setPending(false);
-    }
+    setPending("lookup");
+    await loadById(interventionId.trim());
+    setPending(null);
   }
 
-  const owned = intervention?.control_owner === `human:${operatorId}`;
+  const claimable = intervention?.status === "open" || leaseExpired;
+  const seconds =
+    intervention && owned
+      ? Math.max(
+          0,
+          Math.ceil((Date.parse(intervention.lease_expires_at) - now) / 1000),
+        )
+      : null;
   return (
     <main>
       <header>
@@ -255,105 +419,310 @@ export default function InterventionConsole() {
         </div>
         <span className="environment">Local · synthetic data</span>
       </header>
-
-      <section className="lookup" aria-labelledby="lookup-heading">
+      <section className="operator-bar">
         <div>
-          <p className="eyebrow">Same-session handoff</p>
-          <h2 id="lookup-heading">Open an intervention</h2>
-          <p>Claims are exclusive. Every viewport request and transition uses the current lease version.</p>
+          <p className="eyebrow">Operator identity</p>
+          <p>
+            Exclusive local lease identity; this demo has no authentication
+            layer.
+          </p>
         </div>
-        <form onSubmit={load}>
-          <label>
-            Intervention ID
-            <input value={interventionId} onChange={(event) => setInterventionId(event.target.value)} required />
-          </label>
-          <label>
-            Operator ID
-            <input value={operatorId} onChange={(event) => setOperatorId(event.target.value)} required />
-          </label>
-          <button disabled={pending}>Load intervention</button>
-        </form>
+        <label>
+          Operator ID
+          <input
+            value={operatorId}
+            onChange={(event) => setOperatorId(event.target.value)}
+            disabled={Boolean(ownerMatches)}
+            required
+          />
+        </label>
       </section>
-
-      {error ? <div className="error" role="alert">{error}</div> : null}
+      {error ? (
+        <div className="error" role="alert">
+          {error}
+        </div>
+      ) : null}
+      {notice ? (
+        <div className="notice" role="status">
+          {notice}
+        </div>
+      ) : null}
       {resumeResult ? (
         <div className={`result result-${resumeResult.status}`} role="status">
-          Resume result: {resumeResult.status.replaceAll("_", " ")}
+          Replay result: {resumeResult.status.replaceAll("_", " ")}
           {resumeResult.code ? ` · ${resumeResult.code}` : ""}
         </div>
       ) : null}
-      {intervention ? (
-        <section className="workspace" aria-live="polite">
-          <div className="viewport-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Live retained browser</p>
-                <h2>Current viewport</h2>
-              </div>
-              <span className={`status status-${intervention.status}`}>{intervention.status}</span>
+      <section className="console-grid">
+        <aside className="inbox" aria-label="Active replay interventions">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Replay queue</p>
+              <h2>Active interventions</h2>
             </div>
-            <div className="viewport">
-              {owned && viewportUrl ? (
-                // The source is a short-lived same-origin blob generated from a no-store response.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={viewportUrl}
-                  alt="Current retained browser viewport; click to send a left-click"
-                  onClick={clickViewport}
-                />
-              ) : (
-                <p>{owned ? "Waiting for the first frame…" : "Claim control to view the live session."}</p>
-              )}
-            </div>
+            <span className="count">{inbox.length}</span>
           </div>
-
-          <aside>
-            <p className="eyebrow">Control lease</p>
-            <dl>
-              <div><dt>Owner</dt><dd>{intervention.control_owner}</dd></div>
-              <div><dt>Version</dt><dd>{intervention.lease_version}</dd></div>
-              <div><dt>Frame</dt><dd>{viewportFrame ? `${viewportFrame.sequence} · ${viewportFrame.width}×${viewportFrame.height}` : "—"}</dd></div>
-              <div><dt>Expires</dt><dd>{new Date(intervention.lease_expires_at).toLocaleTimeString()}</dd></div>
-              <div><dt>Run</dt><dd>{intervention.run_id}</dd></div>
-              <div><dt>Session</dt><dd>{intervention.session_id}</dd></div>
-            </dl>
-            <div className="actions">
-              <button disabled={pending || intervention.status !== "open"} onClick={() => void requestTransition("claim")}>Claim control</button>
-              <button disabled={pending || !owned} onClick={() => void requestTransition("heartbeat")}>Renew lease</button>
-              <button className="secondary" disabled={pending || !owned} onClick={() => void requestTransition("release")}>Release</button>
-              <button className="secondary" disabled={pending || !owned} onClick={() => void requestTransition("resume")}>Begin resume</button>
-              <button className="danger" disabled={pending || (!owned && intervention.status !== "open")} onClick={() => void requestTransition("terminate")}>Terminate</button>
-            </div>
-            <div className="manual-input" aria-label="Manual session input">
-              <p className="eyebrow">Manual input</p>
-              <p>Click the current frame, or send text to the control already focused in the retained session.</p>
-              <form onSubmit={submitText}>
-                <label>
-                  Text (not retained)
-                  <input
-                    value={manualText}
-                    onChange={(event) => setManualText(event.target.value)}
-                    maxLength={1000}
-                    autoComplete="off"
-                    disabled={!owned || !viewportFrame || pending}
-                  />
-                </label>
-                <button disabled={!owned || !viewportFrame || pending || !manualText}>Send text</button>
-              </form>
-              <div className="key-input">
-                <label>
-                  Navigation key
-                  <select value={manualKey} onChange={(event) => setManualKey(event.target.value as HumanKey)} disabled={!owned || !viewportFrame || pending}>
-                    {['Enter', 'Escape', 'Tab', 'Shift+Tab', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].map((key) => <option key={key}>{key}</option>)}
-                  </select>
-                </label>
-                <button disabled={!owned || !viewportFrame || pending} onClick={() => void sendInput({ kind: "key", key: manualKey })}>Send key</button>
+          <div className="inbox-list">
+            {inbox.length ? (
+              inbox.map((item) => (
+                <button
+                  key={item.intervention_id}
+                  className={`inbox-item ${intervention?.intervention_id === item.intervention_id ? "selected" : ""}`}
+                  onClick={() => void loadById(item.intervention_id)}
+                >
+                  <span className="inbox-top">
+                    <strong>
+                      {item.capability_name ?? "Replay intervention"}
+                    </strong>
+                    <span className={`status status-${item.status}`}>
+                      {expired(item, now) ? "expired" : item.status}
+                    </span>
+                  </span>
+                  <span>
+                    {item.tenant ?? "unknown tenant"} ·{" "}
+                    {item.step_id ?? "between steps"}
+                  </span>
+                  <small>{item.explanation}</small>
+                </button>
+              ))
+            ) : (
+              <p className="empty">No replay sessions need an operator.</p>
+            )}
+          </div>
+          <details className="direct-lookup">
+            <summary>Open by intervention ID</summary>
+            <form onSubmit={directLookup}>
+              <label>
+                Intervention ID
+                <input
+                  value={interventionId}
+                  onChange={(event) => setInterventionId(event.target.value)}
+                  required
+                />
+              </label>
+              <button disabled={pending === "lookup"}>Open</button>
+            </form>
+          </details>
+        </aside>
+        <section className="workspace" aria-live="polite">
+          {intervention ? (
+            <>
+              <div className="context-panel">
+                <div>
+                  <p className="eyebrow">Paused task</p>
+                  <h2>{intervention.capability_name ?? "Intervention"}</h2>
+                  <p>{intervention.task_summary}</p>
+                </div>
+                <div className="context-grid">
+                  <span>
+                    <b>Reason</b>
+                    {intervention.explanation}
+                  </span>
+                  <span>
+                    <b>Trigger</b>
+                    <code>{intervention.trigger_code}</code>
+                  </span>
+                  <span>
+                    <b>Step</b>
+                    <code>{intervention.step_id ?? "—"}</code>
+                  </span>
+                  <span>
+                    <b>Surface</b>
+                    {intervention.application_family} / {intervention.tenant} /{" "}
+                    {intervention.surface_route}
+                  </span>
+                </div>
               </div>
+              <div className="session-grid">
+                <div className="viewport-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="eyebrow">Same retained browser</p>
+                      <h2>Live viewport</h2>
+                    </div>
+                    <span className={`status status-${intervention.status}`}>
+                      {leaseExpired ? "lease expired" : intervention.status}
+                    </span>
+                  </div>
+                  <div className="viewport">
+                    {owned && viewportUrl ? (
+                      <img
+                        src={viewportUrl}
+                        alt="Current retained browser viewport; click to send a left-click"
+                        onClick={clickViewport}
+                      />
+                    ) : (
+                      <p>
+                        {leaseExpired
+                          ? "The lease expired. Reclaim it to continue."
+                          : ownerMatches
+                            ? "Waiting for the latest frame…"
+                            : "Claim control to view the live session."}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <aside className="controls">
+                  <p className="eyebrow">Control lease</p>
+                  <dl>
+                    <div>
+                      <dt>Owner</dt>
+                      <dd>{intervention.control_owner}</dd>
+                    </div>
+                    <div>
+                      <dt>Lease</dt>
+                      <dd>
+                        v{intervention.lease_version}
+                        {seconds !== null ? ` · ${seconds}s` : ""}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Frame</dt>
+                      <dd>
+                        {frame
+                          ? `${frame.sequence} · ${frame.width}×${frame.height}`
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Run</dt>
+                      <dd>{intervention.run_id}</dd>
+                    </div>
+                  </dl>
+                  <div className="actions">
+                    <button
+                      disabled={Boolean(pending) || !claimable}
+                      onClick={() => void transition("claim")}
+                    >
+                      {leaseExpired ? "Reclaim expired lease" : "Claim control"}
+                    </button>
+                    <button
+                      className="secondary"
+                      disabled={Boolean(pending) || !owned}
+                      onClick={() => void transition("release")}
+                    >
+                      Release control
+                    </button>
+                    <button
+                      className="secondary"
+                      disabled={Boolean(pending) || !owned}
+                      onClick={() => void transition("resume")}
+                    >
+                      {pending === "resume"
+                        ? "Validating…"
+                        : "Resume automation"}
+                    </button>
+                    {!confirmTerminate ? (
+                      <button
+                        className="danger"
+                        disabled={
+                          Boolean(pending) ||
+                          (!owned && intervention.status !== "open")
+                        }
+                        onClick={() => setConfirmTerminate(true)}
+                      >
+                        Terminate session
+                      </button>
+                    ) : (
+                      <div className="confirm">
+                        <p>Close the retained session permanently?</p>
+                        <button
+                          className="danger"
+                          onClick={() => void transition("terminate")}
+                        >
+                          Confirm terminate
+                        </button>
+                        <button
+                          className="secondary"
+                          onClick={() => setConfirmTerminate(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="manual-input">
+                    <p className="eyebrow">Manual input</p>
+                    <p>
+                      Click the frame, type into the focused control, or send a
+                      navigation key.
+                    </p>
+                    <form onSubmit={submitText}>
+                      <label>
+                        Text (not retained)
+                        <input
+                          value={manualText}
+                          onChange={(event) =>
+                            setManualText(event.target.value)
+                          }
+                          maxLength={1000}
+                          autoComplete="off"
+                          disabled={!owned || !frame || Boolean(pending)}
+                        />
+                      </label>
+                      <button
+                        disabled={
+                          !owned || !frame || Boolean(pending) || !manualText
+                        }
+                      >
+                        Send
+                      </button>
+                    </form>
+                    <div className="key-input">
+                      <label>
+                        Navigation key
+                        <select
+                          value={manualKey}
+                          onChange={(event) =>
+                            setManualKey(event.target.value as HumanKey)
+                          }
+                          disabled={!owned || !frame || Boolean(pending)}
+                        >
+                          {[
+                            "Enter",
+                            "Escape",
+                            "Tab",
+                            "Shift+Tab",
+                            "Backspace",
+                            "Delete",
+                            "ArrowUp",
+                            "ArrowDown",
+                            "ArrowLeft",
+                            "ArrowRight",
+                          ].map((key) => (
+                            <option key={key}>{key}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        disabled={!owned || !frame || Boolean(pending)}
+                        onClick={() =>
+                          void sendInput({ kind: "key", key: manualKey })
+                        }
+                      >
+                        Send key
+                      </button>
+                    </div>
+                  </div>
+                  <p className="boundary">
+                    Input is accepted once against the current lease and frame.
+                    Typed text is omitted from audit evidence.
+                  </p>
+                </aside>
+              </div>
+            </>
+          ) : (
+            <div className="workspace-empty">
+              <p className="eyebrow">Same-session handoff</p>
+              <h2>Select an intervention</h2>
+              <p>
+                Choose a paused replay. Context is visible before claiming; the
+                live viewport is restricted to its lease holder.
+              </p>
             </div>
-            <p className="boundary">Input is accepted once against the latest frame and current lease. Typed text is never written to the audit log.</p>
-          </aside>
+          )}
         </section>
-      ) : null}
+      </section>
     </main>
   );
 }

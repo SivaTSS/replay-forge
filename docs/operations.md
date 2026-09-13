@@ -27,6 +27,7 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | `POST` | `/api/v1/capabilities/validate` | Parses, validates, and hashes supplied YAML |
 | `POST` | `/api/v1/capabilities/{id}/replays` | Runs replay synchronously; `202` only if paused |
 | `POST` | `/api/v1/capabilities/{id}/invoke` | Alias of the replay endpoint |
+| `GET` | `/api/v1/interventions?run_mode=replay` | Lists active replay interventions oldest first |
 | `GET` | `/api/v1/interventions/{id}` | Reads intervention and current lease |
 | `POST` | `/api/v1/interventions/{id}/claim` | Transfers paused ownership to one operator |
 | `POST` | `/api/v1/interventions/{id}/release` | Returns human ownership to paused state |
@@ -109,7 +110,9 @@ and Summit, and writes its own immutable artifact. No post-discovery reviewer ex
 | Unknown capability/version | `404 capability_not_found` |
 | Target unavailable at readiness | `503 runtime_not_ready` |
 | Discovery dependencies unavailable | `503 discovery_not_ready` |
-| Stale lease, state, or owner | `409 intervention_transition_conflict` |
+| Stale lease version or state | `409 intervention_transition_conflict` |
+| Wrong human owner | `403 intervention_forbidden` |
+| Expired human lease | `409 control_lease_expired` |
 | Stale frame/client input | `409 human_input_conflict` |
 | Valid replay failure | HTTP `200` with typed `failure` result |
 | Automation paused | HTTP `202` with `intervention_required` |

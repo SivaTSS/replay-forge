@@ -23,6 +23,10 @@ class LeaseConflictError(RuntimeError):
     """The caller acted on stale ownership or version state."""
 
 
+class LeaseExpiredError(LeaseConflictError):
+    """The active owner stopped renewing its control lease."""
+
+
 class LeaseNotFoundError(KeyError):
     """No control lease exists for the requested session."""
 
@@ -122,6 +126,31 @@ class ControlLeaseService:
             PAUSED_OWNER,
             ControlOwner(OwnerKind.HUMAN, operator_id),
             parsed_intervention_id,
+            require_unexpired=False,
+        )
+
+    def reclaim_expired(
+        self,
+        session_id: str,
+        expected_version: int,
+        intervention_id: str,
+        operator_id: str,
+    ) -> ControlLease:
+        current = self.repository.get(session_id)
+        parsed_intervention_id = parse_id(intervention_id, EntityKind.INTERVENTION)
+        if current.version != expected_version or current.intervention_id != parsed_intervention_id:
+            raise LeaseConflictError("control lease version or intervention is stale")
+        if current.owner.kind is not OwnerKind.HUMAN:
+            raise LeaseConflictError("only an expired human lease can be reclaimed")
+        if current.expires_at > self.clock.now():
+            raise LeaseConflictError("the current human control lease is still active")
+        return self._transfer(
+            session_id,
+            expected_version,
+            current.owner,
+            ControlOwner(OwnerKind.HUMAN, operator_id),
+            parsed_intervention_id,
+            require_unexpired=False,
         )
 
     def release(self, session_id: str, expected_version: int, operator_id: str) -> ControlLease:
@@ -151,7 +180,14 @@ class ControlLeaseService:
     def terminate(
         self, session_id: str, expected_version: int, expected_owner: ControlOwner
     ) -> ControlLease:
-        return self._transfer(session_id, expected_version, expected_owner, NO_OWNER, None)
+        return self._transfer(
+            session_id,
+            expected_version,
+            expected_owner,
+            NO_OWNER,
+            None,
+            require_unexpired=expected_owner != PAUSED_OWNER,
+        )
 
     def assert_can_act(
         self, session_id: str, expected_version: int, owner: ControlOwner
@@ -160,7 +196,7 @@ class ControlLeaseService:
         if current.version != expected_version or current.owner != owner:
             raise LeaseConflictError("control lease version or owner is stale")
         if current.expires_at <= self.clock.now():
-            raise LeaseConflictError("control lease has expired")
+            raise LeaseExpiredError("control lease has expired")
         return current
 
     def heartbeat(
@@ -183,8 +219,14 @@ class ControlLeaseService:
         expected_owner: ControlOwner,
         next_owner: ControlOwner,
         intervention_id: EntityId | None,
+        *,
+        require_unexpired: bool = True,
     ) -> ControlLease:
-        current = self.assert_can_act(session_id, expected_version, expected_owner)
+        current = self.repository.get(session_id)
+        if current.version != expected_version or current.owner != expected_owner:
+            raise LeaseConflictError("control lease version or owner is stale")
+        if require_unexpired and current.expires_at <= self.clock.now():
+            raise LeaseExpiredError("control lease has expired")
         now = self.clock.now()
         replacement = ControlLease(
             session_id=current.session_id,

@@ -67,7 +67,11 @@ stateDiagram-v2
 
 Every mutation supplies the expected lease version and owner. The repository changes it with compare-and-swap. A stale operator tab, duplicate request, expired lease, or automation action after pause is rejected.
 
+An active human lease cannot be stolen. If its heartbeat expires, the claim transition may atomically assign the session to a new operator and increment the version. A passive `automation_paused` lease remains claimable after its timestamp so queue delay does not strand the retained browser.
+
 ## Same-session handoff
+
+The operator does not copy an opaque ID from a terminal. The console polls the active replay inbox and shows safe routing context before control is claimed: capability and version, application and tenant, interrupted step, normalized route, trigger, and explanation. Invocation inputs and extracted values are absent. The unmasked live viewport remains restricted to the current lease holder.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -150,8 +154,11 @@ The operator viewport is live and therefore unmasked for the authorized lease ho
 | Risky replay action | Allow with logging, deny all, human intervention | Sensitive → human; irreversible → deny | Demonstrates safe progress without pretending irreversible recovery is solved |
 | Evidence redaction | Redact at display, redact after storage, redact before write | Before write | Sensitive bytes never enter durable evidence |
 | Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, form state, and the assignment's required seam |
+| Operator routing | Require an ID from logs, active inbox | Replay inbox + optional direct ID | Makes a paused session discoverable without adding a general run-management UI |
 | Ownership | UI convention, mutex only, versioned lease | Versioned lease + CAS | Makes stale and concurrent commands explicit conflicts |
+| Identity | Pretend login, external identity provider, local label | Local operator label | Keeps the trust boundary honest; real authentication belongs with deployment authorization |
 | Transport | WebSocket/CDP stream, headed browser, HTTP polling | HTTP polling | Minimal real control path; sequence checks compensate for stale frames |
+| UI verification | Mocked network calls, real browser path | Real browser path | Proves the console drives the retained runtime rather than only rendering mocked states |
 | Persistence | Database transactions, process memory | Memory for control metadata | Fits the local slice; restart loses interventions and is documented |
 
 ## Known limits

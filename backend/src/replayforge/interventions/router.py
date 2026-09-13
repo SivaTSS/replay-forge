@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from threading import Lock
 
-from replayforge.interventions.models import Intervention, InterventionStatus
+from replayforge.interventions.models import (
+    Intervention,
+    InterventionContext,
+    InterventionRunMode,
+    InterventionStatus,
+)
 from replayforge.shared.clock import Clock
 from replayforge.shared.ids import EntityKind, parse_id
 from replayforge.surfaces.models import NormalizedObservation
@@ -35,13 +40,15 @@ class InMemoryInterventionRouter:
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
+        context: InterventionContext | None = None,
+        explanation: str | None = None,
     ) -> str:
         parsed_intervention_id = parse_id(intervention_id, EntityKind.INTERVENTION)
         parsed_run_id = parse_id(run_id, EntityKind.RUN)
         parsed_session_id = parse_id(session_id, EntityKind.SESSION)
         if observation.session_id != parsed_session_id:
             raise ValueError("observation does not belong to the intervention session")
-        explanation = (
+        safe_explanation = explanation or (
             f"Automation paused safely at {step_id}." if step_id else "Automation paused safely."
         )
         intervention = Intervention(
@@ -49,9 +56,10 @@ class InMemoryInterventionRouter:
             run_id=parsed_run_id,
             session_id=parsed_session_id,
             trigger_code=code,
-            explanation=explanation,
+            explanation=safe_explanation,
             status=InterventionStatus.OPEN,
             created_at=self.clock.now(),
+            context=context,
         )
         with self._lock:
             if intervention_id in self._interventions:
@@ -81,6 +89,29 @@ class InMemoryInterventionRouter:
                 for intervention in self._interventions.values()
                 if intervention.status is InterventionStatus.OPEN
             )
+
+    def list_active(
+        self, run_mode: InterventionRunMode | None = None
+    ) -> tuple[Intervention, ...]:
+        active = {
+            InterventionStatus.OPEN,
+            InterventionStatus.CLAIMED,
+            InterventionStatus.RESUMING,
+        }
+        with self._lock:
+            matches = (
+                intervention
+                for intervention in self._interventions.values()
+                if intervention.status in active
+                and (
+                    run_mode is None
+                    or (
+                        intervention.context is not None
+                        and intervention.context.run_mode is run_mode
+                    )
+                )
+            )
+            return tuple(sorted(matches, key=lambda item: item.created_at))
 
     def compare_and_swap(
         self,

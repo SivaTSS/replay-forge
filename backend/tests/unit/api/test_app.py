@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+import pytest
 from fastapi.testclient import TestClient
 
 from replayforge.api.app import create_app
@@ -10,7 +11,7 @@ from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.capabilities.serialization import dump_artifact_yaml
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
-from replayforge.interventions.leases import LeaseConflictError
+from replayforge.interventions.leases import LeaseConflictError, LeaseExpiredError
 from replayforge.interventions.models import (
     ControlLease,
     ControlOwner,
@@ -22,7 +23,11 @@ from replayforge.interventions.models import (
     OwnerKind,
 )
 from replayforge.interventions.router import InterventionNotFoundError
-from replayforge.interventions.service import InterventionResume, InterventionTransition
+from replayforge.interventions.service import (
+    InterventionAuthorizationError,
+    InterventionResume,
+    InterventionTransition,
+)
 from replayforge.runs.results import (
     CapabilityReference,
     RunResult,
@@ -97,6 +102,9 @@ class FakeInterventionInvoker:
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.transition
+
+    def list_active(self, run_mode: object = None) -> tuple[InterventionTransition, ...]:
+        return (self.transition,)
 
     def claim(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
@@ -378,6 +386,22 @@ def test_intervention_claim_returns_new_owner_and_lease_version() -> None:
     assert response.json()["lease_version"] == 3
 
 
+def test_intervention_inbox_returns_active_transition_context() -> None:
+    transition = intervention_transition()
+    response = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=FakeInterventionInvoker(transition),
+            )
+        )
+    ).get("/api/v1/interventions", params={"run_mode": "replay"})
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["intervention_id"] == str(transition.intervention.id)
+    assert response.json()["items"][0]["trigger_code"] == "unexpected_dialog"
+
+
 def test_intervention_viewport_is_non_cacheable_png() -> None:
     transition = intervention_transition()
     api = TestClient(
@@ -576,6 +600,41 @@ def test_stale_intervention_error_is_sanitized() -> None:
     assert response.status_code == 409
     assert response.json()["code"] == "intervention_transition_conflict"
     assert "internal current owner" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("raised", "status", "code"),
+    [
+        (InterventionAuthorizationError("private owner"), 403, "intervention_forbidden"),
+        (LeaseExpiredError("private expiry"), 409, "control_lease_expired"),
+    ],
+)
+def test_owner_and_expiry_failures_have_actionable_public_codes(
+    raised: Exception, status: int, code: str
+) -> None:
+    class RejectingInvoker(FakeInterventionInvoker):
+        def heartbeat(
+            self, intervention_id: str, expected_lease_version: int, operator_id: str
+        ) -> InterventionTransition:
+            raise raised
+
+    transition = intervention_transition()
+    api = TestClient(
+        create_app(
+            ApiServices(
+                FakeReplayInvoker(),
+                intervention_invoker=RejectingInvoker(transition),
+            )
+        )
+    )
+    response = api.post(
+        f"/api/v1/interventions/{transition.intervention.id}/heartbeat",
+        json={"expected_lease_version": 3, "operator_id": "operator-7"},
+    )
+
+    assert response.status_code == status
+    assert response.json()["code"] == code
+    assert "private" not in response.text
 
 
 def test_intervention_read_release_resume_and_terminate_contracts() -> None:

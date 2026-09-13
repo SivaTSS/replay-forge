@@ -36,6 +36,7 @@ from replayforge.interventions.models import (
     HumanInputConflictError,
     HumanInputReceipt,
     InterventionFrame,
+    InterventionRunMode,
     InterventionStatus,
     OwnerKind,
 )
@@ -318,6 +319,11 @@ class RuntimeInterventionService:
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.coordinator.get(intervention_id)
+
+    def list_active(
+        self, run_mode: InterventionRunMode | None = None
+    ) -> tuple[InterventionTransition, ...]:
+        return self.coordinator.list_active(run_mode)
 
     def claim(
         self, intervention_id: str, expected_lease_version: int, operator_id: str

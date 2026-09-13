@@ -20,7 +20,11 @@ from replayforge.capabilities.models import (
 from replayforge.capabilities.values import ContractValidationError, validate_object
 from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.interventions.leases import ControlLeaseService
-from replayforge.interventions.models import AUTOMATION_OWNER
+from replayforge.interventions.models import (
+    AUTOMATION_OWNER,
+    InterventionContext,
+    InterventionRunMode,
+)
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import (
     ActionContext,
@@ -366,7 +370,13 @@ class ReplayEngine:
                         session=session,
                     )
                 return self._intervene(
-                    request, session, step.id, decision.reason_code, observation, lease_version
+                    request,
+                    session,
+                    step.id,
+                    decision.reason_code,
+                    observation,
+                    lease_version,
+                    decision.explanation,
                 )
 
             self.recorder.record("action_intent", request.run_id, step_id=step.id)
@@ -717,6 +727,7 @@ class ReplayEngine:
                 error.code,
                 session.observe(),
                 lease_version,
+                error.safe_message,
             )
         return self._failure(
             request,
@@ -737,6 +748,7 @@ class ReplayEngine:
         code: str,
         observation: NormalizedObservation,
         lease_version: int,
+        explanation: str | None = None,
     ) -> InterventionRequiredResult:
         from replayforge.shared.ids import EntityKind, new_id
 
@@ -750,6 +762,18 @@ class ReplayEngine:
             code=code,
             step_id=step_id,
             observation=observation,
+            explanation=explanation,
+            context=InterventionContext(
+                run_mode=InterventionRunMode.REPLAY,
+                application_family=request.artifact.capability.application_family,
+                tenant=request.tenant,
+                task_summary=request.artifact.capability.description,
+                capability_id=request.artifact.capability.id,
+                capability_version=request.artifact.capability.version,
+                capability_name=request.artifact.capability.name,
+                step_id=step_id,
+                surface_route=observation.route,
+            ),
         )
         if routed_id != intervention_id:
             raise RuntimeError("intervention router must preserve the reserved identity")

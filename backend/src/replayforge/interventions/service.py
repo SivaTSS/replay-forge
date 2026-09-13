@@ -10,7 +10,9 @@ from replayforge.interventions.models import (
     ControlLease,
     ControlOwner,
     Intervention,
+    InterventionRunMode,
     InterventionStatus,
+    InterventionTransitionError,
     OwnerKind,
 )
 from replayforge.interventions.router import InMemoryInterventionRouter
@@ -43,17 +45,39 @@ class InterventionCoordinator:
         lease = self.leases.repository.get(str(intervention.session_id))
         return InterventionTransition(intervention, lease)
 
+    def list_active(
+        self, run_mode: InterventionRunMode | None = None
+    ) -> tuple[InterventionTransition, ...]:
+        return tuple(
+            InterventionTransition(
+                intervention,
+                self.leases.repository.get(str(intervention.session_id)),
+            )
+            for intervention in self.interventions.list_active(run_mode)
+        )
+
     def claim(
         self, intervention_id: str, expected_lease_version: int, operator_id: str
     ) -> InterventionTransition:
         current = self.interventions.get(intervention_id)
-        replacement = current.claim(operator_id)
-        lease = self.leases.claim(
-            str(current.session_id), expected_lease_version, intervention_id, operator_id
-        )
-        updated = self.interventions.compare_and_swap(
-            intervention_id, InterventionStatus.OPEN, replacement
-        )
+        if current.status is InterventionStatus.OPEN:
+            replacement = current.claim(operator_id)
+            lease = self.leases.claim(
+                str(current.session_id), expected_lease_version, intervention_id, operator_id
+            )
+            updated = self.interventions.compare_and_swap(
+                intervention_id, InterventionStatus.OPEN, replacement
+            )
+        elif current.status is InterventionStatus.CLAIMED:
+            replacement = current.reassign(operator_id)
+            lease = self.leases.reclaim_expired(
+                str(current.session_id), expected_lease_version, intervention_id, operator_id
+            )
+            updated = self.interventions.compare_and_swap(
+                intervention_id, InterventionStatus.CLAIMED, replacement
+            )
+        else:
+            raise InterventionTransitionError("only an open or expired claim can be claimed")
         return InterventionTransition(updated, lease)
 
     def release(

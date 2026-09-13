@@ -35,7 +35,11 @@ from replayforge.discovery.models import (
 )
 from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelProviderError
 from replayforge.interventions.leases import ControlLeaseService
-from replayforge.interventions.models import AUTOMATION_OWNER
+from replayforge.interventions.models import (
+    AUTOMATION_OWNER,
+    InterventionContext,
+    InterventionRunMode,
+)
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import (
     ActionContext,
@@ -581,6 +585,14 @@ class DiscoveryEngine:
             code=code,
             step_id=step_id,
             observation=observation,
+            context=InterventionContext(
+                run_mode=InterventionRunMode.DISCOVERY,
+                application_family=request.application_family,
+                tenant=request.tenant,
+                task_summary=request.goal,
+                step_id=step_id,
+                surface_route=observation.route,
+            ),
         )
         if routed_id != intervention_id:
             raise RuntimeError("intervention router must preserve the reserved identity")

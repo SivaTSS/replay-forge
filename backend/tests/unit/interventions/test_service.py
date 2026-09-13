@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -106,6 +106,41 @@ def test_heartbeat_rotates_current_human_lease() -> None:
     assert heartbeat.lease.owner.value == "human:operator-7"
     with pytest.raises(ValueError, match="does not own"):
         service.heartbeat(intervention_id, heartbeat.lease.version, "operator-8")
+
+
+def test_expired_human_claim_can_be_reassigned_but_active_claim_cannot() -> None:
+    service, intervention_id = coordinator()
+    claimed = service.claim(intervention_id, 2, "operator-7")
+
+    with pytest.raises(LeaseConflictError, match="still active"):
+        service.claim(intervention_id, claimed.lease.version, "operator-8")
+
+    later_leases = ControlLeaseService(
+        service.leases.repository,
+        FrozenClock(claimed.lease.expires_at + timedelta(seconds=1)),
+    )
+    later = InterventionCoordinator(service.interventions, later_leases)
+    reassigned = later.claim(intervention_id, claimed.lease.version, "operator-8")
+
+    assert reassigned.intervention.operator_id == "operator-8"
+    assert reassigned.lease.owner.value == "human:operator-8"
+    assert reassigned.lease.version == claimed.lease.version + 1
+
+
+def test_paused_intervention_remains_claimable_after_passive_lease_expiry() -> None:
+    service, intervention_id = coordinator()
+    paused = service.get(intervention_id).lease
+    later = InterventionCoordinator(
+        service.interventions,
+        ControlLeaseService(
+            service.leases.repository,
+            FrozenClock(paused.expires_at + timedelta(seconds=1)),
+        ),
+    )
+
+    claimed = later.claim(intervention_id, paused.version, "operator-7")
+
+    assert claimed.lease.owner.value == "human:operator-7"
 
 
 @pytest.mark.parametrize("claimed", [False, True])

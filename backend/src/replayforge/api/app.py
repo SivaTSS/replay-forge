@@ -20,6 +20,7 @@ from replayforge.api.contracts import (
     HealthResponse,
     HumanInputRequest,
     HumanInputResponse,
+    InterventionListResponse,
     InterventionTransitionResponse,
     KeyInputPayload,
     LeaseTransitionRequest,
@@ -37,10 +38,15 @@ from replayforge.capabilities.serialization import (
     load_artifact_yaml,
 )
 from replayforge.discovery.models import DiscoverySuccess
-from replayforge.interventions.leases import LeaseConflictError, LeaseNotFoundError
+from replayforge.interventions.leases import (
+    LeaseConflictError,
+    LeaseExpiredError,
+    LeaseNotFoundError,
+)
 from replayforge.interventions.models import (
     HumanInputCommand,
     HumanInputConflictError,
+    InterventionRunMode,
     InterventionTransitionError,
 )
 from replayforge.interventions.router import (
@@ -115,12 +121,13 @@ def create_app(services: ApiServices) -> FastAPI:
     for not_found_error in (InterventionNotFoundError, LeaseNotFoundError):
         app.add_exception_handler(not_found_error, _intervention_not_found)
     app.add_exception_handler(HumanInputConflictError, _human_input_conflict)
+    app.add_exception_handler(LeaseExpiredError, _lease_expired)
+    app.add_exception_handler(InterventionAuthorizationError, _intervention_forbidden)
     app.add_exception_handler(DiscoverySuiteError, _discovery_suite_conflict)
     for conflict_error in (
         LeaseConflictError,
         InterventionConflictError,
         InterventionTransitionError,
-        InterventionAuthorizationError,
     ):
         app.add_exception_handler(conflict_error, _intervention_conflict)
 
@@ -255,6 +262,18 @@ def create_app(services: ApiServices) -> FastAPI:
     @app.post("/api/v1/capabilities/{capability_id}/invoke")
     def invoke(capability_id: str, body: ReplayInvocation) -> JSONResponse:
         return replay(capability_id, body)
+
+    @app.get("/api/v1/interventions", response_model=InterventionListResponse)
+    def list_interventions(
+        request: Request,
+        run_mode: InterventionRunMode = InterventionRunMode.REPLAY,
+    ) -> InterventionListResponse | JSONResponse:
+        invoker = _intervention_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return InterventionListResponse(
+            items=tuple(_transition_response(item) for item in invoker.list_active(run_mode))
+        )
 
     @app.get(
         "/api/v1/interventions/{intervention_id}",
@@ -453,6 +472,26 @@ async def _intervention_conflict(request: Request, error: Exception) -> JSONResp
     )
 
 
+async def _intervention_forbidden(request: Request, error: Exception) -> JSONResponse:
+    del error
+    return _error_response(
+        request,
+        status_code=403,
+        code="intervention_forbidden",
+        message="The operator does not own this intervention.",
+    )
+
+
+async def _lease_expired(request: Request, error: Exception) -> JSONResponse:
+    del error
+    return _error_response(
+        request,
+        status_code=409,
+        code="control_lease_expired",
+        message="The operator lease expired. Reclaim the intervention to continue.",
+    )
+
+
 async def _human_input_conflict(request: Request, error: Exception) -> JSONResponse:
     del error
     return _error_response(
@@ -500,6 +539,7 @@ def _discovery_suite_invoker(request: Request, services: ApiServices) -> Any:
 def _transition_response(
     transition: InterventionTransition,
 ) -> InterventionTransitionResponse:
+    context = transition.intervention.context
     return InterventionTransitionResponse(
         intervention_id=str(transition.intervention.id),
         run_id=str(transition.intervention.run_id),
@@ -508,4 +548,16 @@ def _transition_response(
         control_owner=transition.lease.owner.value,
         lease_version=transition.lease.version,
         lease_expires_at=transition.lease.expires_at.isoformat().replace("+00:00", "Z"),
+        run_mode=context.run_mode.value if context is not None else None,
+        application_family=context.application_family if context is not None else None,
+        tenant=context.tenant if context is not None else None,
+        task_summary=context.task_summary if context is not None else None,
+        capability_id=context.capability_id if context is not None else None,
+        capability_version=context.capability_version if context is not None else None,
+        capability_name=context.capability_name if context is not None else None,
+        step_id=context.step_id if context is not None else None,
+        trigger_code=transition.intervention.trigger_code,
+        explanation=transition.intervention.explanation,
+        surface_route=context.surface_route if context is not None else None,
+        created_at=transition.intervention.created_at.isoformat().replace("+00:00", "Z"),
     )

@@ -20,6 +20,7 @@ from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
 )
+from replayforge.interventions.models import InterventionContext
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import Risk
@@ -219,6 +220,7 @@ class MemoryRecorder:
 @dataclass
 class MemoryInterventionRouter:
     created: list[str] = field(default_factory=list)
+    contexts: list[InterventionContext | None] = field(default_factory=list)
 
     def create(
         self,
@@ -229,8 +231,12 @@ class MemoryInterventionRouter:
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
+        context: InterventionContext | None = None,
+        explanation: str | None = None,
     ) -> str:
+        del run_id, session_id, code, step_id, observation, explanation
         self.created.append(intervention_id)
+        self.contexts.append(context)
         return intervention_id
 
 

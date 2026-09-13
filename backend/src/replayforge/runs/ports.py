@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
+from replayforge.interventions.models import InterventionContext
 from replayforge.surfaces.models import NormalizedObservation
 
 
@@ -39,4 +40,6 @@ class InterventionRouter(Protocol):
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
+        context: InterventionContext | None = None,
+        explanation: str | None = None,
     ) -> str: ...
