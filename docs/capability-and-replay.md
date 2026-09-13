@@ -9,7 +9,7 @@ raw model exchange       recorded successful trace       published capability
      discarded        ───────── compiler ─────────►   typed, hashed, reviewable
 ```
 
-An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click coordinate. The primary example is [`3.1.0.yaml`](../capabilities/member.lookup_savings_balance/3.1.0.yaml); its Pydantic definition is [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py). `3.0.0.yaml` remains the immutable original visual-terminal fixture.
+An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click coordinate. The primary example is [`3.2.0.yaml`](../capabilities/member.lookup_savings_balance/3.2.0.yaml); its Pydantic definition is [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py). `3.0.0.yaml` and `3.1.0.yaml` remain immutable regression fixtures.
 
 ## Shape
 
@@ -50,23 +50,33 @@ A target is a description, a scope, ordered candidates, and required state.
 
 ```yaml
 target:
-  description: Search button text
+  description: Rendered Search action
   registered_risk: read_only
   visual_candidates:
-    - strategy: ocr_text
+    - strategy: rendered_text
       value: Search
       match: exact
-      minimum_confidence: 0.85
+```
+
+The geometry-free `3.2.0` artifact uses the same shape for all durable targets:
+
+```yaml
+target:
+  description: Value associated with the rendered Currency label
+  visual_candidates:
+    - strategy: rendered_field_value
+      label: Currency
+      label_match: exact
 ```
 
 Resolution is deterministic:
 
 ```text
-for each visual candidate, in artifact order
-  → capture a fresh screenshot
-  → enforce search bounds, confidence and exactly one match
-  → return a transient region handle
-otherwise try optional semantic candidates in order
+for each rendered candidate, in artifact order
+  → capture a fresh CSS-pixel screenshot
+  → rebuild OCR phrases and frame-local edge components
+  → enforce policy budgets and exactly one semantic match
+  → return a transient region handle tied to the frame hash
 otherwise → target_absent or target_ambiguous
 ```
 
@@ -77,28 +87,31 @@ The resolver never asks a model, selects the first ambiguous result, or clicks a
 | Option | Outcome | Reason |
 |---|---|---|
 | Persisted coordinates | Rejected | Not stable across viewport and layout changes |
-| OCR text | **Chosen for named controls** | Human-readable and exact on rendered pixels |
-| OCR-relative region | **Chosen for fields and values** | Recomputes geometry from a fresh text anchor |
-| Edge template | **Chosen for icon-only controls** | Palette-reduced, multi-scale, hash-verified, and uniqueness-gated |
+| OCR text | **Chosen for named actions and conditions** | Human-readable identity on rendered pixels |
+| Saved OCR-relative region | Rejected | Stores layout geometry and breaks under reflow |
+| Label-to-control relation | **Chosen for text inputs** | Uses the current label and detected control component |
+| Label-to-value relation | **Chosen for extraction** | Supports horizontal and stacked field layouts without offsets |
+| Group label + edge signature | **Chosen for repeated icon actions** | Content-addressed identity plus semantic row context |
 | Role/label + iframe scope | Optional fallback | Precise when a trustworthy semantic surface exists |
 | Generated CSS selector | Supported but not primary | Often encodes incidental markup |
 
-Coordinates exist only at discovery time for an icon bounding box. Before the action is recorded, the adapter crops an edge representation, stores it under `asset://sha256/<digest>`, and replaces the coordinate candidate with an `image_anchor`. The compiler rejects a coordinate-only recording.
+Coordinates exist only as ephemeral browser input dispatch values. Discovery may observe a transient icon region to create a signature, but the compiler publishes only rendered candidates; schema `1.3` rejects coordinates, normalized regions, and target-specific tuning fields recursively.
 
 ### Contextual image anchors
 
-Repeated-row interfaces need more than a global icon match. Version `3.1.0` first resolves the rendered `Savings` label with OCR, derives a search rectangle from that fresh anchor, and only then searches for the hashed chevron inside the rectangle. Three identical account icons therefore remain safe: a global template search is ambiguous, while the contextual search has one permitted match. The context and relative region are part of the typed artifact; the resulting click region is still transient and tied to the current frame hash.
+Repeated-row interfaces need more than a global icon match. Version `3.2.0` first resolves the rendered `Savings` label with OCR, identifies same-group components in the current frame, then compares each component with the hashed signature. Three identical account icons therefore remain safe: a global match is ambiguous, while the semantic group plus signature has one permitted match. The resulting click region is transient and tied to the current frame hash.
 
 | Repeated-icon option | Decision | Reason |
 |---|---|---|
 | Click the first template match | Rejected | Identical Checking, Savings, and loan actions make ordinal selection unsafe |
 | Persist the Savings-row coordinates | Rejected | Layout and viewport changes invalidate the recording |
 | Give each icon a different shape | Rejected | Hides the ambiguity instead of solving it |
-| OCR anchor + relative template region | **Chosen** | Preserves pixel-first operation while binding the icon to the named business row |
+| OCR anchor + saved relative template region | Rejected | Relative geometry still leaks recording-time layout |
+| OCR group label + current-frame component graph | **Chosen** | Binds the icon to the named business row without persisted geometry |
 
 Template matching extracts a bounded set of spatial peaks per scale and merges detections referring to the same physical icon. A close second match returns `target_ambiguous`; no first-match shortcut is used.
 
-The committed calibration keeps a `0.75` score floor and evaluates scales `0.70–1.25` in `0.025` steps. The lower bound is measured from the compact `1024×640` rendering (the chevron is approximately `0.775×` the logical template), not a blanket confidence reduction.
+The reviewed vision policy keeps a `0.72` normalized-signature floor, a `0.08` uniqueness margin, a `64×64` canonical canvas, and bounded pixel/time budgets. DPR variation is handled by CSS-pixel screenshots and canonical normalization—not by storing a scale range in the artifact.
 
 ## Replay pipeline
 
@@ -171,9 +184,10 @@ Retry occurs only when the artifact names the error, attempts remain, and the pr
 | `1.0.2` | Hard-failure demonstration | Selects permission denial; classifies expected/observed state |
 | `2.0.0` | Handoff demonstration | Marks search submission sensitive; policy pauses before click |
 | `3.0.0` | Visual-first demonstration | Full canvas-only flow using OCR, relative geometry, and one image anchor |
-| `3.1.0` | Visual portability demonstration | Richer repeated-row canvas, contextual image anchor, viewport matrix, delayed response, recovery, and declared visual failures |
+| `3.1.0` | Prior visual portability fixture | Richer repeated-row canvas with contextual relative template |
+| `3.2.0` | Geometry-free responsive replay | Semantic candidates, frame-local graph, canonical signature, six viewport/DPR cases, delayed response, recovery, and declared visual failures |
 
-No version means “latest,” currently `3.1.0`. Use `2.0.0` explicitly for human handoff and `3.0.0` for the original visual-terminal fixture.
+No version means “latest,” currently `3.2.0`. Use `2.0.0` explicitly for human handoff and `3.0.0` for the original visual-terminal fixture.
 
 ## Schema and version decisions
 

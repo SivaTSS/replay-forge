@@ -38,7 +38,7 @@ There are no implemented capability-list, run-read, event-read, evidence-downloa
 ```json
 {
   "tenant": "harbor",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "inputs": {"member_id": "12345"}
 }
 ```
@@ -69,7 +69,9 @@ Pydantic models forbid unknown request fields. Validation errors contain field l
 | `REPLAYFORGE_DEMO_BASE_URL` | `http://127.0.0.1:3001` | Credential-free target origin |
 | `REPLAYFORGE_BROWSER_HEADLESS` | `true` | Chromium mode |
 | `REPLAYFORGE_BROWSER_VIEWPORT_WIDTH` / `REPLAYFORGE_BROWSER_VIEWPORT_HEIGHT` | `1280` / `800` | CSS viewport used by the browser surface |
+| `REPLAYFORGE_BROWSER_DEVICE_SCALE_FACTOR` | `1.0` | Chromium DPR; screenshots and pointer regions remain CSS-pixel based |
 | `REPLAYFORGE_MODEL_POLICY_FILE` | `config/model-policy.yaml` | Reviewed discovery budget |
+| `REPLAYFORGE_VISION_POLICY_FILE` | `config/vision-policy.yaml` | Reviewed OCR, segmentation, similarity, pixel, and time budgets |
 | `REPLAYFORGE_OPENAI_API_KEY` | unset | Enables live discovery only |
 | `REPLAYFORGE_LANGFUSE_BASE_URL` | `http://127.0.0.1:3100` | Must be loopback HTTP |
 | `REPLAYFORGE_LANGFUSE_PUBLIC_KEY` / `REPLAYFORGE_LANGFUSE_SECRET_KEY` | unset | Must be configured together |
@@ -87,7 +89,7 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 | Local evidence path in API | Rejected | Callers receive opaque `evidence://` keys rather than filesystem paths |
 | Public target | Rejected | Cannot guarantee availability, fault injection, or acceptable automation terms |
 
-The latest visual workbench is available at the registered `visual_member_workbench` entry point. It remains canvas-only and normalizes to the logical `/members/search` route for policy checks. Its focused acceptance matrix covers the `1024×640`, `1280×800`, and `1440×900` viewports; arbitrary aspect ratios and device-pixel-ratio changes are not claimed.
+The latest visual workbench is available at the registered `visual_member_workbench` entry point. It remains canvas-only and normalizes to the logical `/members/search` route for policy checks. Its acceptance matrix covers six CSS viewports, both tenants, and DPR values from `1` through `2`; each action is re-grounded from a fresh frame.
 
 ## Failure behavior
 

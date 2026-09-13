@@ -38,9 +38,9 @@ The Playwright adapter is excluded from the Python coverage percentage and teste
 | Known hard failure | Failure classification + masked screenshot checks | `evidence/replay-hard-failure` |
 | Same live browser handoff | Lease/runtime tests + captured frames | `evidence/human-handoff` |
 | Shared artifact across tenants | Chromium integration | `evidence/tenant-reuse` |
-| Canvas-only model-free replay | Chromium on Harbor and Summit | Automated `3.0.0` and `3.1.0` integration tests |
+| Canvas-only model-free replay | Chromium on Harbor and Summit | Automated `3.0.0`, `3.1.0`, and `3.2.0` integration tests |
 | Visual fail-closed behavior | OCR cardinality, same-scale peak detection, contextual template, asset integrity tests | Unit suite + `test_visual_portability.py` |
-| Visual portability | One artifact across two tenants and three 16:10 viewports | 12-case matrix, all passing |
+| Visual portability | One artifact across two tenants, six CSS viewports, DPR `1–2` | 15-case matrix, all passing |
 | Artifact immutability and integrity | Registry/serialization tests | Artifact hash in every applicable bundle |
 | Redaction before retention | Redactor/journal/store tests | Manifest directives and sanitized payloads |
 
@@ -81,7 +81,7 @@ The runtime first writes mutable evidence under ignored `evidence/runtime/`. Exp
 
 ### Visual workbench matrix
 
-`backend/tests/integration/test_visual_portability.py` runs the latest artifact against a canvas-only workbench. The ten behavior cells cover both tenants at `1280×800`, Harbor at `1024×640`, Summit at `1440×900`, a delayed response, a known notice recovery, and four declared/fail-closed outcomes. Two additional tests assert the canvas-only surface and artifact shape, for 12 pytest cases total. The suite must pass without a model call or DOM target.
+`backend/tests/integration/test_visual_portability.py` runs the latest artifact against a canvas-only workbench. Six positive cells cover compact cards and wide tables across Harbor and Summit at CSS viewports from `800×600` to `1920×1080`, with DPR values `1`, `1.25`, `1.5`, and `2`. Two recovery cells and five declared/fail-closed outcomes complete a 15-case browser suite; two additional tests assert the canvas-only surface and artifact shape. The suite must pass without a model call or DOM target.
 
 | Fixture | Expected terminal behavior |
 |---|---|
@@ -92,6 +92,7 @@ The runtime first writes mutable evidence under ignored `evidence/runtime/`. Exp
 | `restricted` | `failure/permission_denied` |
 | `duplicate_search` | `failure/target_ambiguous` before dispatch |
 | `changed_icon` | `failure/target_absent` |
+| `duplicate_field` | `failure/target_ambiguous` at `account.extract_available_balance` |
 
 No Playwright trace archive is committed. This is an explicit optional evidence cut; screenshots are the richer failure/handoff signal.
 

@@ -65,7 +65,8 @@ classDiagram
     Step *-- LocatorBundle
     Step *-- RetryPolicy
     LocatorBundle *-- LocatorScope
-    LocatorBundle *-- LocatorCandidate
+    LocatorBundle *-- LocatorCandidate : optional DOM/coordinate legacy
+    LocatorBundle *-- VisualLocatorCandidate : rendered visual
 
 ```
 
@@ -76,7 +77,7 @@ classDiagram
 | `ObjectContract` | Required names, property schemas, additional-properties flag | Required names exist; invocation/output objects reject undeclared values |
 | `ValueSchema` | Type, constraints, classification, persistence | Decimal and timestamp stay strings at artifact/API boundaries |
 | `Step` | ID, action, target, conditions, timeout, retry, references, risk | Target-required actions have a target; referenced objects exist |
-| `LocatorBundle` | Description, scope, ordered candidates, state | At least one candidate; resolved match must be unique |
+| `LocatorBundle` | Description, scope, ordered visual/legacy candidates, state | At least one candidate; schema `1.3` permits only rendered visual candidates |
 | `Recovery` | Trigger, maximum uses, steps, resume target | No nested recovery; resume step exists; recovery cannot be sensitive |
 | `BusinessOutcome` | Stable code, detector, allowed step, result bindings | Only detectable after explicitly listed steps |
 | `ApplicationFailure` | Stable code, detector, expected/observed state, recoverability | Cannot collide with a business-outcome code |
@@ -146,7 +147,7 @@ visual tokens(text, confidence, screen region)
 active element + optional dialog/evidence reference
 ```
 
-`ResolvedTarget` does not expose a Playwright locator. It contains an adapter-owned opaque handle, description, chosen candidate index, observed count, reviewed risk, and optional transient visual region. Durable visual candidates contain text/relative rules or a content-addressed template—never the resolved screen coordinates.
+`ResolvedTarget` does not expose a Playwright locator. It contains an adapter-owned opaque handle, description, chosen candidate index, observed count, reviewed risk, and an optional transient CSS-pixel visual region. Schema `1.3` durable candidates are `rendered_text`, `rendered_labeled_control`, `rendered_field_value`, and `rendered_group_image`; none carries a target region, offset, scale, or confidence threshold. The resolved region is tied to the current frame hash and is never serialized into the artifact.
 
 `SurfaceError` carries only safe, classified data: code, safe message, recoverability, whether the prior effect is absent, whether intervention is recommended, and sanitized expected/observed facts.
 

@@ -23,7 +23,7 @@ The engines depend on typed ports, not FastAPI, OpenAI, Playwright, or filesyste
 | Modular monolith with ports | **Chosen** | Strong replaceable boundaries with one-process operability |
 | PostgreSQL and object storage | Deferred | Operational metadata is in memory; atomic evidence files keep the submission runnable and inspectable |
 
-The primary path is rendered-surface automation. Discovery combines screenshots with local OCR tokens and optional semantic facts. Replay resolves OCR text, OCR-relative regions, and edge templates before optional DOM/accessibility candidates. The canonical target exposes the workflow as one canvas; Playwright provides screenshots and mouse/keyboard transport, not element identity. Native desktop transport is the remaining extension seam.
+The primary path is rendered-surface automation. Discovery combines screenshots with local OCR tokens and optional semantic facts. Replay resolves geometry-free rendered text, label-to-control/value relationships, and a content-addressed group signature before optional DOM/accessibility candidates. The canonical target exposes the workflow as one canvas; Playwright provides CSS-pixel screenshots and mouse/keyboard transport, not element identity. Native desktop transport is the remaining extension seam.
 
 ## 2. Artifact schema
 
@@ -43,7 +43,7 @@ identity/version
 
 Pydantic models reject unknown fields and invalid cross-references. Every required output must be extracted by the main flow and checked by the final checkpoint. Published `(capability ID, version)` content is immutable; discovery receives the next patch version. Symbolic values such as `input.member_id` make a recording reusable without retaining the discovery value.
 
-Target bundles contain a human-readable description, reviewed target risk, optional frame scope, ordered visual and semantic candidates, expected cardinality, state, and portability. Version `3.1.0` uses OCR text for named controls, fresh OCR-anchor-relative geometry for fields and values, and a content-addressed multi-scale edge template scoped by the freshly observed `Savings` label. Its workbench renders three identical account-row icons, so a global match is ambiguous and must fail closed; contextual OCR plus relative geometry selects the correct row. Every visual rule has explicit confidence and search bounds.
+Target bundles contain a human-readable description, reviewed target risk, optional frame scope, ordered visual and semantic candidates, expected cardinality, state, and portability. Version `3.2.0` uses rendered text for named actions, frame-local label relationships for controls and values, and a content-addressed canonical edge signature scoped by the freshly observed `Savings` label. Its workbench renders three identical account-row icons, so a global match is ambiguous and must fail closed; the semantic group graph selects the unique matching component. Schema `1.3` forbids target geometry and target-specific tuning fields recursively.
 
 | Option considered | Choice | Reason |
 |---|---|---|
@@ -51,6 +51,8 @@ Target bundles contain a human-readable description, reviewed target risk, optio
 | Raw JSON | Rejected as review format | Strict but less readable for a step-oriented capability |
 | YAML validated into frozen models | **Chosen** | Human-reviewable and machine-strict; raw YAML is never executed |
 | Record coordinates only | Rejected | Viewport and layout changes make deterministic replay brittle |
+| Persist relative regions | Rejected | Responsive reflow changes the relationship being recorded |
+| Semantic OCR + frame-local graph + visual signature | **Chosen** | Keeps identity durable while deriving current CSS-pixel geometry |
 | Model writes an arbitrary artifact | Rejected | The specialized compiler accepts only the verified savings-balance trace shape |
 
 ## 3. Determinism & error handling
@@ -70,7 +72,7 @@ The result contract separates four meanings:
 
 | Result | Meaning | Demonstration |
 |---|---|---|
-| `success` | Checkpoint and outputs verified | Visual-first versions `3.0.0` and `3.1.0` |
+| `success` | Checkpoint and outputs verified | Visual-first versions `3.0.0`, `3.1.0`, and `3.2.0` |
 | `business_outcome` | Legitimate negative answer | `member_not_found` |
 | `failure` | Known application, mechanical, policy, or verification failure | Permission denial in `1.0.2` |
 | `intervention_required` | Session is live but automation may not proceed | Sensitive submit in `2.0.0` |
@@ -83,9 +85,9 @@ The key choice was checkpoint-led correctness rather than action-led optimism: a
 
 The seam is `SurfaceDriver`/`SurfaceSession`: open, observe, resolve, act, evaluate, extract, capture evidence, and close. Normalized observations and actions contain no Playwright handles. `VisionGrounder` operates on PNG bytes and viewport dimensions, so a desktop transport can reuse the same OCR and template logic while supplying its own capture and input mechanisms.
 
-The canonical demo is DOM-hostile by construction: every control and displayed value is painted into one canvas. The immutable `3.0.0` route proves the original visual flow; `3.1.0` adds a repeated-row workbench with delayed results, a known notice, permission denial, and controlled ambiguity. Harbor and Summit vary palette, font metrics, horizontal placement, and account-row order. The same `3.1.0` artifact succeeds at `1024×640`, `1280×800`, and `1440×900`; a 12-case Chromium matrix also verifies the declared business outcome, recovery, failure, and fail-closed states. Persistent coordinates were rejected; a model may identify a tight icon box only during discovery, where the adapter immediately converts it to a content-addressed template before recording.
+The canonical demo is DOM-hostile by construction: every control and displayed value is painted into one canvas. The immutable `3.0.0` route proves the original visual flow; `3.1.0` remains a prior repeated-row fixture; `3.2.0` adds responsive cards/table reflow, DPR variation, delayed results, a known notice, permission denial, controlled ambiguity, a changed icon, and duplicate field labels. Harbor and Summit vary palette, font metrics, horizontal placement, and account-row order. The same `3.2.0` artifact succeeds across six CSS viewports from `800×600` to `1920×1080` at DPR values `1–2`; the 15-case Chromium matrix also verifies declared business, recovery, and fail-closed states. Persistent coordinates were rejected; discovery may use a transient icon region only to create a content-addressed signature before recording.
 
-One artifact lists both `harbor` and `summit` as supported variants. The adapter normalizes tenant-prefixed routes to one surface contract; the portability matrix proves the same `3.1.0` artifact version and hash on Summit and across the tested viewport scales. This is a measured reuse proof, not a claim that hundreds of tenant instances have been deployed.
+One artifact lists both `harbor` and `summit` as supported variants. The adapter normalizes tenant-prefixed routes to one surface contract; the portability matrix proves the same `3.2.0` artifact version and hash on Summit and across the tested viewport/DPR scales. This is a measured reuse proof, not a claim that hundreds of tenant instances have been deployed.
 
 | Multi-tenant option | Choice | Reason |
 |---|---|---|
@@ -138,4 +140,4 @@ Depth was concentrated on one complete workflow and its exceptional states.
 | Open-ended model replay recovery | Declared finite recovery only | Optional single-step, policy-checked assisted fallback |
 | Automatic tenant drift/overlays | Supported variants, route normalization, recorded fingerprints | Narrow overlay schema and compatibility gate |
 
-The repository provides seven hash-verified evidence bundles: genuine discovery, replay success, member-not-found, bounded recovery, hard failure with masked screenshot, same-session handoff, and second-tenant reuse. The visual workbench adds a reproducible 12-case Chromium matrix without persisting raw canvas frames. `bash scripts/verify.sh` runs formatting, lint, strict typing, a 90% branch gate, evidence integrity, both frontend builds, and real Chromium integration tests.
+The repository provides seven hash-verified evidence bundles: genuine discovery, replay success, member-not-found, bounded recovery, hard failure with masked screenshot, same-session handoff, and second-tenant reuse. The visual workbench adds a reproducible 15-case Chromium matrix without persisting raw canvas frames. `bash scripts/verify.sh` runs formatting, lint, strict typing, a 90% branch gate, evidence integrity, both frontend builds, and real Chromium integration tests.

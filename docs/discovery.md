@@ -108,7 +108,7 @@ all five outputs validate
 registry publishes next immutable patch
 ```
 
-The compiler is intentionally specific to the savings-balance flow. It requires eight actions in the expected order, durable targets, read-only risk, and exactly the five declared extractions. A discovery-only icon region is converted to a content-addressed edge template before recording; any coordinate-only target that survives capture is rejected.
+The compiler is intentionally specific to the savings-balance flow. It requires eight actions in the expected order, read-only risk, and exactly the five declared extractions. For a geometry-free trace it emits schema `1.3` and capability `3.2.0`: rendered text, label relations, and a content-addressed group signature. A discovery-only icon region is used only to create that signature; any coordinate-only target that survives capture is rejected.
 
 ## Perception decision
 
@@ -120,7 +120,7 @@ The compiler is intentionally specific to the savings-balance flow. It requires 
 | Screenshot + local OCR + typed visual targets | **Chosen primary** | Pixel-grounded while remaining structured and replayable |
 | Compact semantic facts | Chosen fallback | Useful when the target exposes trustworthy roles and labels |
 
-On the canvas route, normalized DOM control lists are empty. The model receives the screenshot and OCR tokens, then proposes OCR targets or one transient icon region. `capture_locator` compiles that region into a hashed template before the successful step enters the trace. Replay later uses only OCR/template candidates and never calls the model.
+On the canvas route, normalized DOM control lists are empty. The model receives the screenshot and OCR tokens, then proposes semantic candidates or one transient icon region. `capture_locator` compiles that region into a hashed signature before the successful step enters the trace. Replay later uses only rendered candidates and never calls the model.
 
 ## Provider decision
 

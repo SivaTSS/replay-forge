@@ -12,17 +12,17 @@ flowchart LR
     R -. sensitive or stuck .-> H([Same-session human handoff])
 ```
 
-The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. Its primary `3.1.0` path operates a richer canvas-only workbench through local OCR, OCR-relative geometry, and an OCR-contextual content-addressed image template. The earlier `3.0.0` visual-terminal path remains as an immutable regression fixture. DOM/accessibility targeting remains an optional web strategy for the earlier failure and handoff scenarios.
+The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. Its primary `3.2.0` path operates a canvas-only workbench through local OCR, frame-local label relationships, and a content-addressed visual signature. It stores semantic identity—not target coordinates—and recomputes the current action region after every reflow. `3.0.0` and `3.1.0` remain immutable regression fixtures. DOM/accessibility targeting remains an optional web strategy for the earlier failure and handoff scenarios, never the primary path here.
 
 ## What is real
 
 | Path | Model? | Surface | Result |
 |---|---:|---|---|
 | Discovery | Yes | Screenshot + local OCR tokens; compact DOM facts when available | Publishes an immutable artifact |
-| Replay | **No** | Pixels first; optional semantic DOM candidates second | Success, business outcome, failure, or intervention |
+| Replay | **No** | Rendered pixels first; optional semantic DOM candidates second | Success, business outcome, failure, or intervention |
 | Handoff | No | The same retained Chromium context | Operator input followed by deterministic replay continuation |
 
-The canonical flow never queries a DOM control: the target exposes one canvas, and all typing, clicking, extraction, and verification are grounded from rendered pixels. Playwright supplies the browser, screenshot, mouse, and keyboard—not element targeting. See [Architecture](docs/architecture.md#surface-reality).
+The canonical flow never queries a DOM control: the target exposes one canvas, and all typing, clicking, extraction, and verification are grounded from rendered pixels. Playwright supplies the browser, CSS-pixel screenshot, mouse, and keyboard—not element targeting. See [Architecture](docs/architecture.md#surface-reality).
 
 ## Run the core replay
 
@@ -52,7 +52,7 @@ Invoke the visual-first artifact:
 ```bash
 curl --fail-with-body --silent --show-error \
   -H 'content-type: application/json' \
-  -d '{"tenant":"harbor","version":"3.1.0","inputs":{"member_id":"12345"}}' \
+  -d '{"tenant":"harbor","version":"3.2.0","inputs":{"member_id":"12345"}}' \
   http://127.0.0.1:8000/api/v1/capabilities/member.lookup_savings_balance/invoke
 ```
 
@@ -62,13 +62,14 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 
 | Behavior | How to run | Expected |
 |---|---|---|
-| Canvas-only visual workbench | `3.1.0`, member `12345` | `success` without DOM targets |
-| Cross-tenant visual workbench | `3.1.0`, tenant `summit` | Same artifact resolves the reordered Savings row |
-| Viewport portability | `3.1.0`, `1024×640` or `1440×900` | Same artifact succeeds at a tested scale |
-| Delayed result | `3.1.0`, member `13579` | Bounded wait, then `success` |
-| Known notice | `3.1.0`, member `67890` | One bounded recovery, then `success` |
-| Visual ambiguity | `3.1.0`, member `33333` | `failure/target_ambiguous` before a click |
-| Changed visual target | `3.1.0`, member `44444` | `failure/target_absent` |
+| Canvas-only visual workbench | `3.2.0`, member `12345` | `success` without DOM targets |
+| Reflow + DPR portability | `3.2.0`, six CSS viewports, DPR `1–2` | Same artifact succeeds across compact cards and wide table layouts |
+| Cross-tenant visual workbench | `3.2.0`, tenant `summit` | Same artifact resolves the reordered Savings row |
+| Delayed result | `3.2.0`, member `13579` | Bounded wait, then `success` |
+| Known notice | `3.2.0`, member `67890` | One bounded recovery, then `success` |
+| Visual ambiguity | `3.2.0`, member `33333` | `failure/target_ambiguous` before a click |
+| Changed visual target | `3.2.0`, member `44444` | `failure/target_absent` |
+| Duplicate field label | `3.2.0`, member `55555` | `failure/target_ambiguous` at the affected extraction |
 | Happy path | `1.0.0`, member `12345` | `success` |
 | Business outcome | `1.0.0`, member `99999` | `business_outcome/member_not_found` |
 | Second tenant | `1.0.0`, tenant `summit` | Same artifact succeeds |
@@ -76,7 +77,7 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 | Hard failure | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_hard_failure_run.py` | `failure/permission_denied` + masked frame |
 | Human handoff | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_handoff_run.py` | Claim, same-session input, resume, `success` |
 
-Omitting `version` selects the latest artifact, currently visual workbench `3.1.0`. Request `2.0.0` explicitly for the approval/handoff demonstration and `3.0.0` for the original visual-terminal regression path.
+Omitting `version` selects the latest artifact, currently visual workbench `3.2.0`. Request `2.0.0` explicitly for the approval/handoff demonstration, `3.0.0` for the original visual-terminal regression path, or `3.1.0` for its prior repeated-row fixture.
 
 ## Operator console
 
@@ -169,6 +170,7 @@ docs/                implementation-accurate design documentation
 - [Implemented API and operations](docs/operations.md)
 - [Tests and evidence](docs/verification.md)
 - [Visual portability implementation plan](docs/plans/01-demo-realism-and-portability.md)
+- [Geometry-free responsive replay plan](docs/plans/02-geometry-free-responsive-replay.md)
 - [Assignment requirement matrix](docs/requirements.md)
 - [Required seven-part design report](REPORT.md)
 

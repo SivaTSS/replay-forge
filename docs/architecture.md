@@ -136,19 +136,19 @@ Playwright's synchronous objects are thread-affine. `SerialSessionWorker` theref
 
 ## Surface reality
 
-The production path is rendered-surface first. Playwright is still the browser transport, but the canonical capability uses it only for screenshots and input dispatch; it never asks Playwright for a target element.
+The production path is rendered-surface first. Playwright is still the browser transport, but the canonical capability uses it only for CSS-pixel screenshots and input dispatch; it never asks Playwright for a target element.
 
 | Option considered | Decision | Reason |
 |---|---|---|
-| Persisted coordinates | Rejected | Couple replay to one viewport and layout |
+| Persisted coordinates or relative ROIs | Rejected | Reflow and responsive breakpoints invalidate recorded geometry |
 | Raw CSS/XPath recording | Rejected as primary | Couples artifacts to markup shape and generated identifiers |
-| Semantic DOM/accessibility locators | Optional fallback | Cheap and precise when a trustworthy semantic surface exists |
-| Local OCR + relative regions + edge templates | **Chosen primary** | Works on rendered pixels, remains deterministic, and survives tenant layout/palette drift |
+| Semantic DOM/accessibility locators | Optional fallback | Useful when a trustworthy semantic surface exists; unavailable on the canvas contract |
+| Semantic OCR + frame-local layout graph + visual signature | **Chosen primary** | Uses rendered identity, derives current geometry, and survives reflow, tenant styling, and DPR |
 | OS accessibility/desktop driver | Designed, not built | Fits the surface port, but the assignment requires only one concrete surface |
 
-`VisionGrounder` runs RapidOCR locally and resolves three durable strategies in artifact order: exact/contained OCR text, OCR-anchor-relative regions, and multi-scale edge-template matches. Each candidate declares confidence, cardinality, search bounds, and—where applicable—a uniqueness margin. Failure to meet those rules returns `target_absent` or `target_ambiguous`; replay never guesses.
+`VisionGrounder` runs RapidOCR locally and resolves four geometry-free strategies: rendered text, a rendered label-to-control relation, a rendered label-to-value relation, and a rendered group label plus content-addressed visual signature. OCR phrases are rebuilt from the current frame; edge components are segmented from that same frame; relations use measured text height rather than saved offsets. Each result must be unique and satisfy the centrally loaded OCR, segmentation, similarity, pixel, and time budgets. Failure returns `target_absent` or `target_ambiguous`; replay never guesses.
 
-The `visual-terminal` demo route exposes the original workflow as one canvas with no usable control or value nodes. The newer `visual-workbench` route keeps that contract while rendering three identical account-row actions and deterministic delayed, notice, permission, and ambiguity fixtures. Harbor and Summit change palette, font metrics, horizontal placement, and row order. Version `3.1.0` first resolves the rendered `Savings` label with OCR, then searches for a content-addressed edge template only inside the derived row region. Coordinates may appear only as a discovery proposal for an icon bounding box; the adapter immediately converts that region into a hashed edge template before recording the step. Published artifacts reject coordinate-only targets.
+The `visual-terminal` demo route exposes the original workflow as one canvas with no usable control or value nodes. The `visual-workbench` route keeps that contract while switching between responsive cards and a wide table, rendering three account-row actions, and injecting delayed, notice, permission, ambiguity, changed-icon, and duplicate-label fixtures. Harbor and Summit change palette, font metrics, horizontal placement, and row order. Version `3.2.0` resolves the current rendered `Savings` label, ranks same-group visual components against a content-addressed signature, and dispatches the resulting CSS-pixel point only for that frame. No artifact target stores coordinates or target-specific geometry; schema `1.3` rejects them recursively.
 
 ## Decisions
 
@@ -159,6 +159,8 @@ The `visual-terminal` demo route exposes the original workflow as one canvas wit
 | Target | Public sandbox, real bank, local synthetic app | Local synthetic app | Legal, deterministic, credential-free, and able to inject failures |
 | Persistence | PostgreSQL/S3, memory/files, browser-local state | Memory + atomic files | Small runnable submission; repository ports leave a migration seam |
 | Tenant model | Artifact copy per tenant, free-form overrides, shared contract | Shared supported-variant list | Demonstrates reuse without unsafe override complexity |
+| Responsive grounding | Saved offsets, ordinal row selection, frame-local graph | Frame-local graph + canonical visual signature | Recomputes geometry after layout changes and fails closed on ties |
+| DPR handling | Rescale stored pixels, screenshot in device pixels, CSS-pixel capture | CSS-pixel capture + explicit context DPR | Mouse coordinates and screenshot regions remain in one coordinate space |
 | Live control | WebSocket stream, headed browser, polling | Versioned HTTP polling/input | Minimal real same-session control with stale-command protection |
 
 ## Honest extension path
@@ -167,7 +169,7 @@ The `visual-terminal` demo route exposes the original workflow as one canvas wit
 Capability semantics stay stable
   inputs → ordered actions → outputs → checkpoint
                          │
-                         ├── web.v1: OCR + image anchors          [primary]
+                         ├── web.v1: rendered OCR + signatures   [primary]
                          ├── web.v1: semantic Playwright locators [optional]
                          └── desktop.v1: accessibility/window IDs [designed]
 ```
