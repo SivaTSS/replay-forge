@@ -126,6 +126,7 @@ def test_viewport_requires_current_human_lease_and_uses_owner_thread() -> None:
         assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
         assert frame.sequence == 1
         assert frame.next_client_sequence == 1
+        assert service.viewport(intervention_id, claimed.lease.version, "operator-7") == frame
         assert frame.viewport == Viewport(1280, 800)
         assert driver.captured_on == owner_thread
         with pytest.raises(InterventionAuthorizationError):

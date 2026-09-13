@@ -246,7 +246,7 @@ export default function InterventionConsole() {
     if (!owned || !intervention) return;
     let cancelled = false;
     const loadFrame = async () => {
-      if (frameInFlight.current) return;
+      if (frameInFlight.current || mutationInFlight.current) return;
       frameInFlight.current = true;
       try {
         const query = new URLSearchParams({

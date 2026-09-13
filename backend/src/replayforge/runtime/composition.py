@@ -226,6 +226,12 @@ class LiveBrowserSession:
 
     def capture_frame(self) -> InterventionFrame:
         frame = self.worker.call(self.driver.capture_active_frame)
+        if (
+            self.latest_frame is not None
+            and frame.content == self.latest_frame.content
+            and frame.viewport == self.latest_frame.viewport
+        ):
+            return self.latest_frame
         self.frame_sequence += 1
         self.latest_frame = InterventionFrame(
             frame.content,
