@@ -28,6 +28,7 @@ from replayforge.evidence.integrity import (
     verify_run_manifest,
 )
 from replayforge.evidence.models import (
+    MAX_ATTACHMENT_BYTES,
     MAX_EVENT_BYTES,
     MAX_MANIFEST_BYTES,
     EventEvidence,
@@ -82,7 +83,7 @@ class _BundleModel(BaseModel):
 
 class BundleFile(_BundleModel):
     content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    size_bytes: int = Field(ge=0, le=20_000_000)
+    size_bytes: int = Field(ge=0, le=MAX_ATTACHMENT_BYTES)
 
 
 class BundleAttachment(BundleFile):

@@ -29,6 +29,7 @@ renderer; connectors use one neutral, high-contrast gray in light and dark modes
 | What exactly is recorded and replayed? | [Capability and replay](capability-and-replay.md) |
 | What does the model see and decide? | [Discovery](discovery.md) |
 | How are unsafe actions, data, and handoff handled? | [Safety and handoff](safety-and-handoff.md) |
+| Which limits apply, and who may change them? | [Constraints and policy](constraints-and-policy.md) |
 | How do I run it, and what HTTP surface exists? | [Operations](operations.md) |
 | What do the tests and committed evidence prove? | [Verification](verification.md) |
 | How does the implementation map to the assignment? | [Requirements](requirements.md) |

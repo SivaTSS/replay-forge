@@ -91,6 +91,9 @@ Raw chain-of-thought is not requested or persisted. Provider errors are reduced 
 | Screenshot | Maximum `1.5 MiB` |
 
 The model policy is loaded from `config/model-policy.yaml`. API requests and environment variables cannot select a different model or enlarge these budgets.
+The request and engine share one domain definition for step and wall-time bounds. These bounds are
+layered: contract planning consumes one model call, and discovery stops at whichever request or
+provider budget is exhausted first. See [Constraints and policy](constraints-and-policy.md).
 
 ## Completion is not trusted
 

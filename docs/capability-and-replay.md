@@ -105,6 +105,10 @@ otherwise → target_absent or target_ambiguous
 
 The resolver never asks a model, selects the first ambiguous result, or clicks a nearby element.
 
+Replay retries only a declared recoverable error when the surface adapter proves the prior attempt
+had no effect. Capability artifacts cannot disable that requirement. Attempts, backoff, step time,
+and recovery use are all schema-bounded; see [Constraints and policy](constraints-and-policy.md).
+
 ### Targeting decision
 
 | Option | Outcome | Reason |
