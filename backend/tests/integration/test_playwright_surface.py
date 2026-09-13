@@ -25,6 +25,7 @@ from replayforge.capabilities.models import (
     TextCondition,
     TypeAction,
 )
+from replayforge.capabilities.registry import LocalCapabilityRegistry
 from replayforge.capabilities.serialization import (
     artifact_content_hash,
     dump_artifact_yaml,
@@ -474,6 +475,48 @@ def test_visual_artifact_replays_without_dom_targets(
             "available_balance": "1420.57",
             "as_of": "2026-09-10T12:30:00Z",
         }
+        assert result.checkpoint.verified
+    finally:
+        runtime.close()
+
+
+def test_durably_published_visual_artifact_replays_after_fresh_runtime(
+    demo_bank: str, tmp_path: Path
+) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    artifact = load_artifact_yaml(
+        (repository / "capabilities/member.lookup_savings_balance/3.2.0.yaml").read_text()
+    )
+    publication_root = tmp_path / "capabilities"
+    published = LocalCapabilityRegistry(publication_root).publish_next(artifact)
+
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=publication_root,
+            capability_asset_directory=repository / "capabilities/_assets",
+            evidence_directory=tmp_path / "evidence",
+            demo_base_url=demo_bank,
+            openai_api_key=None,
+            langfuse_public_key=None,
+            langfuse_secret_key=None,
+        )
+    )
+    try:
+        assert not runtime.discovery_service.ready()
+        loaded = runtime.service.registry.get(
+            artifact.capability.id, published.artifact.capability.version
+        )
+        assert loaded.content_hash == published.content_hash
+
+        result = runtime.service.invoke(
+            artifact.capability.id,
+            published.artifact.capability.version,
+            "harbor",
+            {"member_id": "12345"},
+        )
+
+        assert isinstance(result, SuccessResult)
+        assert result.outputs["available_balance"] == "1420.57"
         assert result.checkpoint.verified
     finally:
         runtime.close()
