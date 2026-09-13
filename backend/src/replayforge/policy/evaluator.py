@@ -37,10 +37,20 @@ def _canonical_origin(origin: str) -> str | None:
     parsed = urlsplit(origin)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return None
-    if parsed.username or parsed.password or parsed.path not in {"", "/"}:
+    if (
+        parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
         return None
     host = parsed.hostname.lower()
-    port = f":{parsed.port}" if parsed.port is not None else ""
+    try:
+        parsed_port = parsed.port
+    except ValueError:
+        return None
+    port = f":{parsed_port}" if parsed_port is not None else ""
     return f"{parsed.scheme.lower()}://{host}{port}"
 
 

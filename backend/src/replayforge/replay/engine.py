@@ -444,7 +444,7 @@ class ReplayEngine:
         except SurfaceError as error:
             can_retry = (
                 error.recoverable
-                and (error.effect_absent or not step.retry.require_effect_absent)
+                and error.effect_absent
                 and error.code in step.retry.retry_on
                 and attempt < step.retry.max_attempts
             )

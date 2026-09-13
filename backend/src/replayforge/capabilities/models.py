@@ -597,7 +597,7 @@ class RetryPolicy(ArtifactModel):
     max_attempts: int = Field(default=1, ge=1, le=5)
     backoff_ms: tuple[int, ...] = ()
     retry_on: tuple[str, ...] = ()
-    require_effect_absent: bool = True
+    require_effect_absent: Literal[True] = True
 
     @model_validator(mode="after")
     def validate_backoff(self) -> Self:
@@ -605,6 +605,14 @@ class RetryPolicy(ArtifactModel):
             raise ValueError("backoff entries cannot exceed the number of retries")
         if any(delay < 0 or delay > 30_000 for delay in self.backoff_ms):
             raise ValueError("backoff values must be between 0 and 30000 milliseconds")
+        if len(set(self.retry_on)) != len(self.retry_on) or any(
+            _STABLE_ID_PATTERN.fullmatch(code) is None for code in self.retry_on
+        ):
+            raise ValueError("retry error codes must be unique stable identifiers")
+        if self.max_attempts > 1 and not self.retry_on:
+            raise ValueError("multiple attempts require an explicit retry error code")
+        if self.max_attempts == 1 and (self.retry_on or self.backoff_ms):
+            raise ValueError("single-attempt steps cannot declare retry behavior")
         return self
 
 

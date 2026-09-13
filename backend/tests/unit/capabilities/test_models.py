@@ -448,10 +448,14 @@ def test_locator_candidate_rejects_fields_from_another_strategy() -> None:
     [
         {"max_attempts": 1, "backoff_ms": [100]},
         {"max_attempts": 2, "backoff_ms": [30_001]},
+        {"max_attempts": 2},
+        {"retry_on": ["temporary", "temporary"]},
+        {"retry_on": ["NOT_STABLE"]},
+        {"max_attempts": 2, "retry_on": ["temporary"], "require_effect_absent": False},
     ],
 )
 def test_retry_policy_is_strictly_bounded(retry: dict[str, Any]) -> None:
-    with pytest.raises(ValidationError, match="backoff"):
+    with pytest.raises(ValidationError):
         RetryPolicy.model_validate(retry)
 
 
