@@ -1,0 +1,17 @@
+schema_version: "1.0"
+ocr:
+  minimum_confidence: 0.80
+phrases:
+  maximum_line_gap_in_text_heights: 1.5
+segmentation:
+  minimum_component_area_ratio: 0.00001
+  maximum_component_area_ratio: 0.25
+  maximum_components: 2000
+image:
+  canonical_width: 64
+  canonical_height: 64
+  minimum_similarity: 0.78
+  uniqueness_margin: 0.08
+budgets:
+  maximum_frame_pixels: 8000000
+  maximum_grounding_milliseconds: 2000

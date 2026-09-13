@@ -22,6 +22,7 @@ from replayforge.capabilities.models import (
     RelativeRegion,
     VisualLocatorCandidate,
 )
+from replayforge.runtime.vision_policy import VisionGroundingPolicy
 from replayforge.surfaces.models import (
     ScreenRegion,
     SurfaceError,
@@ -70,6 +71,7 @@ class RapidOcrTextRecognizer:
 class VisionGrounder:
     recognizer: TextRecognizer
     assets: CapabilityAssetStore
+    policy: VisionGroundingPolicy | None = None
     _ocr_cache: dict[str, tuple[VisualToken, ...]] = field(default_factory=dict, init=False)
 
     def resolve(

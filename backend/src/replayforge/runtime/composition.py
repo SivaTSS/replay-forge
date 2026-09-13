@@ -540,7 +540,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         driver = PlaywrightSurfaceDriver(
             settings.demo_base_url,
             settings.browser_headless,
-            VisionGrounder(text_recognizer, capability_assets),
+            VisionGrounder(text_recognizer, capability_assets, settings.vision_policy),
             viewport=Viewport(settings.browser_viewport_width, settings.browser_viewport_height),
         )
         worker = SerialSessionWorker(run_id)
@@ -617,7 +617,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         driver = PlaywrightSurfaceDriver(
             settings.demo_base_url,
             settings.browser_headless,
-            VisionGrounder(text_recognizer, capability_assets),
+            VisionGrounder(text_recognizer, capability_assets, settings.vision_policy),
             allow_transient_coordinates=True,
             viewport=Viewport(settings.browser_viewport_width, settings.browser_viewport_height),
         )

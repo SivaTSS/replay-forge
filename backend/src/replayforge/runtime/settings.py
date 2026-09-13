@@ -10,6 +10,7 @@ from pydantic import PrivateAttr, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
+from replayforge.runtime.vision_policy import VisionGroundingPolicy, load_vision_policy
 
 
 class RuntimeSettings(BaseSettings):
@@ -30,12 +31,18 @@ class RuntimeSettings(BaseSettings):
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
     model_policy_file: Path = Path("config/model-policy.yaml")
+    vision_policy_file: Path = Path("config/vision-policy.yaml")
     openai_api_key: SecretStr | None = None
     _model_policy: ModelPolicy = PrivateAttr()
+    _vision_policy: VisionGroundingPolicy = PrivateAttr()
 
     @property
     def model_policy(self) -> ModelPolicy:
         return self._model_policy
+
+    @property
+    def vision_policy(self) -> VisionGroundingPolicy:
+        return self._vision_policy
 
     @model_validator(mode="after")
     def validate_runtime_boundaries(self) -> Self:
@@ -72,6 +79,7 @@ class RuntimeSettings(BaseSettings):
         if self.openai_api_key is not None and self.langfuse_public_key is None:
             raise ValueError("OpenAI discovery requires local Langfuse monitoring credentials")
         self._model_policy = load_model_policy(self.model_policy_file)
+        self._vision_policy = load_vision_policy(self.vision_policy_file)
         self.demo_base_url = self.demo_base_url.rstrip("/")
         self.langfuse_base_url = self.langfuse_base_url.rstrip("/")
         return self
