@@ -91,15 +91,19 @@ def test_verifier_rejects_invalid_attachment_signature(
         verify_run_manifest(store, journal.evidence_manifest_key)
 
 
-@pytest.mark.parametrize("mutation", ["duplicate", "cross_run", "sequence"])
+@pytest.mark.parametrize(
+    "mutation", ["duplicate_key", "duplicate_identity", "cross_run", "sequence"]
+)
 def test_verifier_rejects_invalid_manifest_relationships(
     retained_run: tuple[LocalEvidenceStore, InMemoryRunJournal], mutation: str
 ) -> None:
     store, journal = retained_run
     manifest_path = store.root / journal.evidence_manifest_key.removeprefix("evidence://")
     manifest = json.loads(manifest_path.read_text())
-    if mutation == "duplicate":
+    if mutation == "duplicate_key":
         manifest["events"][1]["key"] = manifest["events"][0]["key"]
+    elif mutation == "duplicate_identity":
+        manifest["events"][1]["evidence_id"] = manifest["events"][0]["evidence_id"]
     elif mutation == "cross_run":
         other_run = str(new_id(EntityKind.RUN))
         manifest["events"][0]["key"] = manifest["events"][0]["key"].replace(

@@ -144,6 +144,9 @@ class RunEvidenceManifest(EvidenceModel):
         keys = tuple(entry.key for entry in entries)
         if len(set(keys)) != len(keys):
             raise ValueError("evidence manifest keys must be unique")
+        evidence_ids = tuple(entry.evidence_id for entry in entries)
+        if len(set(evidence_ids)) != len(evidence_ids):
+            raise ValueError("evidence manifest identities must be unique")
         prefix = f"evidence://{self.run_id}/"
         if any(not key.startswith(prefix) for key in keys):
             raise ValueError("evidence manifest entries must belong to the manifest run")
