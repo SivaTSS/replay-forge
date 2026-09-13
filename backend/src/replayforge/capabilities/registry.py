@@ -274,7 +274,7 @@ class LocalCapabilityRegistry:
 
         content = dump_artifact_yaml(artifact).encode("utf-8")
         if len(content) > self.maximum_artifact_bytes:
-            raise ValueError("artifact exceeds the publication size limit")
+            raise CapabilityIntegrityError("artifact exceeds the publication size limit")
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             self._sync_directory(self.root)

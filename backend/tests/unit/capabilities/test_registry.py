@@ -200,7 +200,7 @@ def test_local_registry_rejects_tampered_and_misplaced_artifacts(
 def test_local_registry_rejects_oversized_artifact(
     tmp_path: Path, valid_artifact_data: dict[str, Any]
 ) -> None:
-    with pytest.raises(ValueError, match="size limit"):
+    with pytest.raises(CapabilityIntegrityError, match="size limit"):
         LocalCapabilityRegistry(tmp_path, maximum_artifact_bytes=10).publish(
             _artifact(valid_artifact_data)
         )
