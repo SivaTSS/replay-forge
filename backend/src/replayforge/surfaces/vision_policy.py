@@ -1,4 +1,4 @@
-"""Reviewed, file-backed policy for deterministic visual grounding."""
+"""Reviewed, file-backed policy for deterministic surface grounding."""
 
 from __future__ import annotations
 

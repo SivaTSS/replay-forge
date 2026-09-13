@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from replayforge.runtime.vision_policy import VisionGroundingPolicy, load_vision_policy
+from replayforge.surfaces.vision_policy import VisionGroundingPolicy, load_vision_policy
 
 
 def policy_payload() -> dict[str, object]:

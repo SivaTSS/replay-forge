@@ -10,7 +10,7 @@ from replayforge.observability.model_calls import (
     ModelCallMetric,
     ModelUsage,
 )
-from replayforge.runtime.model_policy import load_model_policy
+from replayforge.providers.policy import load_model_policy
 
 
 @dataclass

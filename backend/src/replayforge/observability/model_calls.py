@@ -9,7 +9,7 @@ from typing import Any, Literal, Protocol, cast
 
 from langfuse import Langfuse
 
-from replayforge.runtime.model_policy import ModelPolicy
+from replayforge.providers.policy import ModelPolicy
 
 logger = logging.getLogger(__name__)
 

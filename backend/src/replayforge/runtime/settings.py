@@ -9,8 +9,8 @@ from urllib.parse import urlsplit
 from pydantic import PrivateAttr, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
-from replayforge.runtime.vision_policy import VisionGroundingPolicy, load_vision_policy
+from replayforge.providers.policy import ModelPolicy, load_model_policy
+from replayforge.surfaces.vision_policy import VisionGroundingPolicy, load_vision_policy
 
 
 class RuntimeSettings(BaseSettings):

@@ -32,7 +32,7 @@ from replayforge.providers.openai import (
     ProviderTypeLocatorBundle,
     ProviderTypeProposal,
 )
-from replayforge.runtime.model_policy import ModelPolicy, load_model_policy
+from replayforge.providers.policy import ModelPolicy, load_model_policy
 from replayforge.shared.clock import SystemClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import (

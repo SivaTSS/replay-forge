@@ -28,7 +28,6 @@ from replayforge.capabilities.models import (
     RenderedTextCandidate,
     VisualLocatorCandidate,
 )
-from replayforge.runtime.vision_policy import VisionGroundingPolicy
 from replayforge.surfaces.models import (
     ScreenRegion,
     SurfaceError,
@@ -36,6 +35,7 @@ from replayforge.surfaces.models import (
     VisualTargetData,
     VisualToken,
 )
+from replayforge.surfaces.vision_policy import VisionGroundingPolicy
 
 
 class TextRecognizer(Protocol):

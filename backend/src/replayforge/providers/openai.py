@@ -38,7 +38,7 @@ from replayforge.observability.model_calls import (
     ProviderErrorCategory,
 )
 from replayforge.policy.types import RISK_RANK, DataClassification, Risk
-from replayforge.runtime.model_policy import ModelPolicy
+from replayforge.providers.policy import ModelPolicy
 
 logger = logging.getLogger(__name__)
 

@@ -22,9 +22,9 @@ from replayforge.capabilities.models import (
     RenderedLabeledControlCandidate,
     RenderedTextCandidate,
 )
-from replayforge.runtime.vision_policy import load_vision_policy
 from replayforge.surfaces.models import ScreenRegion, SurfaceError, Viewport, VisualToken
 from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
+from replayforge.surfaces.vision_policy import load_vision_policy
 
 
 @dataclass(frozen=True)

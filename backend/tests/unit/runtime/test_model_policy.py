@@ -8,7 +8,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from replayforge.runtime.model_policy import load_model_policy
+from replayforge.providers.policy import load_model_policy
 
 
 def policy_payload() -> dict[str, object]:

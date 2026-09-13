@@ -1,4 +1,4 @@
-"""Reviewed, file-backed policy for bounded model use."""
+"""Reviewed, file-backed policy for bounded OpenAI model use."""
 
 from __future__ import annotations
 
