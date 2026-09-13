@@ -4,95 +4,24 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from replayforge.evidence.models import RetentionClass
+from replayforge.evidence.models import (
+    MAX_EVENT_BYTES,
+    MAX_MANIFEST_BYTES,
+    EventEvidence,
+    ManifestEntry,
+    RetentionClass,
+    RunEvidenceManifest,
+)
 from replayforge.evidence.ports import EvidenceStore
 from replayforge.shared.ids import EntityKind, parse_id
-
-_MAX_MANIFEST_BYTES = 2_000_000
-_MAX_EVENT_BYTES = 2_000_000
-_MAX_ATTACHMENT_BYTES = 20_000_000
 
 
 class EvidenceIntegrityError(ValueError):
     """Raised when retained evidence cannot prove its declared integrity."""
-
-
-class _StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class ManifestEntry(_StrictModel):
-    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    created_at: datetime
-    evidence_id: str
-    key: str = Field(pattern=r"^evidence://.+$")
-    media_type: Literal["application/json", "image/png", "application/zip"]
-    redaction_directives: tuple[str, ...]
-    retention_class: RetentionClass
-    size_bytes: int = Field(ge=0, le=_MAX_ATTACHMENT_BYTES)
-
-    @field_validator("created_at")
-    @classmethod
-    def require_aware_timestamp(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("evidence timestamp must include an offset")
-        return value
-
-
-class RunEvidenceManifest(_StrictModel):
-    schema_version: str = Field(pattern=r"^1\.0$")
-    run_id: str
-    generated_at: datetime
-    events: tuple[ManifestEntry, ...] = Field(min_length=1, max_length=10_000)
-    attachments: tuple[ManifestEntry, ...] = Field(default=(), max_length=100)
-    terminal_result: ManifestEntry | None = None
-
-    @field_validator("run_id")
-    @classmethod
-    def validate_run_id(cls, value: str) -> str:
-        parse_id(value, EntityKind.RUN)
-        return value
-
-    @field_validator("generated_at")
-    @classmethod
-    def require_aware_timestamp(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("manifest timestamp must include an offset")
-        return value
-
-
-class EventEvidence(_StrictModel):
-    details: dict[str, Any]
-    event_id: str
-    event_type: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
-    occurred_at: datetime
-    run_id: str
-    sequence: int = Field(ge=1)
-    step_id: str | None
-
-    @field_validator("event_id")
-    @classmethod
-    def validate_event_id(cls, value: str) -> str:
-        parse_id(value, EntityKind.EVENT)
-        return value
-
-    @field_validator("run_id")
-    @classmethod
-    def validate_run_id(cls, value: str) -> str:
-        parse_id(value, EntityKind.RUN)
-        return value
-
-    @field_validator("occurred_at")
-    @classmethod
-    def require_aware_timestamp(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("event timestamp must include an offset")
-        return value
 
 
 class TerminalResultEvidence(BaseModel):
@@ -124,7 +53,7 @@ def verify_run_manifest(
     """Verify the manifest schema and every referenced event payload."""
 
     manifest_content = store.read(manifest_key)
-    if len(manifest_content) > _MAX_MANIFEST_BYTES:
+    if len(manifest_content) > MAX_MANIFEST_BYTES:
         raise EvidenceIntegrityError("evidence manifest exceeds the verification limit")
     manifest = _parse_manifest(manifest_content)
     expected_prefix = f"evidence://{manifest.run_id}/"
@@ -207,7 +136,7 @@ def _parse_manifest(content: bytes) -> RunEvidenceManifest:
 
 
 def _parse_event(content: bytes) -> EventEvidence:
-    if len(content) > _MAX_EVENT_BYTES:
+    if len(content) > MAX_EVENT_BYTES:
         raise EvidenceIntegrityError("event evidence exceeds the verification limit")
     try:
         return EventEvidence.model_validate_json(content)
@@ -216,7 +145,7 @@ def _parse_event(content: bytes) -> EventEvidence:
 
 
 def _parse_terminal_result(content: bytes) -> TerminalResultEvidence:
-    if len(content) > _MAX_EVENT_BYTES:
+    if len(content) > MAX_EVENT_BYTES:
         raise EvidenceIntegrityError("terminal result evidence exceeds the verification limit")
     try:
         return TerminalResultEvidence.model_validate_json(content)

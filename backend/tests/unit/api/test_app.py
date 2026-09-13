@@ -61,7 +61,7 @@ class FakeReplayInvoker:
             capability=CapabilityReference(id=capability_id, version=version or "1.0.0"),
             outputs={"available_balance": "1420.57"},
             checkpoint=VerifiedCheckpoint(id="savings_balance_verified", verified=True),
-            evidence_manifest="evidence://test/manifest.json",
+            evidence_manifest=("evidence://run_0123456789abcdef0123456789abcdef/manifest.json"),
         )
 
 
@@ -457,7 +457,7 @@ def test_intervention_resume_returns_typed_terminal_result() -> None:
         capability=CapabilityReference(id="member.lookup", version="1.0.0"),
         outputs={"balance": "1420.57"},
         checkpoint=VerifiedCheckpoint(id="balance_verified", verified=True),
-        evidence_manifest="evidence://test/manifest.json",
+        evidence_manifest=f"evidence://{transition.intervention.run_id}/manifest.json",
     )
     api = TestClient(
         create_app(

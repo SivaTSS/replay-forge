@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
+from replayforge.evidence import local_store
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.evidence.models import RetentionClass
+from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
@@ -50,6 +51,18 @@ def test_store_rejects_invalid_run_identifier(store: LocalEvidenceStore) -> None
 
     with pytest.raises(ValueError, match="identifier"):
         store.write("not-a-run", "event", payload, RetentionClass.FAILURE)
+
+
+def test_store_rejects_oversized_payload_before_writing(
+    store: LocalEvidenceStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(local_store, "MAX_ATTACHMENT_BYTES", 2)
+    payload = SanitizedEvidence(b"{}\n", "application/json", ())
+
+    with pytest.raises(ValueError, match="storage limit"):
+        store.write(new_id(EntityKind.RUN), "event", payload, RetentionClass.OPERATIONAL)
+
+    assert not tuple(store.root.rglob("*.bin"))
 
 
 @pytest.mark.parametrize(

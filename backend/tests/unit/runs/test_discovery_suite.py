@@ -79,11 +79,11 @@ def test_read_only_suite_publishes_only_at_finalize() -> None:
 def test_suite_snapshot_omits_failure_values_and_free_text() -> None:
     failure = FailureResult(
         status="failure",
-        run_id="run_failure",
+        run_id="run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         code="state_mismatch",
         message="Member 12345 was not found.",
         recoverable=False,
-        evidence_manifest="evidence://failure",
+        evidence_manifest=("evidence://run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/manifest.json"),
         expected={"member_id": "12345"},
         observed={"screen": "Customer 12345"},
     )
@@ -103,10 +103,10 @@ def test_suite_snapshot_omits_failure_values_and_free_text() -> None:
     assert "12345" not in str(snapshot)
     assert snapshot["primary"] == {
         "status": "failure",
-        "run_id": "run_failure",
+        "run_id": "run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "code": "state_mismatch",
         "recoverable": False,
-        "evidence_manifest": "evidence://failure",
+        "evidence_manifest": ("evidence://run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/manifest.json"),
     }
 
 

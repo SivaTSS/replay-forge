@@ -182,10 +182,15 @@ class FakeSurfaceDriver:
 
 @dataclass
 class MemoryRecorder:
-    evidence_manifest_key: str = "evidence://test/manifest.json"
     events: list[tuple[str, str | None]] = field(default_factory=list)
     attachments: list[tuple[str, SanitizedEvidence, RetentionClass]] = field(default_factory=list)
     recorded_details: list[dict[str, object]] = field(default_factory=list)
+    run_id: str | None = None
+
+    @property
+    def evidence_manifest_key(self) -> str:
+        assert self.run_id is not None
+        return f"evidence://{self.run_id}/manifest.json"
 
     def record(
         self,
@@ -195,6 +200,10 @@ class MemoryRecorder:
         step_id: str | None = None,
         details: dict[str, object] | None = None,
     ) -> None:
+        if self.run_id is None:
+            self.run_id = run_id
+        elif self.run_id != run_id:
+            raise ValueError("recorder cannot mix runs")
         self.events.append((event_type, step_id))
         self.recorded_details.append(details or {})
 

@@ -21,11 +21,10 @@ from replayforge.capabilities.serialization import (
     load_artifact_yaml,
 )
 from replayforge.evidence.integrity import (
-    EventEvidence,
-    RunEvidenceManifest,
     TerminalResultEvidence,
     verify_run_manifest,
 )
+from replayforge.evidence.models import EventEvidence, RunEvidenceManifest
 from replayforge.evidence.ports import EvidenceStore
 from replayforge.evidence.redaction import StructuredRedactor
 

@@ -7,8 +7,19 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
+from typing import cast
 
-from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
+from pydantic import JsonValue
+
+from replayforge.evidence.models import (
+    MAX_ATTACHMENT_BYTES,
+    EventEvidence,
+    EvidenceRecord,
+    ManifestEntry,
+    RetentionClass,
+    RunEvidenceManifest,
+    SanitizedEvidence,
+)
 from replayforge.evidence.ports import EvidenceStore
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.policy.types import DataClassification
@@ -17,7 +28,6 @@ from replayforge.shared.ids import EntityId, EntityKind, new_id, parse_id
 
 _EVENT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 _STEP_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]+$")
-_MAX_ATTACHMENT_BYTES = 20_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +38,7 @@ class RunEvent:
     event_type: str
     occurred_at: datetime
     step_id: str | None
-    details: dict[str, object]
+    details: dict[str, JsonValue]
 
 
 @dataclass(slots=True)
@@ -83,7 +93,7 @@ class InMemoryRunJournal:
                 event_type=event_type,
                 occurred_at=self.clock.now(),
                 step_id=step_id,
-                details=cleaned,
+                details=cast(dict[str, JsonValue], cleaned),
             )
             if self.evidence_store is not None:
                 evidence_record = self.evidence_store.write(
@@ -119,7 +129,7 @@ class InMemoryRunJournal:
             raise ValueError("run attachments must be PNG images or ZIP archives")
         if not payload.content:
             raise ValueError("run attachments cannot be empty")
-        if len(payload.content) > _MAX_ATTACHMENT_BYTES:
+        if len(payload.content) > MAX_ATTACHMENT_BYTES:
             raise ValueError("run attachment exceeds the twenty-megabyte limit")
         if payload.media_type == "image/png" and not payload.content.startswith(
             b"\x89PNG\r\n\x1a\n"
@@ -202,16 +212,17 @@ class InMemoryRunJournal:
 
 
 def _event_payload(event: RunEvent, redaction_directives: tuple[str, ...]) -> SanitizedEvidence:
+    payload = EventEvidence(
+        details=event.details,
+        event_id=str(event.id),
+        event_type=event.event_type,
+        occurred_at=event.occurred_at,
+        run_id=str(event.run_id),
+        sequence=event.sequence,
+        step_id=event.step_id,
+    )
     content = json.dumps(
-        {
-            "details": event.details,
-            "event_id": str(event.id),
-            "event_type": event.event_type,
-            "occurred_at": _timestamp(event.occurred_at),
-            "run_id": str(event.run_id),
-            "sequence": event.sequence,
-            "step_id": event.step_id,
-        },
+        payload.model_dump(mode="json"),
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
@@ -225,17 +236,15 @@ def _manifest_payload(
     attachments: tuple[EvidenceRecord, ...] = (),
     terminal_result: EvidenceRecord | None = None,
 ) -> SanitizedEvidence:
+    manifest = RunEvidenceManifest(
+        events=tuple(_manifest_record(record) for record in records),
+        attachments=tuple(_manifest_record(record) for record in attachments),
+        generated_at=generated_at,
+        run_id=run_id,
+        terminal_result=_manifest_record(terminal_result) if terminal_result is not None else None,
+    )
     content = json.dumps(
-        {
-            "events": [_manifest_record(record) for record in records],
-            "attachments": [_manifest_record(record) for record in attachments],
-            "generated_at": _timestamp(generated_at),
-            "run_id": run_id,
-            "schema_version": "1.0",
-            "terminal_result": (
-                _manifest_record(terminal_result) if terminal_result is not None else None
-            ),
-        },
+        manifest.model_dump(mode="json"),
         indent=2,
         sort_keys=True,
     ).encode()
@@ -250,17 +259,17 @@ def _manifest_payload(
     return SanitizedEvidence(content, "application/json", directives)
 
 
-def _manifest_record(record: EvidenceRecord) -> dict[str, object]:
-    return {
-        "content_hash": record.content_hash,
-        "created_at": _timestamp(record.created_at),
-        "evidence_id": str(record.id),
-        "key": record.key,
-        "media_type": record.media_type,
-        "redaction_directives": list(record.redaction_directives),
-        "retention_class": record.retention_class.value,
-        "size_bytes": record.size_bytes,
-    }
+def _manifest_record(record: EvidenceRecord) -> ManifestEntry:
+    return ManifestEntry(
+        content_hash=record.content_hash,
+        created_at=record.created_at,
+        evidence_id=str(record.id),
+        key=record.key,
+        media_type=record.media_type,
+        redaction_directives=record.redaction_directives,
+        retention_class=record.retention_class,
+        size_bytes=record.size_bytes,
+    )
 
 
 def _retention_class(event_type: str) -> RetentionClass:

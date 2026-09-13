@@ -10,7 +10,12 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import (
+    MAX_ATTACHMENT_BYTES,
+    EvidenceRecord,
+    RetentionClass,
+    SanitizedEvidence,
+)
 from replayforge.shared.clock import Clock
 from replayforge.shared.ids import EntityKind, new_id, parse_id
 
@@ -35,6 +40,8 @@ class LocalEvidenceStore:
         parse_id(run_id, EntityKind.RUN)
         if _KIND_PATTERN.fullmatch(kind) is None:
             raise ValueError("evidence kind must be a lowercase safe path segment")
+        if len(payload.content) > MAX_ATTACHMENT_BYTES:
+            raise ValueError("evidence payload exceeds the storage limit")
         evidence_id = new_id(EntityKind.EVIDENCE)
         relative = Path(run_id) / f"{kind}-{evidence_id}.bin"
         destination = self._resolve_key(relative.as_posix())

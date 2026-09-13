@@ -26,14 +26,19 @@ class Executor:
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
         self.request = request
         if self.succeed:
-            return DiscoverySuccess("success", request.run_id, self.artifact, "evidence://manifest")
+            return DiscoverySuccess(
+                "success",
+                request.run_id,
+                self.artifact,
+                f"evidence://{request.run_id}/manifest.json",
+            )
         return FailureResult(
             status="failure",
             run_id=request.run_id,
             code="provider_unavailable",
             message="Provider unavailable.",
             recoverable=True,
-            evidence_manifest="evidence://manifest",
+            evidence_manifest=f"evidence://{request.run_id}/manifest.json",
         )
 
 

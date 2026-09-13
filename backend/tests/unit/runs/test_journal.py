@@ -150,18 +150,21 @@ def test_journal_persists_sanitized_binary_attachment(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "payload",
+    ("content", "media_type", "directives"),
     [
-        SanitizedEvidence(b"", "image/png", ()),
-        SanitizedEvidence(b"{}", "application/json", ()),
-        SanitizedEvidence(b"not-a-png", "image/png", ()),
-        SanitizedEvidence(b"not-a-zip", "application/zip", ()),
+        (b"", "image/png", ()),
+        (b"{}", "application/json", ()),
+        (b"not-a-png", "image/png", ()),
+        (b"not-a-zip", "application/zip", ()),
     ],
 )
-def test_journal_rejects_invalid_attachment(payload: SanitizedEvidence) -> None:
+def test_journal_rejects_invalid_attachment(
+    content: bytes, media_type: str, directives: tuple[str, ...]
+) -> None:
     recorder = journal()
 
     with pytest.raises((ValueError, RuntimeError)):
+        payload = SanitizedEvidence(content, media_type, directives)  # type: ignore[arg-type]
         recorder.attach_sanitized("invalid", payload, RetentionClass.OPERATIONAL)
 
 

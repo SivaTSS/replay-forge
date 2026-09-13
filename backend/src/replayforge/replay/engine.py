@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from time import sleep
-from typing import Any
+from typing import Any, cast
+
+from pydantic import JsonValue
 
 from replayforge.capabilities.models import (
     ApplicationFailure,
@@ -832,8 +834,8 @@ class ReplayEngine:
             message=message,
             recoverable=recoverable,
             step_id=step_id,
-            expected=expected,
-            observed=observed,
+            expected=cast(dict[str, JsonValue] | None, expected),
+            observed=cast(dict[str, JsonValue] | None, observed),
             evidence_manifest=self.recorder.evidence_manifest_key,
         )
 
