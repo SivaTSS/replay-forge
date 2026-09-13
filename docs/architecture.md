@@ -74,16 +74,23 @@ adds one reviewed registration. A new surface contract still requires a surface 
 ## Dependency direction
 
 ```text
-FastAPI / OpenAI / Playwright / filesystem
-                    │ implement
-                    ▼
-           typed ports and services
-                    │ use
-                    ▼
-       domain models and deterministic rules
+main → runtime composition root
+             │ constructs
+             ▼
+ API → application services → discovery / replay engines
+                                  │ depend on
+                                  ▼
+                         typed ports + domain models
+                                  ▲
+                                  │ implement
+                 OpenAI / Playwright / local files
 ```
 
-The key rule is structural: `replay` does not import `providers`. A test enforces that rule. Replacing OpenAI cannot alter replay; replacing Playwright does not require changing the replay state machine.
+Two structural tests enforce the important direction: replay cannot import discovery or model
+providers, and domain/adapter packages cannot import the outer `runtime` composition package.
+Provider budgets therefore live with the provider adapter; visual budgets live with surfaces;
+runtime only loads configuration and wires concrete objects. Replacing OpenAI cannot alter replay,
+and replacing Playwright does not require changing the replay state machine.
 
 | Boundary | Port or contract | Current adapter |
 |---|---|---|
@@ -103,17 +110,31 @@ The key rule is structural: `replay` does not import `providers`. A test enforce
 | `applications` | Validated application onboarding, launch resolution, route aliases, and policy ceilings | [`applications/models.py`](../backend/src/replayforge/applications/models.py) |
 | `discovery` | Contract planning, bounded observe-decide-act loop, and generic trace compilation | [`discovery/engine.py`](../backend/src/replayforge/discovery/engine.py) |
 | `replay` | Model-free step interpreter, recovery, outcomes, checkpoint | [`replay/engine.py`](../backend/src/replayforge/replay/engine.py) |
-| `surfaces` | Technology-neutral session port and Playwright implementation | [`surfaces/ports.py`](../backend/src/replayforge/surfaces/ports.py) |
+| `surfaces` | Session port, Playwright adapter, deterministic vision, and visual policy | [`surfaces/ports.py`](../backend/src/replayforge/surfaces/ports.py) |
 | `policy` | Allowlist intersection, risk inference, decision records | [`policy/evaluator.py`](../backend/src/replayforge/policy/evaluator.py) |
 | `interventions` | Intervention lifecycle and exclusive lease transitions | [`interventions/service.py`](../backend/src/replayforge/interventions/service.py) |
 | `evidence` | Redaction, local storage, manifests, bundle verification/export | [`evidence/redaction.py`](../backend/src/replayforge/evidence/redaction.py) |
 | `runs` | Invocation orchestration, discovery suites, terminal results, ordered journal | [`runs/service.py`](../backend/src/replayforge/runs/service.py) |
-| `providers` | OpenAI request/response translation only | [`providers/openai.py`](../backend/src/replayforge/providers/openai.py) |
+| `providers` | OpenAI translation plus its reviewed model/cost policy | [`providers/openai.py`](../backend/src/replayforge/providers/openai.py) |
 | `observability` | Bounded model-call metrics | [`observability/model_calls.py`](../backend/src/replayforge/observability/model_calls.py) |
 | `runtime` | Settings, dependency wiring, worker/session retention | [`runtime/composition.py`](../backend/src/replayforge/runtime/composition.py) |
 | `shared` | Stable IDs and clocks only | [`shared/ids.py`](../backend/src/replayforge/shared/ids.py) |
 
 See [Data models](data-models.md) for the objects passed across these boundaries.
+
+The capability schema is the intentional shared execution language: discovery produces it, replay
+interprets it, and a surface adapter executes its typed actions and conditions. Application
+identity is not part of the Playwright adapter. Every driver receives an `ApplicationRegistry`;
+there is no hardcoded demo-bank fallback.
+
+| Failure owner | Boundary behavior |
+|---|---|
+| HTTP adapter | Reject malformed contracts and map known failures to stable, value-free errors |
+| Application service | Resolve versions and create one isolated run scope |
+| Discovery/replay engine | Return typed business outcome, failure, or intervention state |
+| Surface/provider adapter | Translate implementation exceptions into bounded domain error codes |
+| Repository/evidence adapter | Reject conflicts, unsafe paths, oversized content, and integrity mismatch |
+| Composition root | Construct concrete adapters and retain only live local-process resources |
 
 ## Per-run isolation
 
