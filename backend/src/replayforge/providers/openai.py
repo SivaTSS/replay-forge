@@ -9,19 +9,24 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, cast
 
 from openai import OpenAI
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
 
 from replayforge.capabilities.models import (
     InputValue,
+    JsonValueType,
     LiteralValue,
     MatchMode,
+    ObjectContract,
+    PersistenceMode,
     RelativeRegion,
     ValueSchema,
 )
 from replayforge.discovery.models import (
+    CapabilityDraftSpec,
     CompleteProposal,
     DiscoveryProposal,
     EscalateProposal,
+    PlanningContext,
     ProviderContext,
 )
 from replayforge.discovery.ports import ModelProviderError
@@ -32,7 +37,7 @@ from replayforge.observability.model_calls import (
     NoOpModelCallTelemetry,
     ProviderErrorCategory,
 )
-from replayforge.policy.types import Risk
+from replayforge.policy.types import RISK_RANK, DataClassification, Risk
 from replayforge.runtime.model_policy import ModelPolicy
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
@@ -43,7 +48,9 @@ its tight bounding box and set capture_group_label to the unique rendered label 
 discovery converts that temporary region into a content-addressed image signature before
 recording it. Never use coordinates for type or extract.
 Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
-Declare risk conservatively. Extract every required output using its exact field name, and
+Declare risk conservatively. Use click, type, select, press_keys, scroll, wait_for, assert, and
+extract only when the registered action allowlist contains them. Extract every required output
+using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
 When frame_titles is non-empty, controls represented by the inner application observation must
 use target.scope.frame_path with a title locator matching the relevant frame title exactly.
@@ -60,8 +67,45 @@ remaining_output_fields. Never extract a field listed in captured_output_fields 
 output. Complete when remaining_output_fields is empty and the requested result is verified."""
 
 
+_PLAN_INSTRUCTIONS = """Plan a reusable capability from the natural-language goal and initial
+surface observation. Choose a short snake_case operation_slug, describe the requested operation,
+and list every output the caller should receive. Output names must be stable semantic names, not
+screen labels or customer values. Never declare credential or secret fields. Be conservative about
+risk: read_only means only reading or navigation; data entry is at least reversible; mutation is
+sensitive or irreversible. Do not invent regexes, enums, constants, or exact customer values."""
+
+
 class ProviderModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class ProviderOutputField(ProviderModel):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    type: JsonValueType
+    description: str = Field(min_length=1, max_length=500)
+    data_classification: DataClassification = DataClassification.PERSONAL
+    format: Literal["date", "date-time", "decimal"] | None = None
+    required: bool = True
+
+    @field_validator("type")
+    @classmethod
+    def _primitive_only(cls, value: JsonValueType) -> JsonValueType:
+        if value is JsonValueType.OBJECT:
+            raise ValueError("planned outputs must be primitive values")
+        return value
+
+
+class CapabilityPlanProposal(ProviderModel):
+    operation_slug: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=1_000)
+    outputs: tuple[ProviderOutputField, ...] = Field(min_length=1, max_length=50)
+    risk: Risk
+    tags: tuple[str, ...] = Field(default=(), max_length=20)
+
+
+class CapabilityPlanEnvelope(ProviderModel):
+    proposal: CapabilityPlanProposal
 
 
 class ProviderClickAction(ProviderModel):
@@ -78,6 +122,42 @@ class ProviderExtractAction(ProviderModel):
     kind: Literal["extract"]
     output: str
     transform: Literal["text", "trim", "lowercase", "decimal", "date-time"] = "trim"
+
+
+class ProviderSelectAction(ProviderModel):
+    kind: Literal["select"]
+    option: InputValue | LiteralValue
+
+
+class ProviderPressKeysAction(ProviderModel):
+    kind: Literal["press_keys"]
+    keys: tuple[str, ...] = Field(min_length=1, max_length=4)
+
+
+class ProviderScrollAction(ProviderModel):
+    kind: Literal["scroll"]
+    direction: Literal["up", "down", "left", "right"]
+    amount: int = Field(gt=0, le=2_000)
+
+
+class ProviderWaitForAction(ProviderModel):
+    kind: Literal["wait_for"]
+    condition: dict[str, Any]
+
+
+class ProviderAssertAction(ProviderModel):
+    kind: Literal["assert"]
+    condition: dict[str, Any]
+
+
+class ProviderNavigateAction(ProviderModel):
+    kind: Literal["navigate"]
+    entry_point: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+
+
+class ProviderSwitchContextAction(ProviderModel):
+    kind: Literal["switch_context"]
+    context: str = Field(pattern=r"^[a-z][a-z0-9_-]{0,63}$")
 
 
 class ProviderRoleNameCandidate(ProviderModel):
@@ -232,6 +312,10 @@ class ProviderActProposalBase(ProviderModel):
     kind: Literal["act"]
     rationale: str = Field(min_length=1, max_length=500)
     expected_effect: str = Field(min_length=1, max_length=500)
+    # Kept as a bounded JSON object on the provider wire. The runtime validates it against the
+    # recursive condition contract when converting the proposal, avoiding an unsupported union
+    # in provider strict-output schemas.
+    expected_condition: dict[str, Any] | None = None
     declared_risk: Risk
     confidence: float = Field(ge=0, le=1)
 
@@ -251,17 +335,84 @@ class ProviderExtractProposal(ProviderActProposalBase):
     target: ProviderExtractLocatorBundle
 
 
+class ProviderSelectProposal(ProviderActProposalBase):
+    action: ProviderSelectAction
+    target: ProviderTypeLocatorBundle
+
+
+class ProviderPressKeysProposal(ProviderActProposalBase):
+    action: ProviderPressKeysAction
+    target: ProviderClickLocatorBundle | None = None
+
+
+class ProviderScrollProposal(ProviderActProposalBase):
+    action: ProviderScrollAction
+    target: ProviderClickLocatorBundle | None = None
+
+
+class ProviderWaitForProposal(ProviderActProposalBase):
+    action: ProviderWaitForAction
+    target: None = None
+
+
+class ProviderAssertProposal(ProviderActProposalBase):
+    action: ProviderAssertAction
+    target: None = None
+
+
+class ProviderNavigateProposal(ProviderActProposalBase):
+    action: ProviderNavigateAction
+    target: None = None
+
+
+class ProviderSwitchContextProposal(ProviderActProposalBase):
+    action: ProviderSwitchContextAction
+    target: None = None
+
+
 class ProposalEnvelope(ProviderModel):
     proposal: (
         ProviderClickProposal
         | ProviderTypeProposal
         | ProviderExtractProposal
+        | ProviderSelectProposal
+        | ProviderPressKeysProposal
+        | ProviderScrollProposal
+        | ProviderWaitForProposal
+        | ProviderAssertProposal
+        | ProviderNavigateProposal
+        | ProviderSwitchContextProposal
         | CompleteProposal
         | EscalateProposal
     )
 
 
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
+
+
+def _input_contract(inputs: dict[str, Any]) -> ObjectContract:
+    properties: dict[str, ValueSchema] = {}
+    for name, value in inputs.items():
+        if isinstance(value, bool):
+            value_type = JsonValueType.BOOLEAN
+        elif isinstance(value, int):
+            value_type = JsonValueType.INTEGER
+        elif isinstance(value, str):
+            value_type = JsonValueType.STRING
+        else:
+            raise ValueError("discovery inputs must be local primitive values")
+        classification = (
+            DataClassification.CUSTOMER_IDENTIFIER
+            if name.endswith("_id") or name == "id"
+            else DataClassification.PERSONAL
+        )
+        properties[name] = ValueSchema(
+            type=value_type,
+            description=f"Invocation value for {name.replace('_', ' ')}.",
+            data_classification=classification,
+            persistence=PersistenceMode.REDACTED,
+        )
+    return ObjectContract(required=tuple(properties), properties=properties)
 
 
 def _preferred_transform(schema: ValueSchema) -> str:
@@ -340,6 +491,144 @@ class OpenAIModelProvider:
     @property
     def model_name(self) -> str:
         return self.policy.model
+
+    def plan(self, context: PlanningContext) -> CapabilityDraftSpec:
+        """Ask the model for task semantics before the action loop begins."""
+        if not context.screenshot_png or len(context.screenshot_png) > self.policy.max_frame_bytes:
+            raise ModelProviderError(
+                "provider_frame_invalid",
+                "The visual observation is empty or exceeds the provider frame limit.",
+            )
+        try:
+            input_contract = _input_contract(context.inputs)
+        except ValueError as error:
+            raise ModelProviderError(
+                "provider_contract_invalid",
+                "Discovery inputs must be local primitive values.",
+            ) from error
+        if self._calls_made >= self.policy.max_model_calls_per_run:
+            raise ModelProviderError(
+                "provider_budget_exceeded",
+                "The discovery run exhausted its reviewed model-call budget.",
+            )
+        request = {
+            "goal": context.goal,
+            "application_family": context.application_family,
+            "entry_point": context.entry_point,
+            "input_fields": sorted(context.inputs),
+            "input_types": {
+                name: (
+                    "boolean"
+                    if isinstance(value, bool)
+                    else "integer"
+                    if isinstance(value, int)
+                    else "string"
+                )
+                for name, value in context.inputs.items()
+            },
+            "observation": {
+                "route": context.observation.route,
+                "landmarks": list(context.observation.landmarks),
+                "frame_titles": list(context.observation.frame_titles),
+            },
+            "maximum_risk": context.maximum_risk.value,
+            "allowed_action_types": sorted(context.allowed_action_types),
+            "requested_capability_id": context.requested_capability_id,
+        }
+        input_content = [
+            {"type": "input_text", "text": json.dumps(request, separators=(",", ":"))},
+            {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,"
+                + b64encode(context.screenshot_png).decode("ascii"),
+                "detail": "high",
+            },
+        ]
+        self._calls_made += 1
+        call_index = self._calls_made
+        started_at = time.monotonic()
+        try:
+            response = self.client.responses.parse(
+                model=self.model_name,
+                reasoning={"effort": self.policy.reasoning_effort},
+                instructions=_PLAN_INSTRUCTIONS,
+                input=[{"role": "user", "content": input_content}],
+                text_format=CapabilityPlanEnvelope,
+                max_output_tokens=self.policy.max_output_tokens,
+                store=False,
+                tools=[],
+                parallel_tool_calls=False,
+                timeout=self.policy.timeout_seconds,
+            )
+        except Exception as error:
+            category, status_code, error_code = _safe_provider_error_details(error)
+            self._record_metric(
+                call_index,
+                started_at,
+                "provider_error",
+                error_category=category,
+                provider_status_code=status_code,
+                provider_error_code=error_code,
+            )
+            raise ModelProviderError(
+                "provider_unavailable",
+                "The model provider could not produce a capability plan.",
+            ) from error
+        parsed = response.output_parsed
+        if not isinstance(parsed, CapabilityPlanEnvelope):
+            self._record_metric(call_index, started_at, "invalid_response", response.usage)
+            raise ModelProviderError(
+                "provider_response_invalid",
+                "The model provider returned no valid capability plan.",
+            )
+        self._record_metric(call_index, started_at, "success", response.usage)
+        proposal = parsed.proposal
+        if RISK_RANK[proposal.risk] > RISK_RANK[context.maximum_risk]:
+            raise ModelProviderError(
+                "provider_contract_invalid",
+                "The capability plan exceeds the registered risk ceiling.",
+            )
+        if len({field.name for field in proposal.outputs}) != len(proposal.outputs):
+            raise ModelProviderError(
+                "provider_contract_invalid",
+                "The capability plan contains duplicate output fields.",
+            )
+        if any(
+            field.data_classification in {DataClassification.CREDENTIAL, DataClassification.SECRET}
+            for field in proposal.outputs
+        ):
+            raise ModelProviderError(
+                "provider_contract_forbidden",
+                "The capability plan requested a credential or secret output.",
+            )
+        output_properties = {
+            field.name: ValueSchema(
+                type=field.type,
+                description=field.description,
+                data_classification=field.data_classification,
+                persistence=PersistenceMode.REDACTED,
+                format=field.format,
+            )
+            for field in proposal.outputs
+            if field.required
+        }
+        if not output_properties:
+            raise ModelProviderError(
+                "provider_contract_invalid",
+                "The capability plan declared no required outputs.",
+            )
+        return CapabilityDraftSpec(
+            operation_slug=proposal.operation_slug,
+            name=proposal.name,
+            description=proposal.description,
+            inputs=input_contract,
+            outputs=ObjectContract(
+                required=tuple(output_properties),
+                properties=output_properties,
+            ),
+            risk=proposal.risk,
+            tags=proposal.tags,
+        )
 
     def decide(self, context: ProviderContext) -> DiscoveryProposal:
         if not context.screenshot_png or len(context.screenshot_png) > self.policy.max_frame_bytes:
@@ -448,7 +737,13 @@ class OpenAIModelProvider:
                 "The model provider returned no valid structured discovery decision.",
             )
         self._record_metric(call_index, started_at, "success", response.usage)
-        return _DISCOVERY_PROPOSAL.validate_python(parsed.proposal.model_dump(mode="python"))
+        try:
+            return _DISCOVERY_PROPOSAL.validate_python(parsed.proposal.model_dump(mode="python"))
+        except ValidationError as error:
+            raise ModelProviderError(
+                "provider_response_invalid",
+                "The model provider returned an unsupported discovery proposal.",
+            ) from error
 
     def _record_metric(
         self,

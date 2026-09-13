@@ -3,18 +3,32 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
-from replayforge.capabilities.models import ExtractAction
+from replayforge.capabilities.models import (
+    AssertAction,
+    CapabilityArtifact,
+    ExtractAction,
+    Landmark,
+    LiteralValue,
+    ObjectContract,
+    OutputValidCondition,
+    SelectAction,
+    TypeAction,
+    WaitForAction,
+)
 from replayforge.capabilities.values import ContractValidationError, validate_object
 from replayforge.discovery.models import (
     ActProposal,
+    CapabilityDraftSpec,
     CompleteProposal,
     DiscoveryResult,
     DiscoverySuccess,
     EscalateProposal,
+    PlanningContext,
     ProviderContext,
     RecordedDiscoveryStep,
 )
@@ -45,6 +59,7 @@ class DiscoveryRequest:
     tenant: str
     entry_point: str
     inputs: dict[str, Any]
+    existing_capability_id: str | None = None
     max_steps: int = 20
     timeout: timedelta = timedelta(minutes=5)
     max_repeated_state: int = 2
@@ -60,6 +75,8 @@ class DiscoveryRequest:
             raise ValueError("stuck-detection limits must be positive")
         if not 0 <= self.minimum_confidence <= 1:
             raise ValueError("minimum confidence must be between zero and one")
+        if self.existing_capability_id is not None and not self.existing_capability_id.strip():
+            raise ValueError("existing capability id cannot be blank")
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,22 +85,35 @@ class DiscoveryEngine:
     model_provider: ModelProvider
     artifact_compiler: ArtifactCompiler
     policy_evaluator: PolicyEvaluator
-    effective_policy: EffectivePolicy
+    effective_policy: EffectivePolicy | None
     lease_service: ControlLeaseService
     recorder: RunRecorder
     intervention_router: InterventionRouter
     clock: Clock
+    policy_resolver: Callable[[DiscoveryRequest], EffectivePolicy] | None = None
+    contract_planner: Callable[[PlanningContext], CapabilityDraftSpec] | None = None
+    capability_id_resolver: Callable[[str, str], str] | None = None
 
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
         session: SurfaceSession | None = None
         preserve_session = False
         started_at = self.clock.now()
         try:
+            if self.policy_resolver is not None:
+                effective_policy = self.policy_resolver(request)
+            elif self.effective_policy is not None:
+                effective_policy = self.effective_policy
+            else:
+                raise RuntimeError("discovery policy resolver is not configured")
             session = self.surface_driver.open(
                 request.application_family, request.tenant, request.entry_point
             )
             lease = self.lease_service.create_for_automation(session.session_id)
             self.recorder.record("discovery_started", request.run_id)
+            draft = self._plan_contract(request, session, effective_policy)
+            output_contract = (
+                draft.outputs if draft is not None else self.artifact_compiler.output_contract
+            )
             recordings: list[RecordedDiscoveryStep] = []
             history: list[str] = []
             outputs: dict[str, Any] = {}
@@ -127,14 +157,14 @@ class DiscoveryEngine:
                         observation=observation,
                         screenshot_png=session.capture_provider_frame(),
                         action_history=tuple(history),
-                        allowed_action_types=self.effective_policy.allowed_action_types,
-                        output_contract=self.artifact_compiler.output_contract,
+                        allowed_action_types=effective_policy.allowed_action_types,
+                        output_contract=output_contract,
                         captured_output_names=tuple(
                             name
-                            for name in self.artifact_compiler.output_contract.required
+                            for name in output_contract.required
                             if name in outputs
                         ),
-                        maximum_risk=self.effective_policy.maximum_risk,
+                        maximum_risk=effective_policy.maximum_risk,
                     )
                 )
                 self.recorder.record(
@@ -154,18 +184,25 @@ class DiscoveryEngine:
                     preserve_session = True
                     return result
                 if isinstance(proposal, CompleteProposal):
-                    artifact = self.artifact_compiler.compile(
-                        run_id=request.run_id,
-                        goal=request.goal,
-                        application_family=request.application_family,
-                        tenant=request.tenant,
-                        entry_point=request.entry_point,
-                        steps=tuple(recordings),
-                        final_observation=observation,
-                        provider_name=self.model_provider.provider_name,
-                        model_name=self.model_provider.model_name,
-                        evidence_manifest=self.recorder.evidence_manifest_key,
-                    )
+                    try:
+                        artifact = self._compile(
+                            request,
+                            recordings,
+                            observation,
+                            draft,
+                            effective_policy,
+                            bool(getattr(session, "rendered_surface", False)),
+                            str(getattr(session, "base_variant", "standard")),
+                            str(getattr(session, "surface_contract", "web.v1")),
+                            tuple(getattr(session, "required_landmarks", ())),
+                            tuple(getattr(session, "forbidden_landmarks", ())),
+                        )
+                    except ValueError:
+                        return self._failure(
+                            request,
+                            "artifact_compilation_failed",
+                            "The observed trace could not be compiled into a safe capability.",
+                        )
                     if not session.wait_until(
                         artifact.checkpoint.condition,
                         outputs,
@@ -219,7 +256,14 @@ class DiscoveryEngine:
 
                 try:
                     act_result = self._act(
-                        request, session, lease.version, proposal, observation, outputs
+                        request,
+                        session,
+                        lease.version,
+                        proposal,
+                        observation,
+                        outputs,
+                        effective_policy,
+                        output_contract,
                     )
                 except SurfaceError as error:
                     if not error.recoverable or not error.effect_absent:
@@ -252,6 +296,99 @@ class DiscoveryEngine:
             if session is not None and not preserve_session:
                 session.close()
 
+    def _plan_contract(
+        self,
+        request: DiscoveryRequest,
+        session: SurfaceSession,
+        effective_policy: EffectivePolicy,
+    ) -> CapabilityDraftSpec | None:
+        if self.contract_planner is None:
+            return None
+        try:
+            draft = self.contract_planner(
+                PlanningContext(
+                    goal=request.goal,
+                    inputs=request.inputs,
+                    observation=session.observe(),
+                    screenshot_png=session.capture_provider_frame(),
+                    maximum_risk=effective_policy.maximum_risk,
+                    requested_capability_id=request.existing_capability_id,
+                    application_family=request.application_family,
+                    entry_point=request.entry_point,
+                    allowed_action_types=effective_policy.allowed_action_types,
+                )
+            )
+            if not isinstance(draft, CapabilityDraftSpec):
+                raise ValueError("provider returned an invalid capability draft")
+            if self.capability_id_resolver is not None:
+                expected_id = self.capability_id_resolver(
+                    request.application_family, draft.operation_slug
+                )
+                requested_id = request.existing_capability_id or draft.capability_id
+                if requested_id is not None and requested_id != expected_id:
+                    raise ValueError("capability id must belong to the registered namespace")
+                draft = draft.model_copy(update={"capability_id": expected_id})
+            elif request.existing_capability_id is not None:
+                if draft.capability_id not in {None, request.existing_capability_id}:
+                    raise ValueError("provider capability id conflicts with the requested id")
+                draft = draft.model_copy(update={"capability_id": request.existing_capability_id})
+            return draft
+        except ValueError as error:
+            raise ModelProviderError(
+                "provider_contract_invalid",
+                "The provider returned an invalid capability contract.",
+            ) from error
+
+    def _compile(
+        self,
+        request: DiscoveryRequest,
+        recordings: list[RecordedDiscoveryStep],
+        observation: NormalizedObservation,
+        draft: CapabilityDraftSpec | None,
+        effective_policy: EffectivePolicy,
+        rendered_surface: bool,
+        base_variant: str,
+        surface_contract: str,
+        required_landmarks: tuple[Landmark, ...],
+        forbidden_landmarks: tuple[Landmark, ...],
+    ) -> CapabilityArtifact:
+        arguments = {
+            "run_id": request.run_id,
+            "goal": request.goal,
+            "application_family": request.application_family,
+            "tenant": request.tenant,
+            "entry_point": request.entry_point,
+            "steps": tuple(recordings),
+            "final_observation": observation,
+            "provider_name": self.model_provider.provider_name,
+            "model_name": self.model_provider.model_name,
+            "evidence_manifest": self.recorder.evidence_manifest_key,
+            "allowed_route_patterns": effective_policy.allowed_route_patterns,
+            "rendered_surface": rendered_surface,
+            "base_variant": base_variant,
+            "surface_contract": surface_contract,
+            "maximum_risk": effective_policy.maximum_risk,
+            "allowed_action_types": effective_policy.allowed_action_types,
+            "required_landmarks": required_landmarks,
+            "forbidden_landmarks": forbidden_landmarks,
+        }
+        compile_with_spec = getattr(self.artifact_compiler, "compile_with_spec", None)
+        if draft is not None and callable(compile_with_spec):
+            compiler = cast(Callable[..., CapabilityArtifact], compile_with_spec)
+            return compiler(**arguments, draft=draft)
+        return self.artifact_compiler.compile(
+            run_id=request.run_id,
+            goal=request.goal,
+            application_family=request.application_family,
+            tenant=request.tenant,
+            entry_point=request.entry_point,
+            steps=tuple(recordings),
+            final_observation=observation,
+            provider_name=self.model_provider.provider_name,
+            model_name=self.model_provider.model_name,
+            evidence_manifest=self.recorder.evidence_manifest_key,
+        )
+
     def _act(
         self,
         request: DiscoveryRequest,
@@ -260,10 +397,28 @@ class DiscoveryEngine:
         proposal: ActProposal,
         before: NormalizedObservation,
         outputs: dict[str, Any],
+        effective_policy: EffectivePolicy,
+        output_contract: ObjectContract,
     ) -> tuple[RecordedDiscoveryStep, str] | FailureResult | InterventionRequiredResult:
+        value_source = (
+            proposal.action.value
+            if isinstance(proposal.action, TypeAction)
+            else proposal.action.option
+            if isinstance(proposal.action, SelectAction)
+            else None
+        )
+        if isinstance(value_source, LiteralValue) and (
+            str(value_source.value) in {str(value) for value in request.inputs.values()}
+            or (isinstance(value_source.value, str) and value_source.value.isdigit())
+        ):
+            return self._failure(
+                request,
+                "literal_customer_value",
+                "Discovery cannot publish a customer value embedded in an action.",
+            )
         if isinstance(proposal.action, ExtractAction):
             output_name = proposal.action.output
-            if output_name not in self.artifact_compiler.output_contract.required:
+            if output_name not in output_contract.required:
                 raise SurfaceError(
                     "output_not_declared",
                     "Extraction output is not declared by the capability contract.",
@@ -280,7 +435,7 @@ class DiscoveryEngine:
         target = session.resolve(proposal.target, 10_000) if proposal.target else None
         stable_target = session.capture_locator(target) if target else None
         decision = self.policy_evaluator.evaluate(
-            self.effective_policy,
+            effective_policy,
             ActionContext(
                 principal_type=PrincipalType.AUTOMATION,
                 principal_id="runtime",
@@ -331,6 +486,39 @@ class DiscoveryEngine:
                     receipt.error_code or "action_failed",
                     "The discovery action did not complete.",
                 )
+        verified_postconditions = []
+        if isinstance(proposal.action, WaitForAction | AssertAction):
+            if not session.wait_until(
+                proposal.action.condition, outputs, request.inputs, 10_000
+            ):
+                return self._failure(
+                    request,
+                    "action_condition_not_verified",
+                    "The action's condition was not observed.",
+                )
+            verified_postconditions.append(proposal.action.condition)
+        if proposal.expected_condition is not None:
+            if not session.wait_until(
+                proposal.expected_condition, outputs, request.inputs, 10_000
+            ):
+                return self._failure(
+                    request,
+                    "expected_condition_not_verified",
+                    "The action's expected condition was not observed after execution.",
+                )
+            if proposal.expected_condition not in verified_postconditions:
+                verified_postconditions.append(proposal.expected_condition)
+        if isinstance(proposal.action, ExtractAction):
+            output = proposal.action.output
+            schema = output_contract.properties[output]
+            try:
+                validate_object(
+                    ObjectContract(required=(output,), properties={output: schema}),
+                    {output: outputs[output]},
+                )
+            except (ContractValidationError, KeyError):
+                return self._failure(request, "output_invalid", "The extracted output is invalid.")
+            verified_postconditions.append(OutputValidCondition(kind="output_valid", output=output))
         after = session.observe()
         self.recorder.record("action_result", request.run_id)
         recorded = RecordedDiscoveryStep(
@@ -340,9 +528,11 @@ class DiscoveryEngine:
             observation_after=after,
             expected_effect=proposal.expected_effect,
             rationale=proposal.rationale,
-            risk=proposal.declared_risk,
+            risk=decision.effective_risk,
+            verified_postconditions=tuple(verified_postconditions),
         )
         return recorded, self._proposal_fingerprint(proposal)
+
 
     def _intervene(
         self,

@@ -6,7 +6,9 @@ from typing import Protocol
 
 from replayforge.capabilities.models import CapabilityArtifact, ObjectContract
 from replayforge.discovery.models import (
+    CapabilityDraftSpec,
     DiscoveryProposal,
+    PlanningContext,
     ProviderContext,
     RecordedDiscoveryStep,
 )
@@ -30,6 +32,8 @@ class ModelProvider(Protocol):
     def model_name(self) -> str: ...
 
     def decide(self, context: ProviderContext) -> DiscoveryProposal: ...
+
+    def plan(self, context: PlanningContext) -> CapabilityDraftSpec: ...
 
 
 class ArtifactCompiler(Protocol):

@@ -46,6 +46,12 @@ def _remove_hash_neutral_schema_defaults(payload: dict[str, Any]) -> None:
 
     if not payload.get("failures"):
         payload.pop("failures", None)
+    compatibility = payload.get("compatibility")
+    if isinstance(compatibility, dict) and compatibility.get("rendered_surface") is False:
+        compatibility.pop("rendered_surface", None)
+    policy = payload.get("policy")
+    if isinstance(policy, dict) and not policy.get("allowed_route_patterns"):
+        policy.pop("allowed_route_patterns", None)
     steps = list(payload.get("steps", ()))
     for recovery in payload.get("recoveries", ()):
         if isinstance(recovery, dict):

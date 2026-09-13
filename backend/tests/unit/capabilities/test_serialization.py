@@ -87,7 +87,13 @@ def test_generated_schema_identifies_artifact_contract() -> None:
     schema = artifact_json_schema()
 
     assert schema["title"] == "CapabilityArtifact"
-    assert schema["properties"]["schema_version"]["enum"] == ["1.0", "1.1", "1.2", "1.3"]
+    assert schema["properties"]["schema_version"]["enum"] == [
+        "1.0",
+        "1.1",
+        "1.2",
+        "1.3",
+        "1.4",
+    ]
 
 
 def test_committed_schema_matches_generated_contract() -> None:

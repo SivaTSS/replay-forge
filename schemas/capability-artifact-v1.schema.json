@@ -458,6 +458,15 @@
           "type": "array",
           "uniqueItems": true
         },
+        "allowed_route_patterns": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Route Patterns",
+          "type": "array",
+          "uniqueItems": true
+        },
         "forbidden_text_inputs": {
           "default": [],
           "items": {
@@ -608,6 +617,11 @@
         },
         "fingerprint": {
           "$ref": "#/$defs/SurfaceFingerprint"
+        },
+        "rendered_surface": {
+          "default": false,
+          "title": "Rendered Surface",
+          "type": "boolean"
         },
         "supported_variants": {
           "items": {
@@ -2956,7 +2970,8 @@
         "1.0",
         "1.1",
         "1.2",
-        "1.3"
+        "1.3",
+        "1.4"
       ],
       "title": "Schema Version",
       "type": "string"

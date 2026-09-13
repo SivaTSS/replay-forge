@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -600,6 +600,7 @@ class Compatibility(ArtifactModel):
     supported_variants: tuple[str, ...] = Field(min_length=1)
     surface_contract: str
     entry_point: str
+    rendered_surface: bool = False
     fingerprint: SurfaceFingerprint
 
 
@@ -618,10 +619,24 @@ class CapabilityPolicy(ArtifactModel):
     allowed_action_types: frozenset[str]
     allowed_entry_points: frozenset[str]
     maximum_risk: Risk
+    allowed_route_patterns: frozenset[str] = frozenset()
     forbidden_text_inputs: tuple[str, ...] = ()
     output_redaction: dict[str, Literal["remove", "last4", "tokenize"]] = Field(
         default_factory=dict
     )
+
+    @model_validator(mode="after")
+    def validate_route_patterns(self) -> Self:
+        for pattern in self.allowed_route_patterns:
+            if (
+                not pattern.startswith("/")
+                or "?" in pattern
+                or "#" in pattern
+                or "//" in pattern
+                or ".." in pattern
+            ):
+                raise ValueError("capability route patterns must be absolute paths")
+        return self
 
 
 class Provenance(ArtifactModel):
@@ -704,8 +719,22 @@ def _validate_geometry_free_visual_contract(artifact: CapabilityArtifact) -> Non
     _validate_geometry_free_condition(artifact.checkpoint.condition)
 
 
+def _validate_no_persisted_coordinates(artifact: CapabilityArtifact) -> None:
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            if value.get("strategy") == LocatorStrategy.COORDINATES.value:
+                raise ValueError("schema 1.4 artifacts cannot persist coordinate locators")
+            for nested in value.values():
+                walk(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                walk(nested)
+
+    walk(artifact.model_dump(mode="json"))
+
+
 class CapabilityArtifact(ArtifactModel):
-    schema_version: Literal["1.0", "1.1", "1.2", "1.3"]
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4"]
     capability: CapabilityMetadata
     compatibility: Compatibility
     inputs: ObjectContract
@@ -723,6 +752,12 @@ class CapabilityArtifact(ArtifactModel):
     def validate_semantics(self) -> Self:
         if self.schema_version == "1.3":
             _validate_geometry_free_visual_contract(self)
+        if self.schema_version == "1.4":
+            _validate_no_persisted_coordinates(self)
+            if not self.policy.allowed_route_patterns:
+                raise ValueError("schema 1.4 artifacts require non-empty route patterns")
+            if self.compatibility.rendered_surface:
+                _validate_geometry_free_visual_contract(self)
         if self.capability.application_family != self.compatibility.application_family:
             raise ValueError("capability and compatibility application families must match")
         if self.capability.risk is not self.policy.maximum_risk:
@@ -739,6 +774,8 @@ class CapabilityArtifact(ArtifactModel):
             raise ValueError("recovery IDs must be unique")
         outcome_codes = {outcome.code for outcome in self.outcomes}
         failure_codes = {failure.code for failure in self.failures}
+        if len(outcome_codes) != len(self.outcomes):
+            raise ValueError("business outcome codes must be unique")
         if len(failure_codes) != len(self.failures):
             raise ValueError("application failure codes must be unique")
         if outcome_codes & failure_codes:

@@ -10,7 +10,7 @@ import pytest
 from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 
-from replayforge.capabilities.models import InputValue
+from replayforge.capabilities.models import InputValue, JsonValueType
 from replayforge.discovery.compiler import SavingsBalanceCompiler
 from replayforge.discovery.models import ActProposal, CompleteProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
@@ -23,6 +23,7 @@ from replayforge.providers.openai import (
     ProviderFrameTitleCandidate,
     ProviderInputCandidate,
     ProviderLocatorScope,
+    ProviderOutputField,
     ProviderTypeAction,
     ProviderTypeLocatorBundle,
     ProviderTypeProposal,
@@ -212,9 +213,9 @@ def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> Non
 
     assert '"oneOf"' not in serialized
     assert '"anyOf"' in serialized
-    assert "AssertAction" not in serialized
-    assert "WaitForAction" not in serialized
-    assert "NavigateAction" not in serialized
+    assert "ProviderAssertAction" in serialized
+    assert "ProviderWaitForAction" in serialized
+    assert "ProviderNavigateAction" in serialized
     assert '"css"' not in serialized
     assert '"coordinates"' in serialized
     assert '"image_anchor"' not in serialized
@@ -223,7 +224,19 @@ def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> Non
         "ProviderClickAction",
         "ProviderTypeAction",
         "ProviderExtractAction",
+        "ProviderSelectAction",
+        "ProviderPressKeysAction",
+        "ProviderScrollAction",
     }.issubset(schema["$defs"])
+
+
+def test_provider_plan_rejects_non_primitive_output_fields() -> None:
+    with pytest.raises(ValidationError, match="primitive values"):
+        ProviderOutputField(
+            name="nested_result",
+            type=JsonValueType.OBJECT,
+            description="Nested result",
+        )
 
 
 def test_provider_converts_constrained_wire_locator_to_domain_proposal() -> None:
