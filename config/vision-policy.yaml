@@ -10,7 +10,7 @@ segmentation:
 image:
   canonical_width: 64
   canonical_height: 64
-  minimum_similarity: 0.78
+  minimum_similarity: 0.72
   uniqueness_margin: 0.08
 budgets:
   maximum_frame_pixels: 8000000
