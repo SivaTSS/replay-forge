@@ -22,6 +22,14 @@ from replayforge.capabilities.models import (
     WaitForAction,
 )
 from replayforge.capabilities.values import ContractValidationError, validate_object
+from replayforge.discovery.constraints import (
+    DEFAULT_DISCOVERY_STEPS,
+    DEFAULT_DISCOVERY_TIMEOUT,
+    MAX_DISCOVERY_STEPS,
+    MAX_DISCOVERY_TIMEOUT,
+    MIN_DISCOVERY_STEPS,
+    MIN_DISCOVERY_TIMEOUT,
+)
 from replayforge.discovery.models import (
     ActProposal,
     CapabilityDraftSpec,
@@ -65,8 +73,8 @@ class DiscoveryRequest:
     entry_point: str
     inputs: dict[str, Any]
     existing_capability_id: str | None = None
-    max_steps: int = 20
-    timeout: timedelta = timedelta(minutes=5)
+    max_steps: int = DEFAULT_DISCOVERY_STEPS
+    timeout: timedelta = DEFAULT_DISCOVERY_TIMEOUT
     max_repeated_state: int = 2
     max_repeated_action: int = 2
     minimum_confidence: float = 0.6
@@ -74,8 +82,10 @@ class DiscoveryRequest:
     def __post_init__(self) -> None:
         if not self.goal.strip():
             raise ValueError("discovery goal is required")
-        if self.max_steps < 1 or self.timeout <= timedelta(0):
-            raise ValueError("discovery budgets must be positive")
+        if not MIN_DISCOVERY_STEPS <= self.max_steps <= MAX_DISCOVERY_STEPS:
+            raise ValueError("discovery step budget must be between 1 and 50")
+        if not MIN_DISCOVERY_TIMEOUT <= self.timeout <= MAX_DISCOVERY_TIMEOUT:
+            raise ValueError("discovery timeout must be between 10 and 600 seconds")
         if self.max_repeated_state < 1 or self.max_repeated_action < 1:
             raise ValueError("stuck-detection limits must be positive")
         if not 0 <= self.minimum_confidence <= 1:

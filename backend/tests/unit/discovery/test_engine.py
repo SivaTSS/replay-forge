@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+
+import pytest
 
 from replayforge.capabilities.models import CapabilityArtifact, ExtractAction, ObjectContract
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
@@ -129,6 +131,20 @@ def make_request(**changes: Any) -> DiscoveryRequest:
     }
     defaults.update(changes)
     return DiscoveryRequest(**defaults)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"max_steps": 0},
+        {"max_steps": 51},
+        {"timeout": timedelta(seconds=9)},
+        {"timeout": timedelta(seconds=601)},
+    ],
+)
+def test_discovery_request_enforces_domain_budget_ceiling(changes: dict[str, Any]) -> None:
+    with pytest.raises(ValueError, match="discovery"):
+        make_request(**changes)
 
 
 def test_discovery_extraction_transforms_match_artifact_semantics() -> None:

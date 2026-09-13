@@ -6,6 +6,14 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from replayforge.discovery.constraints import (
+    DEFAULT_DISCOVERY_STEPS,
+    DEFAULT_DISCOVERY_TIMEOUT,
+    MAX_DISCOVERY_STEPS,
+    MAX_DISCOVERY_TIMEOUT,
+    MIN_DISCOVERY_STEPS,
+    MIN_DISCOVERY_TIMEOUT,
+)
 from replayforge.runs.results import RunResult
 
 
@@ -31,8 +39,16 @@ class DiscoveryInvocation(ApiModel):
         default=None,
         pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$",
     )
-    max_steps: int = Field(default=20, ge=1, le=50)
-    timeout_seconds: int = Field(default=120, ge=10, le=600)
+    max_steps: int = Field(
+        default=DEFAULT_DISCOVERY_STEPS,
+        ge=MIN_DISCOVERY_STEPS,
+        le=MAX_DISCOVERY_STEPS,
+    )
+    timeout_seconds: int = Field(
+        default=int(DEFAULT_DISCOVERY_TIMEOUT.total_seconds()),
+        ge=int(MIN_DISCOVERY_TIMEOUT.total_seconds()),
+        le=int(MAX_DISCOVERY_TIMEOUT.total_seconds()),
+    )
 
 
 class DiscoverySuiteScenario(ApiModel):
@@ -41,8 +57,16 @@ class DiscoverySuiteScenario(ApiModel):
     inputs: dict[str, Any]
     code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
     description: str | None = Field(default=None, min_length=1, max_length=500)
-    max_steps: int = Field(default=20, ge=1, le=50)
-    timeout_seconds: int = Field(default=120, ge=10, le=600)
+    max_steps: int = Field(
+        default=DEFAULT_DISCOVERY_STEPS,
+        ge=MIN_DISCOVERY_STEPS,
+        le=MAX_DISCOVERY_STEPS,
+    )
+    timeout_seconds: int = Field(
+        default=int(DEFAULT_DISCOVERY_TIMEOUT.total_seconds()),
+        ge=int(MIN_DISCOVERY_TIMEOUT.total_seconds()),
+        le=int(MAX_DISCOVERY_TIMEOUT.total_seconds()),
+    )
 
 
 class DiscoverySuiteValidation(ApiModel):
