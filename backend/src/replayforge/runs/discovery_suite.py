@@ -20,7 +20,12 @@ from replayforge.capabilities.models import (
     Recovery,
     Step,
 )
-from replayforge.capabilities.registry import CapabilityRegistry
+from replayforge.capabilities.registry import (
+    CapabilityConflictError,
+    CapabilityIntegrityError,
+    CapabilityPublicationError,
+    CapabilityRegistry,
+)
 from replayforge.capabilities.serialization import artifact_content_hash
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import RISK_RANK, Risk
@@ -330,7 +335,20 @@ class DiscoverySuiteService:
         if not self.validator(artifact, suite.tenant, suite.primary_inputs):
             self._record_validation_failure(suite, suite.tenant, "primary_replay_failed")
             raise DiscoverySuiteError("final deterministic replay did not pass")
-        published = self.registry.publish_next(artifact)
+        try:
+            published = self.registry.publish_next(artifact)
+        except (
+            CapabilityConflictError,
+            CapabilityIntegrityError,
+            CapabilityPublicationError,
+        ) as error:
+            updated = replace(
+                suite,
+                artifact=artifact,
+                status=DiscoverySuiteStatus.VALIDATED,
+            )
+            self._store.save(updated)
+            raise DiscoverySuiteError("capability publication failed safely") from error
         artifact = published.artifact
         updated = replace(
             suite,

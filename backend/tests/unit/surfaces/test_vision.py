@@ -702,7 +702,11 @@ def test_template_peak_extraction_is_bounded() -> None:
 
 def test_asset_hash_mismatch_fails_closed(tmp_path: Path) -> None:
     store = LocalCapabilityAssetStore(tmp_path)
-    key, _digest = store.write(png_with_icon(40, 70))
+    content = png_with_icon(40, 70)
+    key, digest = store.write(content)
+
+    assert store.write(content) == (key, digest)
+    assert not tuple(tmp_path.glob("*.tmp"))
 
     with pytest.raises(CapabilityAssetError, match="disagree"):
         store.read(key, "sha256:" + "0" * 64)

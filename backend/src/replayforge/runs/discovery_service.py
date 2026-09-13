@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Protocol
 
-from replayforge.capabilities.registry import CapabilityRegistry
+from replayforge.capabilities.registry import (
+    CapabilityConflictError,
+    CapabilityIntegrityError,
+    CapabilityPublicationError,
+    CapabilityRegistry,
+)
 from replayforge.discovery.engine import DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import Risk
@@ -77,13 +82,28 @@ class DiscoveryApplicationService:
                     evidence_manifest=result.evidence_manifest,
                 )
             else:
-                published = self.registry.publish_next(result.artifact)
-                result = DiscoverySuccess(
-                    status="success",
-                    run_id=result.run_id,
-                    artifact=published.artifact,
-                    evidence_manifest=result.evidence_manifest,
-                )
+                try:
+                    published = self.registry.publish_next(result.artifact)
+                except (
+                    CapabilityConflictError,
+                    CapabilityIntegrityError,
+                    CapabilityPublicationError,
+                ) as error:
+                    result = FailureResult(
+                        status="failure",
+                        run_id=result.run_id,
+                        code="capability_publication_failed",
+                        message="The discovered capability could not be published safely.",
+                        recoverable=isinstance(error, CapabilityPublicationError),
+                        evidence_manifest=result.evidence_manifest,
+                    )
+                else:
+                    result = DiscoverySuccess(
+                        status="success",
+                        run_id=result.run_id,
+                        artifact=published.artifact,
+                        evidence_manifest=result.evidence_manifest,
+                    )
         return self.result_finalizer(result) if self.result_finalizer is not None else result
 
     def discover(

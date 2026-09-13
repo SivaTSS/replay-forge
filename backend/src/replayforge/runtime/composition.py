@@ -18,9 +18,8 @@ from replayforge.capabilities.models import BusinessOutcome, CapabilityArtifact
 from replayforge.capabilities.registry import (
     CapabilityRegistry,
     CapabilityVersionRecord,
-    InMemoryCapabilityRegistry,
+    LocalCapabilityRegistry,
 )
-from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.compiler import TraceArtifactCompiler
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
@@ -94,14 +93,9 @@ _PLATFORM_ACTIONS = frozenset(
 
 
 def load_registry(directory: Path) -> CapabilityRegistry:
-    registry = InMemoryCapabilityRegistry(SystemClock())
-    paths = sorted(directory.glob("*/*.yaml"))
-    if not paths:
+    registry = LocalCapabilityRegistry(directory)
+    if not registry.all():
         raise ValueError("artifact directory contains no versioned YAML artifacts")
-    for path in paths:
-        if path.stat().st_size > 1_000_000:
-            raise ValueError("artifact exceeds the one-megabyte startup limit")
-        registry.publish(load_artifact_yaml(path.read_text(encoding="utf-8")))
     return registry
 
 

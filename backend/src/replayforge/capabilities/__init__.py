@@ -5,9 +5,11 @@ from replayforge.capabilities.registry import (
     CapabilityConflictError,
     CapabilityIntegrityError,
     CapabilityNotFoundError,
+    CapabilityPublicationError,
     CapabilityRegistry,
     CapabilityVersionRecord,
     InMemoryCapabilityRegistry,
+    LocalCapabilityRegistry,
 )
 from replayforge.capabilities.serialization import (
     artifact_content_hash,
@@ -20,9 +22,11 @@ __all__ = [
     "CapabilityConflictError",
     "CapabilityIntegrityError",
     "CapabilityNotFoundError",
+    "CapabilityPublicationError",
     "CapabilityRegistry",
     "CapabilityVersionRecord",
     "InMemoryCapabilityRegistry",
+    "LocalCapabilityRegistry",
     "artifact_content_hash",
     "dump_artifact_yaml",
     "load_artifact_yaml",

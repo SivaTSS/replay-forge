@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -33,7 +35,29 @@ class LocalCapabilityAssetStore:
         if destination.exists() and destination.read_bytes() != content:
             raise CapabilityAssetError("content-addressed asset collision")
         if not destination.exists():
-            destination.write_bytes(content)
+            descriptor, temporary_name = tempfile.mkstemp(
+                dir=self.root,
+                prefix=f".{digest}.",
+                suffix=".tmp",
+            )
+            temporary = Path(temporary_name)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(content)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                try:
+                    os.link(temporary, destination)
+                except FileExistsError:
+                    if destination.read_bytes() != content:
+                        raise CapabilityAssetError("content-addressed asset collision") from None
+                directory = os.open(self.root, os.O_RDONLY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+            finally:
+                temporary.unlink(missing_ok=True)
         return f"asset://sha256/{digest}", f"sha256:{digest}"
 
     def read(self, key: str, content_hash: str) -> bytes:

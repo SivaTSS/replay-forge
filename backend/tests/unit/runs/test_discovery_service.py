@@ -8,7 +8,11 @@ from typing import Any
 import pytest
 
 from replayforge.capabilities.models import CapabilityArtifact
-from replayforge.capabilities.registry import CapabilityNotFoundError, InMemoryCapabilityRegistry
+from replayforge.capabilities.registry import (
+    CapabilityNotFoundError,
+    CapabilityPublicationError,
+    InMemoryCapabilityRegistry,
+)
 from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.engine import DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
@@ -143,3 +147,43 @@ def test_success_is_finalized_after_publishing_next_version(
     )
 
     assert finalized_versions == ["1.0.1"]
+
+
+def test_publication_failure_returns_a_sanitized_completed_failure(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
+    finalized: list[DiscoveryResult] = []
+
+    def fail(_registry: InMemoryCapabilityRegistry, _artifact: CapabilityArtifact) -> None:
+        raise CapabilityPublicationError("/private/path must not be exposed")
+
+    monkeypatch.setattr(InMemoryCapabilityRegistry, "publish_next", fail)
+
+    def finalize(result: DiscoveryResult) -> DiscoveryResult:
+        finalized.append(result)
+        return result
+
+    service = DiscoveryApplicationService(
+        registry,
+        lambda run_id: Executor(artifact, True),
+        lambda: True,
+        finalize,
+    )
+
+    result = service.invoke(
+        goal="Look up the current savings balance",
+        application_family="northstar_member_service",
+        tenant="harbor_credit_union",
+        entry_point="member_search",
+        inputs={"member_id": "12345"},
+        max_steps=20,
+        timeout_seconds=120,
+    )
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "capability_publication_failed"
+    assert result.recoverable
+    assert "/private/path" not in result.message
+    assert finalized == [result]
