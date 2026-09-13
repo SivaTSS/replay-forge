@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from playwright.sync_api import (
@@ -30,6 +30,8 @@ from playwright.sync_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
+from replayforge.applications.models import SurfaceLaunch
+from replayforge.applications.registry import ApplicationRegistry, default_application_registry
 from replayforge.capabilities.models import (
     Action,
     AllCondition,
@@ -42,6 +44,7 @@ from replayforge.capabilities.models import (
     ExtractAction,
     IdentityMatchesCondition,
     InputValue,
+    Landmark,
     LiteralValue,
     LocatorBundle,
     LocatorCandidate,
@@ -112,6 +115,7 @@ class PlaywrightSurfaceDriver:
     vision: VisionGrounder | None = None
     allow_transient_coordinates: bool = False
     viewport: Viewport = field(default_factory=lambda: Viewport(1280, 800))
+    application_registry: ApplicationRegistry | None = None
     browser: Browser | None = field(default=None, init=False)
     playwright: Playwright | None = field(default=None, init=False)
     active_session: PlaywrightSurfaceSession | None = field(default=None, init=False)
@@ -119,16 +123,21 @@ class PlaywrightSurfaceDriver:
     def open(
         self, application_family: str, tenant: str, entry_point: str
     ) -> PlaywrightSurfaceSession:
-        if application_family != "northstar_member_service":
-            raise SurfaceError("unknown_application", "Application family is not registered.")
-        if tenant not in {"harbor", "summit"}:
-            raise SurfaceError("unknown_tenant", "Tenant is not registered.")
-        if entry_point not in {
-            "member_search",
-            "visual_member_search",
-            "visual_member_workbench",
-        }:
-            raise SurfaceError("unknown_entry_point", "Entry point is not registered.")
+        registry = self.application_registry or default_application_registry(self.base_url)
+        try:
+            launch = registry.resolve(application_family, tenant, entry_point)
+        except ValueError as error:
+            message = str(error)
+            code = (
+                "unknown_application"
+                if "application family" in message
+                else "unknown_tenant"
+                if "tenant" in message
+                else "unknown_entry_point"
+            )
+            raise SurfaceError(
+                code, "The requested application target is not registered."
+            ) from error
         if self.playwright is None:
             self.playwright = sync_playwright().start()
             self.browser = self.playwright.chromium.launch(headless=self.headless)
@@ -138,20 +147,17 @@ class PlaywrightSurfaceDriver:
             device_scale_factor=self.viewport.device_scale,
         )
         page = context.new_page()
-        tenant_root = f"{self.base_url.rstrip('/')}/{quote(tenant, safe='')}"
-        destination = (
-            f"{tenant_root}/visual-terminal"
-            if entry_point == "visual_member_search"
-            else f"{tenant_root}/visual-workbench"
-            if entry_point == "visual_member_workbench"
-            else tenant_root
-        )
         try:
-            page.goto(destination, wait_until="domcontentloaded", timeout=15_000)
-            if entry_point == "member_search":
-                page.frame_locator('iframe[title="Member operations"]').get_by_role(
-                    "heading", name="Member Search", exact=True
-                ).wait_for(state="visible", timeout=15_000)
+            page.goto(launch.url, wait_until="domcontentloaded", timeout=15_000)
+            if not launch.rendered_surface and (
+                launch.required_landmarks or launch.forbidden_landmarks
+            ):
+                root = (
+                    page.frame_locator(f'iframe[title="{launch.readiness_frame_title}"]')
+                    if launch.readiness_frame_title
+                    else page
+                )
+                self._verify_registered_landmarks(root, launch)
             else:
                 page.wait_for_timeout(500)
         except PlaywrightTimeoutError as exc:
@@ -167,14 +173,57 @@ class PlaywrightSurfaceDriver:
             page=page,
             application_family=application_family,
             tenant=tenant,
-            entry_points={entry_point: destination},
+            entry_points=launch.entry_points,
+            surface_contract=launch.surface_contract,
+            base_variant=registry.get(application_family).base_variant,
+            required_landmarks=launch.required_landmarks,
+            forbidden_landmarks=launch.forbidden_landmarks,
             vision=self.vision,
             allow_transient_coordinates=self.allow_transient_coordinates,
-            rendered_surface=entry_point in {"visual_member_search", "visual_member_workbench"},
+            rendered_surface=launch.rendered_surface,
             viewport=self.viewport,
+            route_aliases=registry.get(application_family).route_aliases,
         )
         self.active_session = session
         return session
+
+    @staticmethod
+    def _verify_registered_landmarks(root: QueryRoot, launch: SurfaceLaunch) -> None:
+        for landmark in launch.required_landmarks:
+            if landmark.kind == "heading":
+                locator = cast(Any, root).get_by_role(
+                    "heading", name=landmark.value, exact=True
+                )
+            elif landmark.kind in {"field", "label", "text"}:
+                locator = root.get_by_text(landmark.value, exact=True)
+            else:
+                raise SurfaceError(
+                    "readiness_landmark_unsupported",
+                    "The registered readiness landmark is unsupported by the web adapter.",
+                )
+            try:
+                locator.wait_for(state="visible", timeout=15_000)
+            except PlaywrightTimeoutError as exc:
+                raise SurfaceError(
+                    "readiness_landmark_missing",
+                    "The registered application readiness landmark was not observed.",
+                    recoverable=True,
+                    effect_absent=True,
+                ) from exc
+        for landmark in launch.forbidden_landmarks:
+            if landmark.kind == "heading":
+                locator = cast(Any, root).get_by_role(
+                    "heading", name=landmark.value, exact=True
+                )
+            elif landmark.kind in {"field", "label", "text"}:
+                locator = root.get_by_text(landmark.value, exact=True)
+            else:
+                continue
+            if locator.count() > 0:
+                raise SurfaceError(
+                    "forbidden_readiness_landmark",
+                    "The registered application surface is not compatible with this capability.",
+                )
 
     def capture_active_frame(self) -> SurfaceFrame:
         if self.active_session is None:
@@ -203,10 +252,15 @@ class PlaywrightSurfaceSession:
     application_family: str
     tenant: str
     entry_points: dict[str, str]
+    surface_contract: str = "web.v1"
+    base_variant: str = "standard"
+    required_landmarks: tuple[Landmark, ...] = ()
+    forbidden_landmarks: tuple[Landmark, ...] = ()
     vision: VisionGrounder | None = None
     allow_transient_coordinates: bool = False
     rendered_surface: bool = False
     viewport: Viewport = field(default_factory=lambda: Viewport(1280, 800))
+    route_aliases: dict[str, str] = field(default_factory=dict)
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     _handles: dict[str, Locator] = field(default_factory=dict, init=False)
     _bundles: dict[str, LocatorBundle] = field(default_factory=dict, init=False)
@@ -604,7 +658,15 @@ class PlaywrightSurfaceSession:
                 else:
                     self._required(locator).press_sequentially(str(value))
             elif isinstance(action, PressKeysAction):
-                self._required(locator).press("+".join(action.keys))
+                keys = "+".join(action.keys)
+                if target is not None and target.visual is not None:
+                    x, y = self._fresh_visual(target).region.center
+                    self.page.mouse.click(x, y, button="left")
+                    self.page.keyboard.press(keys)
+                elif locator is not None:
+                    locator.press(keys)
+                else:
+                    self.page.keyboard.press(keys)
             elif isinstance(action, SelectAction):
                 if target is not None and target.visual is not None:
                     raise SurfaceError(
@@ -737,16 +799,10 @@ class PlaywrightSurfaceSession:
 
     def _normalize_route(self, route: str) -> str:
         prefix = f"/{self.tenant}"
-        if route.startswith(prefix):
+        if route == prefix or route.startswith(f"{prefix}/"):
             route = route.removeprefix(prefix) or "/"
-        if route in {
-            "/member-search",
-            "/member-results",
-            "/visual-terminal",
-            "/visual-workbench",
-        }:
-            return "/members/search"
-        return route
+        route = route.rstrip("/") or "/"
+        return self.route_aliases.get(route, route)
 
     def _scoped_root(self, target: LocatorBundle) -> QueryRoot:
         root: QueryRoot = self.page

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from replayforge.capabilities.models import Action, Condition, LocatorBundle
+from replayforge.capabilities.models import Action, Condition, Landmark, LocatorBundle
 from replayforge.surfaces.models import (
     ActionReceipt,
     NormalizedObservation,
@@ -19,6 +19,21 @@ class SurfaceSession(Protocol):
 
     @property
     def origin(self) -> str: ...
+
+    @property
+    def surface_contract(self) -> str: ...
+
+    @property
+    def base_variant(self) -> str: ...
+
+    @property
+    def rendered_surface(self) -> bool: ...
+
+    @property
+    def required_landmarks(self) -> tuple[Landmark, ...]: ...
+
+    @property
+    def forbidden_landmarks(self) -> tuple[Landmark, ...]: ...
 
     def observe(self) -> NormalizedObservation: ...
 

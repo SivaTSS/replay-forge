@@ -21,6 +21,7 @@ class RuntimeSettings(BaseSettings):
     )
 
     artifact_directory: Path = Path("capabilities")
+    application_registry_file: Path = Path("config/applications.yaml")
     capability_asset_directory: Path = Path("capabilities/_assets")
     evidence_directory: Path = Path("evidence/runtime")
     demo_base_url: str = "http://127.0.0.1:3001"
@@ -66,6 +67,8 @@ class RuntimeSettings(BaseSettings):
             raise ValueError("demo base URL must be a credential-free HTTP origin")
         if not self.artifact_directory.is_dir():
             raise ValueError("artifact directory does not exist")
+        if not self.application_registry_file.is_file():
+            raise ValueError("application registry file does not exist")
         langfuse_url = urlsplit(self.langfuse_base_url)
         if (
             langfuse_url.scheme != "http"
