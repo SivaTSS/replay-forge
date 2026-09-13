@@ -22,6 +22,10 @@ from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, Viewport
 
+_RUN_ID = "run_0123456789abcdef0123456789abcdef"
+_FINGERPRINT = "a" * 64
+_EVIDENCE_MANIFEST = f"evidence://{_RUN_ID}/manifest.bin"
+
 
 def test_compiler_accepts_a_different_task_shape() -> None:
     clock = FrozenClock(datetime(2026, 9, 10, 12, 30, tzinfo=UTC))
@@ -31,7 +35,7 @@ def test_compiler_accepts_a_different_task_shape() -> None:
         captured_at=clock.now(),
         route="/members/search",
         viewport=Viewport(1280, 800),
-        fingerprint="different-task",
+        fingerprint=_FINGERPRINT,
         landmarks=("Member Search",),
     )
     target = LocatorBundle(
@@ -88,7 +92,7 @@ def test_compiler_accepts_a_different_task_shape() -> None:
 
     artifact = TraceArtifactCompiler(clock).compile(
         draft=draft,
-        run_id="run_generic",
+        run_id=_RUN_ID,
         goal="Read the reference value",
         application_family="northstar_member_service",
         tenant="harbor",
@@ -97,7 +101,7 @@ def test_compiler_accepts_a_different_task_shape() -> None:
         final_observation=observation,
         provider_name="test",
         model_name="test",
-        evidence_manifest="evidence://generic",
+        evidence_manifest=_EVIDENCE_MANIFEST,
     )
 
     assert artifact.capability.id == "northstar_member_service.read_reference"
@@ -136,7 +140,7 @@ def test_generic_compiler_rejects_missing_output() -> None:
     with pytest.raises(CompilationError, match="trace contains no actions"):
         TraceArtifactCompiler(clock).compile(
             draft=draft,
-            run_id="run_generic",
+            run_id=_RUN_ID,
             goal="Read a value",
             application_family="app",
             tenant="tenant",
@@ -145,7 +149,7 @@ def test_generic_compiler_rejects_missing_output() -> None:
             final_observation=observation,
             provider_name="test",
             model_name="test",
-            evidence_manifest="evidence://generic",
+            evidence_manifest=_EVIDENCE_MANIFEST,
         )
 
 
@@ -157,7 +161,7 @@ def test_compiler_derives_completion_from_verified_rendered_extractions() -> Non
         captured_at=clock.now(),
         route="/workbench",
         viewport=Viewport(1280, 800),
-        fingerprint="rendered-details",
+        fingerprint=_FINGERPRINT,
         landmarks=("Reference",),
     )
     draft = CapabilityDraftSpec(
@@ -195,7 +199,7 @@ def test_compiler_derives_completion_from_verified_rendered_extractions() -> Non
 
     artifact = TraceArtifactCompiler(clock).compile(
         draft=draft,
-        run_id="run_rendered",
+        run_id=_RUN_ID,
         goal="Read a rendered reference",
         application_family="app",
         tenant="tenant",
@@ -204,7 +208,7 @@ def test_compiler_derives_completion_from_verified_rendered_extractions() -> Non
         final_observation=observation,
         provider_name="test",
         model_name="test",
-        evidence_manifest="evidence://rendered",
+        evidence_manifest=_EVIDENCE_MANIFEST,
         rendered_surface=True,
     )
 
@@ -224,7 +228,7 @@ def test_compiler_uses_observed_action_risk_not_planner_guess() -> None:
         captured_at=clock.now(),
         route="/details",
         viewport=Viewport(1280, 800),
-        fingerprint="details",
+        fingerprint=_FINGERPRINT,
         landmarks=("Reference",),
     )
     draft = CapabilityDraftSpec(
@@ -261,7 +265,7 @@ def test_compiler_uses_observed_action_risk_not_planner_guess() -> None:
 
     artifact = TraceArtifactCompiler(clock).compile(
         draft=draft,
-        run_id="run_risk",
+        run_id=_RUN_ID,
         goal="Read a reference",
         application_family="app",
         tenant="tenant",
@@ -270,7 +274,7 @@ def test_compiler_uses_observed_action_risk_not_planner_guess() -> None:
         final_observation=observation,
         provider_name="test",
         model_name="test",
-        evidence_manifest="evidence://risk",
+        evidence_manifest=_EVIDENCE_MANIFEST,
     )
 
     assert artifact.capability.risk is Risk.READ_ONLY

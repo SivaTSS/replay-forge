@@ -42,7 +42,7 @@ def discovery_result() -> dict[str, Any]:
     artifact = load_artifact_yaml(
         Path("capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
     )
-    run_id = "run_genuine_discovery"
+    run_id = "run_0123456789abcdef0123456789abcdef"
     manifest = f"evidence://{run_id}/manifest.json"
     provenance_manifest = f"evidence://{run_id}/manifest-compile-snapshot.bin"
     artifact = artifact.model_copy(
@@ -196,7 +196,7 @@ def test_rejects_non_openai_artifact() -> None:
 def test_rejects_cross_run_artifact_provenance() -> None:
     result = discovery_result()
     result["artifact"]["provenance"]["evidence_manifest_key"] = (
-        "evidence://run_different/manifest.json"
+        "evidence://run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/manifest.json"
     )
 
     with pytest.raises(RuntimeError, match="different run"):

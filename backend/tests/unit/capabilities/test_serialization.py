@@ -76,6 +76,7 @@ def test_every_committed_artifact_retains_its_contract_and_canonical_hash() -> N
         assert digest == _COMMITTED_ARTIFACT_HASHES[relative_path]
         assert artifact.provenance.artifact_content_hash == digest
         assert load_artifact_yaml(dump_artifact_yaml(artifact)) == artifact
+        assert CapabilityArtifact.model_validate(artifact.model_dump(mode="python")) == artifact
 
 
 def test_declared_content_hash_is_excluded_from_hash_input(

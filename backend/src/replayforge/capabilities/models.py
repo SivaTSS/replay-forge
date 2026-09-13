@@ -252,7 +252,28 @@ class LocatorCandidate(ArtifactModel):
             },
         }
         allowed = common | strategy_fields.get(self.strategy, {"value"})
-        unexpected = self.model_fields_set - allowed
+        strategy_specific_fields = {
+            "value",
+            "role",
+            "name",
+            "anchor",
+            "relation",
+            "element",
+            "text",
+            "capture_group_label",
+            "x",
+            "y",
+            "width",
+            "height",
+            "viewport_width",
+            "viewport_height",
+        }
+        populated = {
+            field_name
+            for field_name in strategy_specific_fields
+            if getattr(self, field_name) is not None
+        }
+        unexpected = populated - allowed
         if unexpected:
             raise ValueError(
                 f"{self.strategy.value} locator contains unrelated fields: {sorted(unexpected)}"
