@@ -72,21 +72,21 @@ class FakeRetainedDriver:
 def runtime_service() -> tuple[RuntimeInterventionService, str, FakeRetainedDriver, int]:
     clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
     leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
-    router = InMemoryInterventionRouter(clock)
+    router = InMemoryInterventionRouter(clock, leases)
     session_id = str(new_id(EntityKind.SESSION))
     initial = leases.create_for_automation(session_id)
     intervention_id = str(new_id(EntityKind.INTERVENTION))
-    paused = leases.pause(session_id, initial.version, intervention_id)
     run_id = str(new_id(EntityKind.RUN))
-    router.create(
+    router.open(
         intervention_id=intervention_id,
         run_id=run_id,
         session_id=session_id,
+        expected_lease_version=initial.version,
         code="unexpected_dialog",
         step_id=None,
         observation=NormalizedObservation(
             id=new_id(EntityKind.EVENT),
-            session_id=paused.session_id,
+            session_id=initial.session_id,
             captured_at=clock.now(),
             route="/members/search",
             viewport=Viewport(1280, 800),

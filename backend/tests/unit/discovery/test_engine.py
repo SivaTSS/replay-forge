@@ -101,6 +101,7 @@ def build_discovery(
             maximum_risk=Risk.READ_ONLY,
         )
     )
+    lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
     return (
         DiscoveryEngine(
             surface_driver=cast(SurfaceDriver, FakeSurfaceDriver(session)),
@@ -108,9 +109,9 @@ def build_discovery(
             artifact_compiler=compiler,
             policy_evaluator=PolicyEvaluator(clock),
             effective_policy=policy,
-            lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
+            lease_service=lease_service,
             recorder=MemoryRecorder(),
-            intervention_router=MemoryInterventionRouter(),
+            intervention_router=MemoryInterventionRouter(lease_service),
             clock=clock,
         ),
         compiler,

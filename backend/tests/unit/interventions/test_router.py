@@ -4,7 +4,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from replayforge.interventions.leases import (
+    ControlLeaseService,
+    InMemoryControlLeaseRepository,
+)
 from replayforge.interventions.models import (
+    AUTOMATION_OWNER,
     InterventionContext,
     InterventionRunMode,
     InterventionStatus,
@@ -34,10 +39,12 @@ def context() -> InterventionContext:
 
 def test_router_preserves_reserved_identity_and_observation() -> None:
     clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
-    router = InMemoryInterventionRouter(clock)
+    leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
+    router = InMemoryInterventionRouter(clock, leases)
     intervention_id = str(new_id(EntityKind.INTERVENTION))
     run_id = str(new_id(EntityKind.RUN))
     session_id = new_id(EntityKind.SESSION)
+    initial = leases.create_for_automation(str(session_id))
     observation = NormalizedObservation(
         id=new_id(EntityKind.EVENT),
         session_id=session_id,
@@ -48,10 +55,11 @@ def test_router_preserves_reserved_identity_and_observation() -> None:
         landmarks=(),
     )
 
-    routed_id = router.create(
+    routed_id = router.open(
         intervention_id=intervention_id,
         run_id=run_id,
         session_id=str(session_id),
+        expected_lease_version=initial.version,
         code="dialog_detected",
         step_id="search.submit",
         observation=observation,
@@ -65,21 +73,69 @@ def test_router_preserves_reserved_identity_and_observation() -> None:
     assert router.list_active(InterventionRunMode.REPLAY) == (router.get(intervention_id),)
     assert router.list_active(InterventionRunMode.DISCOVERY) == ()
 
+
+def test_opening_intervention_atomically_pauses_its_control_lease() -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
+    router = InMemoryInterventionRouter(clock, leases)
+    intervention_id = str(new_id(EntityKind.INTERVENTION))
+    session_id = new_id(EntityKind.SESSION)
+    initial = leases.create_for_automation(str(session_id))
+    observation = NormalizedObservation(
+        id=new_id(EntityKind.EVENT),
+        session_id=session_id,
+        captured_at=clock.now(),
+        route="/members/search",
+        viewport=Viewport(1280, 800),
+        fingerprint="state",
+        landmarks=(),
+    )
+
+    router.open(
+        intervention_id=intervention_id,
+        run_id=str(new_id(EntityKind.RUN)),
+        session_id=str(session_id),
+        expected_lease_version=initial.version,
+        code="dialog_detected",
+        step_id="search.submit",
+        observation=observation,
+        context=context(),
+    )
+
+    paused = leases.repository.get(str(session_id))
+    assert paused.intervention_id == intervention_id
+    assert paused.owner.value == "automation_paused"
+    assert router.get(intervention_id).status is InterventionStatus.OPEN
+
+    second_session_id = new_id(EntityKind.SESSION)
+    second_initial = leases.create_for_automation(str(second_session_id))
+    second_observation = NormalizedObservation(
+        id=new_id(EntityKind.EVENT),
+        session_id=second_session_id,
+        captured_at=clock.now(),
+        route="/members/search",
+        viewport=Viewport(1280, 800),
+        fingerprint="second-state",
+        landmarks=(),
+    )
     with pytest.raises(InterventionConflictError):
-        router.create(
+        router.open(
             intervention_id=intervention_id,
-            run_id=run_id,
-            session_id=str(session_id),
+            run_id=str(new_id(EntityKind.RUN)),
+            session_id=str(second_session_id),
+            expected_lease_version=second_initial.version,
             code="dialog_detected",
             step_id=None,
-            observation=observation,
+            observation=second_observation,
             context=context(),
         )
+    assert leases.repository.get(str(second_session_id)).owner == AUTOMATION_OWNER
 
 
 def test_router_rejects_observation_from_another_session() -> None:
     clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
-    router = InMemoryInterventionRouter(clock)
+    leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
+    router = InMemoryInterventionRouter(clock, leases)
     observation = NormalizedObservation(
         id=new_id(EntityKind.EVENT),
         session_id=new_id(EntityKind.SESSION),
@@ -91,10 +147,11 @@ def test_router_rejects_observation_from_another_session() -> None:
     )
 
     with pytest.raises(ValueError, match="does not belong"):
-        router.create(
+        router.open(
             intervention_id=str(new_id(EntityKind.INTERVENTION)),
             run_id=str(new_id(EntityKind.RUN)),
             session_id=str(new_id(EntityKind.SESSION)),
+            expected_lease_version=1,
             code="stuck",
             step_id=None,
             observation=observation,
@@ -103,55 +160,12 @@ def test_router_rejects_observation_from_another_session() -> None:
 
 
 def test_unknown_intervention_is_not_found() -> None:
-    router = InMemoryInterventionRouter(FrozenClock(datetime.now(UTC)))
+    clock = FrozenClock(datetime.now(UTC))
+    leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
+    router = InMemoryInterventionRouter(clock, leases)
     unknown = str(new_id(EntityKind.INTERVENTION))
 
     with pytest.raises(InterventionNotFoundError):
         router.get(unknown)
     with pytest.raises(InterventionNotFoundError):
         router.observation(unknown)
-
-
-def test_compare_and_swap_rejects_stale_status_and_identity_change() -> None:
-    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
-    router = InMemoryInterventionRouter(clock)
-    intervention_id = str(new_id(EntityKind.INTERVENTION))
-    run_id = str(new_id(EntityKind.RUN))
-    session_id = new_id(EntityKind.SESSION)
-    observation = NormalizedObservation(
-        id=new_id(EntityKind.EVENT),
-        session_id=session_id,
-        captured_at=clock.now(),
-        route="/members/search",
-        viewport=Viewport(1280, 800),
-        fingerprint="state",
-        landmarks=(),
-    )
-    router.create(
-        intervention_id=intervention_id,
-        run_id=run_id,
-        session_id=str(session_id),
-        code="stuck",
-        step_id=None,
-        observation=observation,
-        context=context(),
-    )
-    current = router.get(intervention_id)
-
-    with pytest.raises(InterventionConflictError, match="stale"):
-        router.compare_and_swap(intervention_id, InterventionStatus.CLAIMED, current)
-    with pytest.raises(ValueError, match="immutable"):
-        router.compare_and_swap(
-            intervention_id,
-            InterventionStatus.OPEN,
-            current.__class__(
-                id=new_id(EntityKind.INTERVENTION),
-                run_id=current.run_id,
-                session_id=current.session_id,
-                trigger_code=current.trigger_code,
-                explanation=current.explanation,
-                status=current.status,
-                created_at=current.created_at,
-                context=current.context,
-            ),
-        )

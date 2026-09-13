@@ -756,11 +756,11 @@ class ReplayEngine:
 
         self._attach_handoff_frame(request.run_id, session, "handoff-before")
         intervention_id = new_id(EntityKind.INTERVENTION)
-        self.lease_service.pause(session.session_id, lease_version, intervention_id)
-        routed_id = self.intervention_router.create(
+        routed_id = self.intervention_router.open(
             intervention_id=intervention_id,
             run_id=request.run_id,
             session_id=session.session_id,
+            expected_lease_version=lease_version,
             code=code,
             step_id=step_id,
             observation=observation,

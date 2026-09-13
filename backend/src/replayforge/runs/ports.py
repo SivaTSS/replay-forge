@@ -31,12 +31,13 @@ class RunRecorder(Protocol):
 
 
 class InterventionRouter(Protocol):
-    def create(
+    def open(
         self,
         *,
         intervention_id: str,
         run_id: str,
         session_id: str,
+        expected_lease_version: int,
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,

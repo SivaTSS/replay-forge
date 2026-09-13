@@ -598,7 +598,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         if secret is not None
     )
     lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
-    interventions = InMemoryInterventionRouter(clock)
+    interventions = InMemoryInterventionRouter(clock, lease_service)
     journals: dict[str, InMemoryRunJournal] = {}
     result_classifications: dict[str, dict[str, DataClassification]] = {}
     live_sessions: dict[str, LiveBrowserSession] = {}

@@ -26,24 +26,24 @@ from replayforge.surfaces.models import NormalizedObservation, Viewport
 def coordinator() -> tuple[InterventionCoordinator, str]:
     clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
     leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
-    router = InMemoryInterventionRouter(clock)
+    router = InMemoryInterventionRouter(clock, leases)
     session_id = str(new_id(EntityKind.SESSION))
     lease = leases.create_for_automation(session_id)
     intervention_id = str(new_id(EntityKind.INTERVENTION))
-    paused = leases.pause(session_id, lease.version, intervention_id)
     observation = NormalizedObservation(
         id=new_id(EntityKind.EVENT),
-        session_id=paused.session_id,
+        session_id=lease.session_id,
         captured_at=clock.now(),
         route="/members/search",
         viewport=Viewport(1280, 800),
         fingerprint="state",
         landmarks=(),
     )
-    router.create(
+    router.open(
         intervention_id=intervention_id,
         run_id=str(new_id(EntityKind.RUN)),
         session_id=session_id,
+        expected_lease_version=lease.version,
         code="stuck",
         step_id=None,
         observation=observation,
@@ -92,6 +92,23 @@ def test_transition_rejects_disagreement_between_intervention_and_lease() -> Non
     claimed = service.claim(intervention_id, opened.lease.version, "operator-7")
     with pytest.raises(ValueError, match="different operators"):
         InterventionTransition(claimed.intervention.reassign("operator-8"), claimed.lease)
+
+
+def test_paired_transition_failure_leaves_both_aggregates_unchanged() -> None:
+    service, intervention_id = coordinator()
+    opened = service.get(intervention_id)
+
+    with pytest.raises(ValueError, match="owner disagree"):
+        service.state.compare_and_swap(
+            intervention_id,
+            InterventionStatus.OPEN,
+            opened.lease.version,
+            opened.lease.owner,
+            opened.intervention.claim("operator-7"),
+            opened.lease,
+        )
+
+    assert service.get(intervention_id) == opened
 
 
 def test_completed_resume_returns_control_to_automation() -> None:

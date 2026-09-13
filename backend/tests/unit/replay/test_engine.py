@@ -228,22 +228,25 @@ class MemoryRecorder:
 
 @dataclass
 class MemoryInterventionRouter:
+    lease_service: ControlLeaseService
     created: list[str] = field(default_factory=list)
     contexts: list[InterventionContext] = field(default_factory=list)
 
-    def create(
+    def open(
         self,
         *,
         intervention_id: str,
         run_id: str,
         session_id: str,
+        expected_lease_version: int,
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
         context: InterventionContext,
         explanation: str | None = None,
     ) -> str:
-        del run_id, session_id, code, step_id, observation, explanation
+        del run_id, code, step_id, observation, explanation
+        self.lease_service.pause(session_id, expected_lease_version, intervention_id)
         self.created.append(intervention_id)
         self.contexts.append(context)
         return intervention_id
@@ -266,12 +269,13 @@ def build_engine(
         )
     )
     recorder = MemoryRecorder()
-    router = MemoryInterventionRouter()
+    lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
+    router = MemoryInterventionRouter(lease_service)
     engine = ReplayEngine(
         surface_driver=cast(SurfaceDriver, FakeSurfaceDriver(session)),
         policy_evaluator=PolicyEvaluator(clock),
         effective_policy=policy,
-        lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
+        lease_service=lease_service,
         recorder=recorder,
         intervention_router=router,
         continuation_sink=(continuation_sink.append if continuation_sink is not None else None),

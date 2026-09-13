@@ -203,14 +203,44 @@ class ControlLeaseService:
         self, session_id: str, expected_version: int, owner: ControlOwner
     ) -> ControlLease:
         current = self.assert_can_act(session_id, expected_version, owner)
+        replacement = self.prepare_heartbeat(current, expected_version, owner)
+        return self.repository.compare_and_swap(session_id, expected_version, owner, replacement)
+
+    def prepare_heartbeat(
+        self, current: ControlLease, expected_version: int, owner: ControlOwner
+    ) -> ControlLease:
+        """Build a validated heartbeat without persisting it for a larger transaction."""
+        self._assert_current(current, expected_version, owner)
         now = self.clock.now()
-        replacement = replace(
+        return replace(
             current,
             version=current.version + 1,
             last_heartbeat=now,
             expires_at=now + self.ttl,
         )
-        return self.repository.compare_and_swap(session_id, expected_version, owner, replacement)
+
+    def prepare_transfer(
+        self,
+        current: ControlLease,
+        expected_version: int,
+        expected_owner: ControlOwner,
+        next_owner: ControlOwner,
+        intervention_id: EntityId | None,
+        *,
+        require_unexpired: bool = True,
+    ) -> ControlLease:
+        """Build a validated ownership transfer without writing either aggregate."""
+        self._assert_current(current, expected_version, expected_owner, require_unexpired)
+        now = self.clock.now()
+        return ControlLease(
+            session_id=current.session_id,
+            owner=next_owner,
+            version=current.version + 1,
+            issued_at=now,
+            last_heartbeat=now,
+            expires_at=now + self.ttl,
+            intervention_id=intervention_id,
+        )
 
     def _transfer(
         self,
@@ -223,20 +253,26 @@ class ControlLeaseService:
         require_unexpired: bool = True,
     ) -> ControlLease:
         current = self.repository.get(session_id)
-        if current.version != expected_version or current.owner != expected_owner:
-            raise LeaseConflictError("control lease version or owner is stale")
-        if require_unexpired and current.expires_at <= self.clock.now():
-            raise LeaseExpiredError("control lease has expired")
-        now = self.clock.now()
-        replacement = ControlLease(
-            session_id=current.session_id,
-            owner=next_owner,
-            version=current.version + 1,
-            issued_at=now,
-            last_heartbeat=now,
-            expires_at=now + self.ttl,
-            intervention_id=intervention_id,
+        replacement = self.prepare_transfer(
+            current,
+            expected_version,
+            expected_owner,
+            next_owner,
+            intervention_id,
+            require_unexpired=require_unexpired,
         )
         return self.repository.compare_and_swap(
             session_id, expected_version, expected_owner, replacement
         )
+
+    def _assert_current(
+        self,
+        current: ControlLease,
+        expected_version: int,
+        expected_owner: ControlOwner,
+        require_unexpired: bool = True,
+    ) -> None:
+        if current.version != expected_version or current.owner != expected_owner:
+            raise LeaseConflictError("control lease version or owner is stale")
+        if require_unexpired and current.expires_at <= self.clock.now():
+            raise LeaseExpiredError("control lease has expired")

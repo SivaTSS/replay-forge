@@ -139,6 +139,7 @@ def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> No
     driver = PlaywrightSurfaceDriver(demo_bank)
     clock = SystemClock()
     run_id = str(new_id(EntityKind.RUN))
+    lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
     engine = DiscoveryEngine(
         surface_driver=driver,
         model_provider=cast(ModelProvider, provider),
@@ -155,9 +156,9 @@ def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> No
                 maximum_risk=Risk.READ_ONLY,
             )
         ),
-        lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
+        lease_service=lease_service,
         recorder=InMemoryRunJournal(run_id, clock),
-        intervention_router=InMemoryInterventionRouter(clock),
+        intervention_router=InMemoryInterventionRouter(clock, lease_service),
         clock=clock,
     )
     try:
@@ -674,16 +675,16 @@ def test_human_input_controls_original_browser_session(demo_bank: str) -> None:
         lambda: driver.open("northstar_member_service", "harbor", "member_search")
     )
     leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
-    router = InMemoryInterventionRouter(clock)
+    router = InMemoryInterventionRouter(clock, leases)
     run_id = str(new_id(EntityKind.RUN))
     intervention_id = str(new_id(EntityKind.INTERVENTION))
     initial = leases.create_for_automation(str(session.session_id))
-    paused = leases.pause(str(session.session_id), initial.version, intervention_id)
     observation = worker.call(session.observe)
-    router.create(
+    router.open(
         intervention_id=intervention_id,
         run_id=run_id,
         session_id=str(session.session_id),
+        expected_lease_version=initial.version,
         code="unexpected_dialog",
         step_id="search.member_id",
         observation=observation,
@@ -705,7 +706,8 @@ def test_human_input_controls_original_browser_session(demo_bank: str) -> None:
         {run_id: journal},
         Lock(),
     )
-    claimed = service.claim(intervention_id, paused.version, "operator-7")
+    opened = service.get(intervention_id)
+    claimed = service.claim(intervention_id, opened.lease.version, "operator-7")
 
     try:
         member_field = worker.call(

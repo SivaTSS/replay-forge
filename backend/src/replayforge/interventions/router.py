@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from threading import Lock
+from typing import TYPE_CHECKING
 
 from replayforge.interventions.models import (
     Intervention,
@@ -14,6 +15,9 @@ from replayforge.interventions.models import (
 from replayforge.shared.clock import Clock
 from replayforge.shared.ids import EntityKind, parse_id
 from replayforge.surfaces.models import NormalizedObservation
+
+if TYPE_CHECKING:
+    from replayforge.interventions.leases import ControlLeaseService
 
 
 class InterventionConflictError(RuntimeError):
@@ -27,22 +31,33 @@ class InterventionNotFoundError(KeyError):
 @dataclass(slots=True)
 class InMemoryInterventionRouter:
     clock: Clock
+    lease_service: ControlLeaseService
     _interventions: dict[str, Intervention] = field(init=False, default_factory=dict)
     _observations: dict[str, NormalizedObservation] = field(init=False, default_factory=dict)
     _lock: Lock = field(init=False, default_factory=Lock)
 
-    def create(
+    def open(
         self,
         *,
         intervention_id: str,
         run_id: str,
         session_id: str,
+        expected_lease_version: int,
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
         context: InterventionContext,
         explanation: str | None = None,
     ) -> str:
+        """Create an intervention and pause its lease in one atomic state change."""
+        from replayforge.interventions.leases import InMemoryControlLeaseRepository
+        from replayforge.interventions.models import AUTOMATION_OWNER, PAUSED_OWNER
+        from replayforge.interventions.transactions import (
+            InMemoryInterventionTransitionRepository,
+        )
+
+        if not isinstance(self.lease_service.repository, InMemoryControlLeaseRepository):
+            raise TypeError("opening an intervention requires an atomic transition repository")
         parsed_intervention_id = parse_id(intervention_id, EntityKind.INTERVENTION)
         parsed_run_id = parse_id(run_id, EntityKind.RUN)
         parsed_session_id = parse_id(session_id, EntityKind.SESSION)
@@ -61,11 +76,22 @@ class InMemoryInterventionRouter:
             created_at=self.clock.now(),
             context=context,
         )
-        with self._lock:
-            if intervention_id in self._interventions:
-                raise InterventionConflictError("intervention identity is already routed")
-            self._interventions[intervention_id] = intervention
-            self._observations[intervention_id] = observation
+        current_lease = self.lease_service.repository.get(session_id)
+        replacement_lease = self.lease_service.prepare_transfer(
+            current_lease,
+            expected_lease_version,
+            AUTOMATION_OWNER,
+            PAUSED_OWNER,
+            parsed_intervention_id,
+        )
+        repository = InMemoryInterventionTransitionRepository(self, self.lease_service.repository)
+        repository.create_paused(
+            intervention,
+            observation,
+            expected_lease_version,
+            AUTOMATION_OWNER,
+            replacement_lease,
+        )
         return intervention_id
 
     def get(self, intervention_id: str) -> Intervention:
@@ -104,27 +130,3 @@ class InMemoryInterventionRouter:
                 and (run_mode is None or intervention.context.run_mode is run_mode)
             )
             return tuple(sorted(matches, key=lambda item: item.created_at))
-
-    def compare_and_swap(
-        self,
-        intervention_id: str,
-        expected_status: InterventionStatus,
-        replacement: Intervention,
-    ) -> Intervention:
-        with self._lock:
-            current = self._interventions.get(intervention_id)
-            if current is None:
-                raise InterventionNotFoundError(intervention_id)
-            if current.status is not expected_status:
-                raise InterventionConflictError("intervention status is stale")
-            if (
-                replacement.id != current.id
-                or replacement.run_id != current.run_id
-                or replacement.session_id != current.session_id
-                or replacement.created_at != current.created_at
-                or replacement.trigger_code != current.trigger_code
-                or replacement.context != current.context
-            ):
-                raise ValueError("intervention replacement cannot change immutable identity")
-            self._interventions[intervention_id] = replacement
-            return replacement
