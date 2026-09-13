@@ -206,8 +206,8 @@ class NormalizedObservation:
         if not self.fingerprint.strip():
             raise ValueError("observation fingerprint cannot be empty")
         for name, values in (("landmarks", self.landmarks), ("frame titles", self.frame_titles)):
-            if len(values) != len(set(values)) or any(not value.strip() for value in values):
-                raise ValueError(f"observation {name} must be non-empty and unique")
+            if any(not value.strip() for value in values):
+                raise ValueError(f"observation {name} cannot contain empty values")
         if self.screenshot_evidence_key is not None and not self.screenshot_evidence_key.startswith(
             "evidence://"
         ):

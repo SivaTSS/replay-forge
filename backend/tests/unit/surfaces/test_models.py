@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -34,22 +35,22 @@ def test_failed_receipt_requires_error_and_valid_time_order() -> None:
 
 def test_observation_requires_typed_identity_and_canonical_location() -> None:
     now = datetime(2026, 9, 10, tzinfo=UTC)
-    values = {
-        "id": new_id(EntityKind.EVENT),
-        "session_id": new_id(EntityKind.SESSION),
-        "captured_at": now,
-        "route": "/members/search",
-        "viewport": Viewport(1280, 800),
-        "fingerprint": "frame-state",
-        "landmarks": ("Member Search",),
-    }
+    observation = NormalizedObservation(
+        id=new_id(EntityKind.EVENT),
+        session_id=new_id(EntityKind.SESSION),
+        captured_at=now,
+        route="/members/search",
+        viewport=Viewport(1280, 800),
+        fingerprint="frame-state",
+        landmarks=("Member Search",),
+    )
 
     with pytest.raises(ValueError, match="evt identifier"):
-        NormalizedObservation(**(values | {"id": new_id(EntityKind.RUN)}))
+        replace(observation, id=new_id(EntityKind.RUN))
     with pytest.raises(ValueError, match="absolute path"):
-        NormalizedObservation(**(values | {"route": "/members/search?member=12345"}))
-    with pytest.raises(ValueError, match="unique"):
-        NormalizedObservation(**(values | {"landmarks": ("Member Search", "Member Search")}))
+        replace(observation, route="/members/search?member=12345")
+    with pytest.raises(ValueError, match="empty values"):
+        replace(observation, landmarks=("Member Search", ""))
 
 
 def test_ids_remain_opaque_across_surface_contract() -> None:

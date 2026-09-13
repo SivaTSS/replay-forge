@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -70,21 +71,21 @@ def test_policy_layer_rejects_ambiguous_configuration(
 
 def test_policy_decision_requires_typed_identity_and_auditable_fields() -> None:
     now = datetime(2026, 9, 10, tzinfo=UTC)
-    values = {
-        "id": new_id(EntityKind.DECISION),
-        "decision": Decision.ALLOW,
-        "reason_code": "policy_allowed",
-        "explanation": "All policy layers allow the action.",
-        "matched_layers": ("platform",),
-        "effective_risk": Risk.READ_ONLY,
-        "required_evidence": ("action_intent",),
-        "redaction_directives": ("mask_customer_identifiers",),
-        "evaluated_at": now,
-    }
+    decision = PolicyDecision(
+        id=new_id(EntityKind.DECISION),
+        decision=Decision.ALLOW,
+        reason_code="policy_allowed",
+        explanation="All policy layers allow the action.",
+        matched_layers=("platform",),
+        effective_risk=Risk.READ_ONLY,
+        required_evidence=("action_intent",),
+        redaction_directives=("mask_customer_identifiers",),
+        evaluated_at=now,
+    )
 
     with pytest.raises(ValueError, match="dec identifier"):
-        PolicyDecision(**(values | {"id": new_id(EntityKind.RUN)}))
+        replace(decision, id=new_id(EntityKind.RUN))
     with pytest.raises(ValueError, match="required evidence"):
-        PolicyDecision(**(values | {"required_evidence": ()}))
+        replace(decision, required_evidence=())
     with pytest.raises(ValueError, match="offset"):
-        PolicyDecision(**(values | {"evaluated_at": now.replace(tzinfo=None)}))
+        replace(decision, evaluated_at=now.replace(tzinfo=None))

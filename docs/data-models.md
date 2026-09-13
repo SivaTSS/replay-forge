@@ -113,7 +113,7 @@ flowchart TB
 ```
 
 `NormalizedObservation` contains a typed event and session ID, aware timestamp, absolute route,
-viewport, fingerprint, unique landmarks/frame titles, semantic controls and fields, OCR tokens,
+viewport, fingerprint, non-empty landmarks/frame titles, semantic controls and fields, OCR tokens,
 and an optional evidence reference. It contains no Playwright object or full DOM.
 
 `ResolvedTarget` contains an adapter-owned handle, candidate index, exactly-one match count,
