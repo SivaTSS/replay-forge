@@ -552,3 +552,17 @@ def test_artifact_rejects_cross_reference_and_policy_conflicts(
 
     with pytest.raises(ValidationError, match=message):
         CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize("kind", ["assert", "wait_for"])
+def test_action_conditions_validate_their_own_references(
+    valid_artifact_data: dict[str, Any], kind: str
+) -> None:
+    valid_artifact_data["policy"]["allowed_action_types"].append(kind)
+    valid_artifact_data["steps"][0].pop("target")
+    valid_artifact_data["steps"][0]["action"] = {
+        "kind": kind,
+        "condition": {"kind": "output_valid", "output": "undeclared"},
+    }
+    with pytest.raises(ValidationError, match="unknown output"):
+        CapabilityArtifact.model_validate(valid_artifact_data)

@@ -67,6 +67,7 @@ from replayforge.capabilities.models import (
     VisualTextCondition,
     WaitForAction,
 )
+from replayforge.capabilities.values import ContractValidationError, resolve_input
 from replayforge.policy.types import Risk
 from replayforge.shared.ids import EntityId, EntityKind, new_id
 from replayforge.surfaces.models import (
@@ -755,8 +756,8 @@ class PlaywrightSurfaceSession:
         if isinstance(condition, ElementCondition):
             try:
                 resolved = self.resolve(condition.target, 1_000)
-            except SurfaceError:
-                return condition.state in {"absent", "hidden"}
+            except SurfaceError as error:
+                return error.code == "target_absent" and condition.state in {"absent", "hidden"}
             if resolved.visual is not None:
                 return condition.state in {"exists", "visible", "enabled"}
             locator = self._handles[resolved.handle]
@@ -770,10 +771,19 @@ class PlaywrightSurfaceSession:
             }
             return states[condition.state]
         if isinstance(condition, OutputValidCondition):
-            return condition.output in outputs and outputs[condition.output] not in {None, ""}
+            return condition.output in outputs and outputs[condition.output] not in (None, "")
         if isinstance(condition, IdentityMatchesCondition):
-            return outputs.get(condition.extracted_output) == inputs.get(condition.input_path)
-        return True
+            try:
+                expected = self._resolve_value(
+                    InputValue(source="input", path=condition.input_path), inputs
+                )
+            except SurfaceError:
+                return False
+            return (
+                condition.extracted_output in outputs
+                and outputs[condition.extracted_output] == expected
+            )
+        return False
 
     def extract(self, target: ResolvedTarget) -> str:
         if target.visual is not None:
@@ -969,8 +979,8 @@ class PlaywrightSurfaceSession:
         if isinstance(value, LiteralValue):
             return value.value
         try:
-            return inputs[value.path]
-        except KeyError as exc:
+            return resolve_input(inputs, value.path)
+        except ContractValidationError as exc:
             raise SurfaceError(
                 "input_binding_missing", "Action input binding is unavailable."
             ) from exc

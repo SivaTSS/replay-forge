@@ -1065,6 +1065,8 @@ class CapabilityArtifact(ArtifactModel):
                     )
             for condition in (*step.preconditions, *step.postconditions):
                 _validate_condition_references(condition, self.inputs, self.outputs)
+            if isinstance(step.action, AssertAction | WaitForAction):
+                _validate_condition_references(step.action.condition, self.inputs, self.outputs)
 
         for condition in self.preconditions:
             _validate_condition_references(condition, self.inputs, self.outputs)

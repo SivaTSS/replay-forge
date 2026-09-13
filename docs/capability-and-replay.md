@@ -230,3 +230,13 @@ No version means “latest,” currently `3.2.0`. Use `2.0.0` explicitly for hum
 Schema `1.4` carries the compiled capability route allowlist and the registered rendered-surface
 flag. The compiler records only routes observed during discovery, narrowed to application
 patterns; replay intersects them again with the application policy.
+
+The interpreter owns condition actions: `assert` evaluates immediately, `wait_for` polls within
+the step timeout, and `checkpoint` evaluates the named final condition. A false condition stops
+the step or enters its declared recovery; it cannot become a successful no-op. Conditions inside
+actions receive the same cross-reference validation as preconditions and postconditions.
+
+Input references support dotted object paths, including typing, selection, identity checks, and
+business-outcome details. Decimal strings must represent finite values. Missing inputs and invalid
+values report declared paths and stable codes; unknown caller-supplied keys are never echoed.
+An ambiguous or broken target lookup is not proof that an element is absent.

@@ -11,15 +11,18 @@ from pydantic import JsonValue
 
 from replayforge.capabilities.models import (
     ApplicationFailure,
+    AssertAction,
     BusinessOutcome,
     CapabilityArtifact,
+    CheckpointAction,
     ExtractAction,
     InputValue,
     LiteralValue,
     Recovery,
     Step,
+    WaitForAction,
 )
-from replayforge.capabilities.values import ContractValidationError, validate_object
+from replayforge.capabilities.values import ContractValidationError, resolve_input, validate_object
 from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
@@ -382,7 +385,23 @@ class ReplayEngine:
                 )
 
             self.recorder.record("action_intent", request.run_id, step_id=step.id)
-            if isinstance(step.action, ExtractAction):
+            if isinstance(step.action, AssertAction | WaitForAction | CheckpointAction):
+                condition = (
+                    request.artifact.checkpoint.condition
+                    if isinstance(step.action, CheckpointAction)
+                    else step.action.condition
+                )
+                satisfied = (
+                    session.wait_until(condition, outputs, inputs, step.timeout_ms)
+                    if isinstance(step.action, WaitForAction)
+                    else session.evaluate(condition, outputs, inputs)
+                )
+                if not satisfied:
+                    raise SurfaceError(
+                        "action_condition_mismatch",
+                        "The action's declared condition was not satisfied.",
+                    )
+            elif isinstance(step.action, ExtractAction):
                 if target is None:
                     raise SurfaceError("target_absent", "Extraction target was not resolved.")
                 outputs[step.action.output] = self._transform(
@@ -631,7 +650,7 @@ class ReplayEngine:
         details: dict[str, Any] = {}
         for name, source in outcome.result.details.items():
             if isinstance(source, InputValue):
-                raw = str(inputs[source.path])
+                raw = str(resolve_input(inputs, source.path))
                 details[name] = f"***{raw[-4:]}" if raw else "[REDACTED]"
             elif isinstance(source, LiteralValue):
                 details[name] = source.value

@@ -6,6 +6,7 @@ import pytest
 from playwright.sync_api import BrowserContext, Page
 from playwright.sync_api import Error as PlaywrightError
 
+from replayforge.capabilities.models import ElementCondition, IdentityMatchesCondition
 from replayforge.surfaces.models import ActionableControl, ExtractableField, SurfaceError
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver, PlaywrightSurfaceSession
 
@@ -33,6 +34,39 @@ def session_with(page: FakePage) -> PlaywrightSurfaceSession:
 def test_driver_requires_explicit_application_registration() -> None:
     with pytest.raises(ValueError, match="application registry"):
         PlaywrightSurfaceDriver("http://127.0.0.1:3001")
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [("target_absent", True), ("target_ambiguous", False), ("action_failed", False)],
+)
+def test_absence_requires_proof_not_a_resolution_error(
+    monkeypatch: pytest.MonkeyPatch, code: str, expected: bool
+) -> None:
+    def fail(*args: Any, **kwargs: Any) -> Any:
+        raise SurfaceError(code, "Unable to resolve target.")
+
+    monkeypatch.setattr(PlaywrightSurfaceSession, "resolve", fail)
+    condition = ElementCondition.model_validate(
+        {
+            "kind": "element",
+            "state": "absent",
+            "target": {
+                "description": "Notice",
+                "candidates": [{"strategy": "text", "value": "Notice"}],
+            },
+        }
+    )
+    assert session_with(FakePage()).evaluate(condition, {}, {}) is expected
+
+
+def test_identity_requires_present_values_and_supports_nested_inputs() -> None:
+    condition = IdentityMatchesCondition(
+        kind="identity_matches", extracted_output="member_id", input_path="member.id"
+    )
+    session = session_with(FakePage())
+    assert not session.evaluate(condition, {}, {})
+    assert session.evaluate(condition, {"member_id": "12345"}, {"member": {"id": "12345"}})
 
 
 def test_observation_retries_transient_navigation_context(

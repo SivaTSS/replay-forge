@@ -264,7 +264,9 @@ def build_engine(
             name="test",
             allowed_origins=frozenset({session.origin}),
             allowed_route_patterns=frozenset({"/members/search", "/accounts/:account_id/details"}),
-            allowed_action_types=frozenset({"type", "click", "extract"}),
+            allowed_action_types=frozenset(
+                {"type", "click", "extract", "assert", "wait_for", "checkpoint"}
+            ),
             maximum_risk=maximum_risk,
         )
     )
@@ -287,6 +289,31 @@ def test_extraction_transforms_are_canonical() -> None:
     assert ReplayEngine._transform(" Savings ", "lowercase") == "savings"
     assert ReplayEngine._transform(" $1,420.57 ", "decimal") == "1420.57"
     assert ReplayEngine._transform(" unchanged ", "text") == " unchanged "
+
+
+@pytest.mark.parametrize("kind", ["assert", "wait_for", "checkpoint"])
+def test_condition_actions_cannot_succeed_without_their_condition(
+    valid_artifact_data: dict[str, Any], kind: str
+) -> None:
+    valid_artifact_data["policy"]["allowed_action_types"].append(kind)
+    action: dict[str, Any] = (
+        {"kind": kind, "checkpoint_id": "savings_balance_verified"}
+        if kind == "checkpoint"
+        else {"kind": kind, "condition": {"kind": "text", "value": "Member Results"}}
+    )
+    valid_artifact_data["steps"].insert(
+        0, {"id": "guard.verify", "name": "Verify state", "action": action, "risk": "read_only"}
+    )
+    session = FakeSurfaceSession(postconditions_valid=False, checkpoint_valid=False)
+    engine, _, _ = build_engine(session)
+
+    result = engine.execute(request_for(valid_artifact_data))
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "action_condition_mismatch"
+    assert result.step_id == "guard.verify"
+    assert session.executed_targets == []
+    assert session.closed
 
 
 def request_for(artifact_data: dict[str, Any], member_id: str = "12345") -> ReplayRequest:

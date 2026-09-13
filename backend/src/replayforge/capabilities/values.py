@@ -19,15 +19,30 @@ class ContractValidationError(ValueError):
         self.code = code
 
 
-def validate_object(contract: ObjectContract, value: dict[str, Any]) -> dict[str, Any]:
+def resolve_input(inputs: dict[str, Any], path: str) -> Any:
+    """Resolve a declared dotted object path without echoing submitted values."""
+    current: Any = inputs
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            raise ContractValidationError(path, "input_binding_missing")
+        current = current[part]
+    return current
+
+
+def validate_object(
+    contract: ObjectContract, value: dict[str, Any], *, path: str = "$"
+) -> dict[str, Any]:
     missing = set(contract.required) - value.keys()
     if missing:
-        raise ContractValidationError("$", f"missing_required:{','.join(sorted(missing))}")
+        raise ContractValidationError(path, f"missing_required:{','.join(sorted(missing))}")
     unknown = value.keys() - contract.properties.keys()
     if unknown:
-        raise ContractValidationError("$", f"unknown_properties:{','.join(sorted(unknown))}")
+        raise ContractValidationError(path, "unknown_properties")
     return {
-        key: _validate_value(contract.properties[key], item, key) for key, item in value.items()
+        key: _validate_value(
+            contract.properties[key], item, key if path == "$" else f"{path}.{key}"
+        )
+        for key, item in value.items()
     }
 
 
@@ -50,7 +65,7 @@ def _validate_value(schema: ValueSchema, value: Any, path: str) -> Any:
             properties=schema.properties,
             additional_properties=False,
         )
-        value = validate_object(nested, value)
+        value = validate_object(nested, value, path=path)
     if schema.enum and value not in schema.enum:
         raise ContractValidationError(path, "not_in_enum")
     if schema.const is not None and value != schema.const:
@@ -67,9 +82,11 @@ def _validate_string(schema: ValueSchema, value: str, path: str) -> None:
         raise ContractValidationError(path, "pattern_mismatch")
     if schema.format == "decimal":
         try:
-            Decimal(value)
+            parsed_decimal = Decimal(value)
         except InvalidOperation as exc:
             raise ContractValidationError(path, "invalid_decimal") from exc
+        if not parsed_decimal.is_finite():
+            raise ContractValidationError(path, "invalid_decimal")
     elif schema.format == "date":
         try:
             date.fromisoformat(value)

@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from replayforge.capabilities.models import ObjectContract
-from replayforge.capabilities.values import ContractValidationError, validate_object
+from replayforge.capabilities.values import ContractValidationError, resolve_input, validate_object
 
 
 def contract_with(property_schema: dict[str, Any]) -> ObjectContract:
@@ -28,6 +28,8 @@ def contract_with(property_schema: dict[str, Any]) -> ObjectContract:
         (contract_with({"type": "string", "max_length": 3}), "long", "too_long"),
         (contract_with({"type": "string", "pattern": "^[0-9]+$"}), "abc", "pattern_mismatch"),
         (contract_with({"type": "string", "format": "decimal"}), "money", "invalid_decimal"),
+        (contract_with({"type": "string", "format": "decimal"}), "NaN", "invalid_decimal"),
+        (contract_with({"type": "string", "format": "decimal"}), "Infinity", "invalid_decimal"),
         (contract_with({"type": "string", "format": "date"}), "not-date", "invalid_date"),
         (
             contract_with({"type": "string", "format": "date-time"}),
@@ -82,3 +84,21 @@ def test_nested_object_is_validated_recursively() -> None:
     assert validate_object(contract, {"value": {"enabled": True}}) == {"value": {"enabled": True}}
     with pytest.raises(ContractValidationError, match="expected_object"):
         validate_object(contract, {"value": "not-an-object"})
+
+    with pytest.raises(ContractValidationError) as error:
+        validate_object(contract, {"value": {"enabled": "yes"}})
+    assert error.value.path == "value.enabled"
+
+
+def test_unknown_property_names_do_not_leak_into_errors() -> None:
+    with pytest.raises(ContractValidationError) as error:
+        validate_object(contract_with({"type": "string"}), {"value": "ok", "private-value": 1})
+    assert "private-value" not in str(error.value)
+
+
+def test_nested_input_resolution_and_missing_optional_values() -> None:
+    assert resolve_input({"member": {"id": "12345"}}, "member.id") == "12345"
+    missing_inputs: tuple[dict[str, Any], ...] = ({}, {"member": None}, {"member": {}})
+    for inputs in missing_inputs:
+        with pytest.raises(ContractValidationError, match="input_binding_missing"):
+            resolve_input(inputs, "member.id")
