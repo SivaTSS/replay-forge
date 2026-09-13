@@ -17,7 +17,10 @@ from replayforge.capabilities.models import (
 )
 from replayforge.policy.types import DataClassification, Risk
 from replayforge.runs.results import FailureResult, InterventionRequiredResult
+from replayforge.shared.ids import EntityKind, parse_id
 from replayforge.surfaces.models import NormalizedObservation
+
+_TARGETED_ACTIONS = frozenset({"click", "type", "select", "extract"})
 
 
 class DiscoveryModel(BaseModel):
@@ -33,6 +36,15 @@ class ActProposal(DiscoveryModel):
     expected_condition: Condition | None = None
     declared_risk: Risk
     confidence: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_target(self) -> Self:
+        requires_target = self.action.kind in _TARGETED_ACTIONS
+        if requires_target and self.target is None:
+            raise ValueError(f"{self.action.kind} action requires a target")
+        if not requires_target and self.target is not None:
+            raise ValueError(f"{self.action.kind} action cannot declare a target")
+        return self
 
 
 class CompleteProposal(DiscoveryModel):
@@ -98,6 +110,16 @@ class PlanningContext:
     entry_point: str = ""
     allowed_action_types: frozenset[str] = frozenset()
 
+    def __post_init__(self) -> None:
+        if not self.goal.strip():
+            raise ValueError("discovery goal cannot be empty")
+        if not self.screenshot_png.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("planning context requires a PNG screenshot")
+        if not self.application_family.strip() or not self.entry_point.strip():
+            raise ValueError("planning context requires a registered application entry point")
+        if not self.allowed_action_types:
+            raise ValueError("planning context requires allowed action types")
+
 
 class EscalateProposal(DiscoveryModel):
     kind: Literal["escalate"]
@@ -121,6 +143,14 @@ class RecordedDiscoveryStep:
     risk: Risk
     verified_postconditions: tuple[Condition, ...] = ()
 
+    def __post_init__(self) -> None:
+        requires_target = self.action.kind in _TARGETED_ACTIONS
+        if requires_target != (self.target is not None):
+            requirement = "requires" if requires_target else "cannot declare"
+            raise ValueError(f"{self.action.kind} action {requirement} a target")
+        if not self.expected_effect.strip() or not self.rationale.strip():
+            raise ValueError("recorded discovery step requires intent and rationale")
+
 
 @dataclass(frozen=True, slots=True)
 class DiscoverySuccess:
@@ -128,6 +158,13 @@ class DiscoverySuccess:
     run_id: str
     artifact: CapabilityArtifact
     evidence_manifest: str
+
+    def __post_init__(self) -> None:
+        if self.status != "success":
+            raise ValueError("discovery success status must be success")
+        parse_id(self.run_id, EntityKind.RUN)
+        if not self.evidence_manifest.startswith(f"evidence://{self.run_id}/"):
+            raise ValueError("discovery evidence manifest must belong to its run")
 
 
 DiscoveryResult = DiscoverySuccess | FailureResult | InterventionRequiredResult

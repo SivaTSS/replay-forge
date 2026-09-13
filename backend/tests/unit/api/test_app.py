@@ -80,7 +80,7 @@ class FakeDiscoveryInvoker:
             status="success",
             run_id="run_0123456789abcdef0123456789abcdef",
             artifact=self.artifact,
-            evidence_manifest="evidence://test/manifest.json",
+            evidence_manifest=("evidence://run_0123456789abcdef0123456789abcdef/manifest.json"),
         )
 
 

@@ -34,7 +34,7 @@ class Executor:
             status="success",
             run_id=request.run_id,
             artifact=self.artifact,
-            evidence_manifest="evidence://suite",
+            evidence_manifest=f"evidence://{request.run_id}/manifest.json",
         )
 
 

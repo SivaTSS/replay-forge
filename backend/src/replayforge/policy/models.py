@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from urllib.parse import urlsplit
 
 from replayforge.policy.types import RISK_RANK, DataClassification, Decision, Risk
-from replayforge.shared.ids import EntityId
+from replayforge.shared.ids import EntityId, EntityKind, parse_id
 
 
 class PrincipalType(StrEnum):
@@ -33,6 +35,35 @@ class PolicyLayer:
     forbidden_field_classes: frozenset[DataClassification] = frozenset(
         {DataClassification.CREDENTIAL, DataClassification.SECRET}
     )
+
+    def __post_init__(self) -> None:
+        if re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", self.name) is None:
+            raise ValueError("policy layer name must be a stable identifier")
+        for origin in self.allowed_origins:
+            parsed = urlsplit(origin)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("policy origins must be credential-free HTTP origins")
+        for pattern in self.allowed_route_patterns:
+            if (
+                not pattern.startswith("/")
+                or "?" in pattern
+                or "#" in pattern
+                or "//" in pattern
+                or ".." in pattern
+            ):
+                raise ValueError("policy route patterns must be absolute paths")
+        if any(
+            re.fullmatch(r"[a-z][a-z0-9_]*", action) is None for action in self.allowed_action_types
+        ):
+            raise ValueError("policy action types must be stable identifiers")
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,3 +123,23 @@ class PolicyDecision:
     required_evidence: tuple[str, ...]
     redaction_directives: tuple[str, ...]
     evaluated_at: datetime
+
+    def __post_init__(self) -> None:
+        parse_id(self.id, EntityKind.DECISION)
+        if re.fullmatch(r"[a-z][a-z0-9_]*", self.reason_code) is None:
+            raise ValueError("policy reason code must be a stable identifier")
+        if not self.explanation.strip():
+            raise ValueError("policy explanation cannot be empty")
+        for name, values in (
+            ("matched layers", self.matched_layers),
+            ("required evidence", self.required_evidence),
+            ("redaction directives", self.redaction_directives),
+        ):
+            if (
+                not values
+                or len(values) != len(set(values))
+                or any(not value.strip() for value in values)
+            ):
+                raise ValueError(f"policy {name} must be non-empty and unique")
+        if self.evaluated_at.tzinfo is None or self.evaluated_at.utcoffset() is None:
+            raise ValueError("policy evaluation timestamp must include an offset")

@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import NewType
 
 from replayforge.policy.types import Risk
-from replayforge.shared.ids import EntityId
+from replayforge.shared.ids import EntityId, EntityKind, parse_id
 
 SurfaceSessionId = NewType("SurfaceSessionId", str)
 
@@ -38,7 +38,6 @@ class SurfaceError(RuntimeError):
 
 
 class ActionStatus(StrEnum):
-    DISPATCHED = "dispatched"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -89,7 +88,7 @@ class VisualTargetData:
     frame_hash: str
 
     def __post_init__(self) -> None:
-        if not self.method or not 0 <= self.confidence <= 1:
+        if not self.method or not self.frame_hash or not 0 <= self.confidence <= 1:
             raise ValueError("visual target requires a method and normalized confidence")
 
 
@@ -197,6 +196,23 @@ class NormalizedObservation:
     dialog_text: str | None = None
     screenshot_evidence_key: str | None = None
 
+    def __post_init__(self) -> None:
+        parse_id(self.id, EntityKind.EVENT)
+        parse_id(self.session_id, EntityKind.SESSION)
+        if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
+            raise ValueError("observation timestamp must include an offset")
+        if not self.route.startswith("/") or "?" in self.route or "#" in self.route:
+            raise ValueError("observation route must be an absolute path without query or fragment")
+        if not self.fingerprint.strip():
+            raise ValueError("observation fingerprint cannot be empty")
+        for name, values in (("landmarks", self.landmarks), ("frame titles", self.frame_titles)):
+            if len(values) != len(set(values)) or any(not value.strip() for value in values):
+                raise ValueError(f"observation {name} must be non-empty and unique")
+        if self.screenshot_evidence_key is not None and not self.screenshot_evidence_key.startswith(
+            "evidence://"
+        ):
+            raise ValueError("observation screenshot reference must use the evidence scheme")
+
 
 @dataclass(frozen=True, slots=True)
 class ResolvedTarget:
@@ -208,6 +224,8 @@ class ResolvedTarget:
     visual: VisualTargetData | None = None
 
     def __post_init__(self) -> None:
+        if not self.handle.strip() or not self.description.strip():
+            raise ValueError("a resolved target requires a handle and description")
         if self.candidate_index < 0 or self.observed_count != 1:
             raise ValueError("a resolved target must identify exactly one candidate match")
 
@@ -221,7 +239,12 @@ class ActionReceipt:
     error_code: str | None = None
 
     def __post_init__(self) -> None:
+        for timestamp in (self.started_at, self.completed_at):
+            if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise ValueError("action receipt timestamps must include an offset")
         if self.completed_at < self.started_at:
             raise ValueError("action completion cannot precede its start")
         if self.status is ActionStatus.FAILED and not self.error_code:
             raise ValueError("failed action receipt requires an error code")
+        if self.status is not ActionStatus.FAILED and self.error_code is not None:
+            raise ValueError("only failed action receipts can contain an error code")
