@@ -60,13 +60,18 @@ class DiscoveryApplicationService:
         )
         if isinstance(result, DiscoverySuccess):
             if result.artifact.capability.risk is not Risk.READ_ONLY:
+                blocked = result.artifact.capability.risk in {Risk.SENSITIVE, Risk.IRREVERSIBLE}
                 result = FailureResult(
                     status="failure",
                     run_id=result.run_id,
-                    code="discovery_suite_required",
+                    code="capability_risk_blocked" if blocked else "discovery_suite_required",
                     message=(
-                        "Non-read-only discovery requires the reviewed discovery-suite "
-                        "approval workflow."
+                        "Sensitive and irreversible capability drafts cannot be published."
+                        if blocked
+                        else (
+                            "Reversible discovery requires deterministic discovery-suite "
+                            "validation."
+                        )
                     ),
                     recoverable=False,
                     evidence_manifest=result.evidence_manifest,

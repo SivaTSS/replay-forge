@@ -82,7 +82,7 @@ def test_failed_discovery_is_not_published(valid_artifact_data: dict[str, Any]) 
     assert not service.ready()
 
 
-def test_one_shot_discovery_cannot_bypass_sensitive_approval() -> None:
+def test_one_shot_discovery_blocks_sensitive_publication() -> None:
     artifact = load_artifact_yaml(
         Path("capabilities/member.lookup_savings_balance/2.0.0.yaml").read_text()
     )
@@ -102,7 +102,7 @@ def test_one_shot_discovery_cannot_bypass_sensitive_approval() -> None:
     )
 
     assert isinstance(result, FailureResult)
-    assert result.code == "discovery_suite_required"
+    assert result.code == "capability_risk_blocked"
     with pytest.raises(CapabilityNotFoundError):
         registry.versions(artifact.capability.id)
 

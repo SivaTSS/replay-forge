@@ -78,6 +78,18 @@ class FakeDiscoveryInvoker:
 
 
 @dataclass
+class FakeDiscoverySuiteInvoker:
+    artifact: CapabilityArtifact
+
+    def ready(self) -> bool:
+        return True
+
+    def published_artifact(self, suite_id: str) -> CapabilityArtifact:
+        assert suite_id == "run_0123456789abcdef0123456789abcdef"
+        return self.artifact
+
+
+@dataclass
 class FakeInterventionInvoker:
     transition: InterventionTransition
     frame: bytes = b"\x89PNG\r\n\x1a\nframe"
@@ -313,6 +325,34 @@ def test_successful_discovery_returns_compiled_artifact(
     assert response.status_code == 200
     assert response.json()["status"] == "success"
     assert response.json()["artifact"]["capability"]["id"] == artifact.capability.id
+
+
+def test_published_discovery_suite_artifact_is_downloadable(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    app = create_app(
+        ApiServices(
+            FakeReplayInvoker(),
+            discovery_suite_invoker=FakeDiscoverySuiteInvoker(artifact),
+        )
+    )
+
+    response = TestClient(app).get(
+        "/api/v1/discovery-suites/run_0123456789abcdef0123456789abcdef/artifact"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["capability"]["id"] == artifact.capability.id
+
+
+def test_discovery_suite_approval_endpoint_does_not_exist() -> None:
+    response = client().post(
+        "/api/v1/discovery-suites/run_0123456789abcdef0123456789abcdef/approve",
+        json={"operator_id": "operator-1", "expected_hash": f"sha256:{'0' * 64}"},
+    )
+
+    assert response.status_code == 404
 
 
 def test_intervention_claim_returns_new_owner_and_lease_version() -> None:

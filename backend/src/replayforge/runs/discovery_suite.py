@@ -27,7 +27,7 @@ from replayforge.runs.results import FailureResult, InterventionRequiredResult
 from replayforge.shared.ids import EntityKind, new_id
 
 ScenarioKind = Literal["business_outcome", "application_failure", "recovery"]
-SuiteStatus = Literal["collecting", "validated", "pending_approval", "published", "failed"]
+SuiteStatus = Literal["collecting", "validated", "published", "failed"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,8 +128,10 @@ class DiscoverySuiteService:
         return self.repository
 
     def ready(self) -> bool:
-        return self.validator is not None and self.discovery.ready() and (
-            self.application_registry is None or self.application_registry.ready()
+        return (
+            self.validator is not None
+            and self.discovery.ready()
+            and (self.application_registry is None or self.application_registry.ready())
         )
 
     def create(
@@ -224,30 +226,27 @@ class DiscoverySuiteService:
         if not isinstance(suite.primary, DiscoverySuccess):
             raise DiscoverySuiteError("cannot finalize an unsuccessful primary discovery")
         try:
-            artifact = _merge_scenarios(suite.primary.artifact, suite.scenarios)
+            artifact = suite.artifact or _merge_scenarios(suite.primary.artifact, suite.scenarios)
         except ValueError as error:
             raise DiscoverySuiteError("scenario evidence could not be merged safely") from error
-        if artifact.capability.risk is Risk.IRREVERSIBLE:
-            raise DiscoverySuiteError("irreversible capability drafts cannot be published")
+        if artifact.capability.risk in {Risk.SENSITIVE, Risk.IRREVERSIBLE}:
+            updated = replace(suite, artifact=artifact, status="failed")
+            self._store.save(updated)
+            raise DiscoverySuiteError(
+                "sensitive and irreversible capability drafts cannot be published"
+            )
         if self.validator is None:
             raise DiscoverySuiteError("final deterministic replay validation is unavailable")
         if not self.validator(artifact, suite.tenant, suite.primary_inputs):
             self._record_validation_failure(suite, suite.tenant, "primary replay failed")
             raise DiscoverySuiteError("final deterministic replay did not pass")
-        status: SuiteStatus = (
-            "validated" if artifact.capability.risk is Risk.READ_ONLY else "pending_approval"
-        )
-        published_version: str | None = None
-        if status == "validated":
-            published = self.registry.publish_next(artifact)
-            artifact = published.artifact
-            status = "published"
-            published_version = artifact.capability.version
+        published = self.registry.publish_next(artifact)
+        artifact = published.artifact
         updated = replace(
             suite,
             artifact=artifact,
-            status=status,
-            published_version=published_version,
+            status="published",
+            published_version=artifact.capability.version,
         )
         self._store.save(updated)
         return updated
@@ -307,24 +306,11 @@ class DiscoverySuiteService:
         )
         self._store.save(updated)
 
-    def approve(self, suite_id: str, *, operator_id: str, expected_hash: str) -> DiscoverySuite:
-        if not operator_id.strip():
-            raise DiscoverySuiteError("operator identity is required")
+    def published_artifact(self, suite_id: str) -> CapabilityArtifact:
         suite = self.get(suite_id)
-        if suite.status != "pending_approval" or suite.artifact is None:
-            raise DiscoverySuiteError("suite is not awaiting approval")
-        actual_hash = artifact_content_hash(suite.artifact)
-        if actual_hash != expected_hash:
-            raise DiscoverySuiteError("artifact hash changed; approval must be retried")
-        published = self.registry.publish_next(suite.artifact)
-        updated = replace(
-            suite,
-            artifact=published.artifact,
-            status="published",
-            published_version=published.artifact.capability.version,
-        )
-        self._store.save(updated)
-        return updated
+        if suite.status != "published" or suite.artifact is None:
+            raise DiscoverySuiteError("suite artifact is not published")
+        return suite.artifact
 
 
 def _merge_scenarios(
@@ -392,8 +378,7 @@ def _merge_scenarios(
             if not recovery_source_steps:
                 raise ValueError("recovery trace contains no recovery actions")
             if any(
-                RISK_RANK[step.risk] >= RISK_RANK[Risk.SENSITIVE]
-                for step in recovery_source_steps
+                RISK_RANK[step.risk] >= RISK_RANK[Risk.SENSITIVE] for step in recovery_source_steps
             ):
                 raise ValueError("recovery traces must remain read-only or reversible")
             recovered_surface_keys = {
@@ -466,9 +451,7 @@ def _surface_conditions(condition: Condition) -> tuple[Condition, ...]:
         return (condition,)
     nested = getattr(condition, "conditions", None)
     if nested is not None:
-        return tuple(
-            observed for item in nested for observed in _surface_conditions(item)
-        )
+        return tuple(observed for item in nested for observed in _surface_conditions(item))
     child = getattr(condition, "condition", None)
     if child is not None and _surface_conditions(child):
         return (condition,)

@@ -45,11 +45,6 @@ class DiscoverySuiteScenario(ApiModel):
     timeout_seconds: int = Field(default=120, ge=10, le=600)
 
 
-class DiscoverySuiteApproval(ApiModel):
-    operator_id: str = Field(pattern=r"^[A-Za-z0-9_.@-]{2,100}$")
-    expected_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-
-
 class DiscoverySuiteValidation(ApiModel):
     tenant: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
     inputs: dict[str, Any]

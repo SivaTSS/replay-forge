@@ -14,7 +14,6 @@ from replayforge.api.contracts import (
     ArtifactValidationRequest,
     ArtifactValidationResponse,
     DiscoveryInvocation,
-    DiscoverySuiteApproval,
     DiscoverySuiteScenario,
     DiscoverySuiteValidation,
     ErrorBody,
@@ -184,6 +183,14 @@ def create_app(services: ApiServices) -> FastAPI:
             return invoker
         return JSONResponse(invoker.get(suite_id).snapshot(), status_code=200)
 
+    @app.get("/api/v1/discovery-suites/{suite_id}/artifact")
+    def get_discovery_suite_artifact(request: Request, suite_id: str) -> JSONResponse:
+        invoker = _discovery_suite_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        artifact = invoker.published_artifact(suite_id)
+        return JSONResponse(artifact.model_dump(mode="json"), status_code=200)
+
     @app.post("/api/v1/discovery-suites/{suite_id}/scenarios")
     def add_discovery_scenario(
         request: Request, suite_id: str, body: DiscoverySuiteScenario
@@ -212,20 +219,6 @@ def create_app(services: ApiServices) -> FastAPI:
             invoker.validate(suite_id, tenant=body.tenant, inputs=body.inputs).snapshot(),
             status_code=200,
         )
-
-    @app.post("/api/v1/discovery-suites/{suite_id}/approve")
-    def approve_discovery_suite(
-        request: Request, suite_id: str, body: DiscoverySuiteApproval
-    ) -> JSONResponse:
-        invoker = _discovery_suite_invoker(request, services)
-        if isinstance(invoker, JSONResponse):
-            return invoker
-        suite = invoker.approve(
-            suite_id,
-            operator_id=body.operator_id,
-            expected_hash=body.expected_hash,
-        )
-        return JSONResponse(suite.snapshot(), status_code=200)
 
     @app.get("/api/v1/capabilities/schema")
     def capability_schema() -> dict[str, Any]:

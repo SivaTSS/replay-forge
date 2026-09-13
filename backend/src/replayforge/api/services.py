@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.discovery.models import DiscoveryResult
 from replayforge.interventions.models import (
     HumanInputCommand,
@@ -80,7 +81,7 @@ class DiscoverySuiteInvoker(Protocol):
 
     def finalize(self, suite_id: str) -> DiscoverySuite: ...
 
-    def approve(self, suite_id: str, *, operator_id: str, expected_hash: str) -> DiscoverySuite: ...
+    def published_artifact(self, suite_id: str) -> CapabilityArtifact: ...
 
 
 class InterventionInvoker(Protocol):

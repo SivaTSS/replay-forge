@@ -3,8 +3,9 @@ from pathlib import Path
 
 from replayforge.capabilities.models import AllCondition, CapabilityArtifact, TextCondition
 from replayforge.capabilities.registry import InMemoryCapabilityRegistry
-from replayforge.capabilities.serialization import artifact_content_hash, load_artifact_yaml
+from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.models import DiscoverySuccess
+from replayforge.policy.types import Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
 from replayforge.runs.discovery_suite import DiscoverySuite, DiscoverySuiteService
 from replayforge.runs.results import FailureResult
@@ -101,7 +102,7 @@ def test_suite_snapshot_omits_failure_values_and_free_text() -> None:
     }
 
 
-def test_sensitive_suite_requires_hash_bound_approval() -> None:
+def test_sensitive_suite_is_blocked_without_publication() -> None:
     service = service_for("capabilities/member.lookup_savings_balance/2.0.0.yaml")
     suite = service.create(
         goal="Reach a sensitive confirmation",
@@ -112,16 +113,64 @@ def test_sensitive_suite_requires_hash_bound_approval() -> None:
         max_steps=20,
         timeout_seconds=60,
     )
-    pending = service.finalize(suite.suite_id)
+    try:
+        service.finalize(suite.suite_id)
+    except ValueError as error:
+        assert "cannot be published" in str(error)
+    else:
+        raise AssertionError("sensitive discovery must not publish")
 
-    assert pending.status == "pending_approval"
-    assert pending.artifact is not None
-    approved = service.approve(
-        suite.suite_id,
-        operator_id="operator-1",
-        expected_hash=artifact_content_hash(pending.artifact),
+    assert service.get(suite.suite_id).status == "failed"
+
+
+def test_reversible_suite_publishes_after_validation() -> None:
+    path = "capabilities/member.lookup_savings_balance/1.0.0.yaml"
+    artifact = load_artifact_yaml(Path(path).read_text())
+    artifact = artifact.model_copy(
+        update={
+            "capability": artifact.capability.model_copy(update={"risk": Risk.REVERSIBLE}),
+            "policy": artifact.policy.model_copy(update={"maximum_risk": Risk.REVERSIBLE}),
+        }
     )
-    assert approved.status == "published"
+    registry = InMemoryCapabilityRegistry(FrozenClock(datetime(2026, 9, 10, tzinfo=UTC)))
+    discovery = DiscoveryApplicationService(registry, lambda _run: Executor(artifact), lambda: True)
+    service = DiscoverySuiteService(discovery, registry, validator=lambda *_args: True)
+    suite = service.create(
+        goal="Temporarily lock a synthetic card",
+        application_family="northstar_member_service",
+        tenant="harbor",
+        entry_point="member_search",
+        inputs={"member_id": "12345"},
+        max_steps=20,
+        timeout_seconds=60,
+    )
+
+    published = service.finalize(suite.suite_id)
+
+    assert published.status == "published"
+    assert service.published_artifact(suite.suite_id).capability.risk.value == "reversible"
+
+
+def test_finalize_preserves_validated_tenant_variant() -> None:
+    service = service_for("capabilities/member.lookup_savings_balance/1.0.0.yaml")
+    suite = service.create(
+        goal="Look up a member balance",
+        application_family="northstar_member_service",
+        tenant="harbor",
+        entry_point="member_search",
+        inputs={"member_id": "12345"},
+        max_steps=20,
+        timeout_seconds=60,
+    )
+    validated = service.validate(
+        suite.suite_id, tenant="new_variant", inputs={"member_id": "12345"}
+    )
+    assert validated.artifact is not None
+
+    published = service.finalize(suite.suite_id)
+
+    assert published.artifact is not None
+    assert "new_variant" in published.artifact.compatibility.supported_variants
 
 
 def test_scenario_is_bound_to_a_verified_primary_prefix() -> None:

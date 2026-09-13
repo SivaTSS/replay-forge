@@ -71,8 +71,10 @@ _PLAN_INSTRUCTIONS = """Plan a reusable capability from the natural-language goa
 surface observation. Choose a short snake_case operation_slug, describe the requested operation,
 and list every output the caller should receive. Output names must be stable semantic names, not
 screen labels or customer values. Never declare credential or secret fields. Be conservative about
-risk: read_only means only reading or navigation; data entry is at least reversible; mutation is
-sensitive or irreversible. Do not invent regexes, enums, constants, or exact customer values."""
+risk: read_only means only reading or navigation. Data entry is at least reversible. A mutation
+may be reversible only when the observed workflow exposes an explicit inverse operation that
+restores the prior state; otherwise it is sensitive or irreversible. Do not invent regexes, enums,
+constants, or exact customer values."""
 
 
 class ProviderModel(BaseModel):
