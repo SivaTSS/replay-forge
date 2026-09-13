@@ -2138,6 +2138,7 @@
           "type": "integer"
         },
         "require_effect_absent": {
+          "const": true,
           "default": true,
           "title": "Require Effect Absent",
           "type": "boolean"
