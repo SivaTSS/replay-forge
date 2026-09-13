@@ -18,7 +18,9 @@ from replayforge.interventions.models import (
     HumanInputCommand,
     HumanInputReceipt,
     Intervention,
+    InterventionContext,
     InterventionFrame,
+    InterventionRunMode,
     InterventionStatus,
     OwnerKind,
 )
@@ -163,6 +165,16 @@ def intervention_transition() -> InterventionTransition:
             explanation="Automation paused safely.",
             status=InterventionStatus.CLAIMED,
             created_at=now,
+            context=InterventionContext(
+                run_mode=InterventionRunMode.REPLAY,
+                application_family="northstar",
+                tenant="harbor",
+                task_summary="Lookup balance",
+                surface_route="/members/search",
+                capability_id="member.lookup",
+                capability_version="1.0.0",
+                capability_name="Lookup",
+            ),
             operator_id="operator-7",
         ),
         ControlLease(

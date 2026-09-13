@@ -40,7 +40,7 @@ class InMemoryInterventionRouter:
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
-        context: InterventionContext | None = None,
+        context: InterventionContext,
         explanation: str | None = None,
     ) -> str:
         parsed_intervention_id = parse_id(intervention_id, EntityKind.INTERVENTION)
@@ -90,9 +90,7 @@ class InMemoryInterventionRouter:
                 if intervention.status is InterventionStatus.OPEN
             )
 
-    def list_active(
-        self, run_mode: InterventionRunMode | None = None
-    ) -> tuple[Intervention, ...]:
+    def list_active(self, run_mode: InterventionRunMode | None = None) -> tuple[Intervention, ...]:
         active = {
             InterventionStatus.OPEN,
             InterventionStatus.CLAIMED,
@@ -103,13 +101,7 @@ class InMemoryInterventionRouter:
                 intervention
                 for intervention in self._interventions.values()
                 if intervention.status in active
-                and (
-                    run_mode is None
-                    or (
-                        intervention.context is not None
-                        and intervention.context.run_mode is run_mode
-                    )
-                )
+                and (run_mode is None or intervention.context.run_mode is run_mode)
             )
             return tuple(sorted(matches, key=lambda item: item.created_at))
 
@@ -130,6 +122,8 @@ class InMemoryInterventionRouter:
                 or replacement.run_id != current.run_id
                 or replacement.session_id != current.session_id
                 or replacement.created_at != current.created_at
+                or replacement.trigger_code != current.trigger_code
+                or replacement.context != current.context
             ):
                 raise ValueError("intervention replacement cannot change immutable identity")
             self._interventions[intervention_id] = replacement

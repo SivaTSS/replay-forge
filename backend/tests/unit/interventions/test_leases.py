@@ -135,8 +135,37 @@ def test_invalid_lease_is_rejected() -> None:
         ControlLease(
             new_id(EntityKind.SESSION), AUTOMATION_OWNER, 0, now, now, now + timedelta(seconds=1)
         )
-    with pytest.raises(ValueError, match="expiry"):
+    with pytest.raises(ValueError, match="ordered"):
         ControlLease(new_id(EntityKind.SESSION), AUTOMATION_OWNER, 1, now, now, now)
+    with pytest.raises(ValueError, match="intervention binding"):
+        ControlLease(
+            new_id(EntityKind.SESSION),
+            PAUSED_OWNER,
+            1,
+            now,
+            now,
+            now + timedelta(seconds=1),
+        )
+    with pytest.raises(ValueError, match="intervention binding"):
+        ControlLease(
+            new_id(EntityKind.SESSION),
+            AUTOMATION_OWNER,
+            1,
+            now,
+            now,
+            now + timedelta(seconds=1),
+            new_id(EntityKind.INTERVENTION),
+        )
+    with pytest.raises(ValueError, match="offset"):
+        naive = datetime(2026, 9, 10, 12, 30)
+        ControlLease(
+            new_id(EntityKind.SESSION),
+            AUTOMATION_OWNER,
+            1,
+            naive,
+            naive,
+            naive + timedelta(seconds=1),
+        )
 
 
 def test_repository_rejects_duplicate_and_invalid_replacement() -> None:
@@ -159,6 +188,7 @@ def test_repository_rejects_duplicate_and_invalid_replacement() -> None:
                 now,
                 now,
                 now + timedelta(seconds=30),
+                new_id(EntityKind.INTERVENTION),
             ),
         )
     with pytest.raises(ValueError, match="increment exactly once"):

@@ -22,6 +22,13 @@ def intervention() -> Intervention:
         explanation="An unclassified confirmation dialog is visible.",
         status=InterventionStatus.OPEN,
         created_at=datetime(2026, 9, 10, 12, 30, tzinfo=UTC),
+        context=InterventionContext(
+            run_mode=InterventionRunMode.DISCOVERY,
+            application_family="northstar",
+            tenant="harbor",
+            task_summary="Discovery run requires operator intervention.",
+            surface_route="/members/search",
+        ),
     )
 
 
@@ -83,6 +90,37 @@ def test_illegal_transitions_fail_closed(intervention: Intervention) -> None:
 def test_claim_requires_operator_identity(intervention: Intervention) -> None:
     with pytest.raises(ValueError, match="operator ID"):
         intervention.claim("")
+
+
+@pytest.mark.parametrize(
+    ("status", "operator_id", "resolution", "message"),
+    [
+        (InterventionStatus.OPEN, "operator-7", None, "operator ownership"),
+        (InterventionStatus.CLAIMED, None, None, "operator ownership"),
+        (InterventionStatus.RESOLVED, "operator-7", None, "resolution"),
+        (InterventionStatus.TERMINATED, None, None, "resolution"),
+    ],
+)
+def test_intervention_rejects_impossible_lifecycle_state(
+    intervention: Intervention,
+    status: InterventionStatus,
+    operator_id: str | None,
+    resolution: str | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        Intervention(
+            id=intervention.id,
+            run_id=intervention.run_id,
+            session_id=intervention.session_id,
+            trigger_code=intervention.trigger_code,
+            explanation=intervention.explanation,
+            status=status,
+            created_at=intervention.created_at,
+            context=intervention.context,
+            operator_id=operator_id,
+            resolution=resolution,
+        )
 
 
 def test_intervention_context_separates_replay_and_discovery_metadata() -> None:

@@ -46,7 +46,11 @@ from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
 )
-from replayforge.interventions.models import HumanInputCommand
+from replayforge.interventions.models import (
+    HumanInputCommand,
+    InterventionContext,
+    InterventionRunMode,
+)
 from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.interventions.service import InterventionCoordinator
 from replayforge.policy.evaluator import PolicyEvaluator
@@ -683,6 +687,16 @@ def test_human_input_controls_original_browser_session(demo_bank: str) -> None:
         code="unexpected_dialog",
         step_id="search.member_id",
         observation=observation,
+        context=InterventionContext(
+            run_mode=InterventionRunMode.REPLAY,
+            application_family="northstar_member_service",
+            tenant="harbor",
+            task_summary="Look up savings balance.",
+            surface_route=observation.route,
+            capability_id="member.lookup_savings_balance",
+            capability_version="2.0.0",
+            capability_name="Lookup savings balance",
+        ),
     )
     journal = InMemoryRunJournal(run_id, clock)
     service = RuntimeInterventionService(

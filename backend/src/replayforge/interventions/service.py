@@ -28,6 +28,34 @@ class InterventionTransition:
     intervention: Intervention
     lease: ControlLease
 
+    def __post_init__(self) -> None:
+        intervention = self.intervention
+        lease = self.lease
+        if intervention.session_id != lease.session_id:
+            raise ValueError("intervention and lease must identify the same session")
+        expected_owner = {
+            InterventionStatus.OPEN: OwnerKind.AUTOMATION_PAUSED,
+            InterventionStatus.CLAIMED: OwnerKind.HUMAN,
+            InterventionStatus.RESUMING: OwnerKind.AUTOMATION_PAUSED,
+            InterventionStatus.RESOLVED: OwnerKind.AUTOMATION,
+            InterventionStatus.TERMINATED: OwnerKind.NONE,
+        }[intervention.status]
+        if lease.owner.kind is not expected_owner:
+            raise ValueError("intervention status and control-lease owner disagree")
+        active = intervention.status in {
+            InterventionStatus.OPEN,
+            InterventionStatus.CLAIMED,
+            InterventionStatus.RESUMING,
+        }
+        if active and lease.intervention_id != intervention.id:
+            raise ValueError("active intervention is not bound to its control lease")
+        if not active and lease.intervention_id is not None:
+            raise ValueError("terminal intervention cannot retain a control-lease binding")
+        if intervention.status is InterventionStatus.CLAIMED and (
+            lease.owner.principal_id != intervention.operator_id
+        ):
+            raise ValueError("claimed intervention and human lease have different operators")
+
 
 @dataclass(frozen=True, slots=True)
 class InterventionResume:

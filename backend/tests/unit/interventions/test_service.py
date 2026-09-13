@@ -9,9 +9,15 @@ from replayforge.interventions.leases import (
     InMemoryControlLeaseRepository,
     LeaseConflictError,
 )
-from replayforge.interventions.models import AUTOMATION_OWNER, InterventionStatus, OwnerKind
+from replayforge.interventions.models import (
+    AUTOMATION_OWNER,
+    InterventionContext,
+    InterventionRunMode,
+    InterventionStatus,
+    OwnerKind,
+)
 from replayforge.interventions.router import InMemoryInterventionRouter
-from replayforge.interventions.service import InterventionCoordinator
+from replayforge.interventions.service import InterventionCoordinator, InterventionTransition
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, Viewport
@@ -41,6 +47,13 @@ def coordinator() -> tuple[InterventionCoordinator, str]:
         code="stuck",
         step_id=None,
         observation=observation,
+        context=InterventionContext(
+            run_mode=InterventionRunMode.DISCOVERY,
+            application_family="northstar",
+            tenant="harbor",
+            task_summary="Discovery run requires operator intervention.",
+            surface_route="/members/search",
+        ),
     )
     return InterventionCoordinator(router, leases), intervention_id
 
@@ -67,6 +80,18 @@ def test_claim_release_and_resume_transitions_share_lease_version() -> None:
     assert reopened.intervention.status is InterventionStatus.OPEN
     assert reopened.intervention.operator_id is None
     assert reopened.lease == resuming.lease
+
+
+def test_transition_rejects_disagreement_between_intervention_and_lease() -> None:
+    service, intervention_id = coordinator()
+    opened = service.get(intervention_id)
+
+    with pytest.raises(ValueError, match="owner disagree"):
+        InterventionTransition(opened.intervention.claim("operator-7"), opened.lease)
+
+    claimed = service.claim(intervention_id, opened.lease.version, "operator-7")
+    with pytest.raises(ValueError, match="different operators"):
+        InterventionTransition(claimed.intervention.reassign("operator-8"), claimed.lease)
 
 
 def test_completed_resume_returns_control_to_automation() -> None:

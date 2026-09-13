@@ -11,7 +11,12 @@ from replayforge.interventions.leases import (
     InMemoryControlLeaseRepository,
     LeaseConflictError,
 )
-from replayforge.interventions.models import HumanInputCommand, HumanInputConflictError
+from replayforge.interventions.models import (
+    HumanInputCommand,
+    HumanInputConflictError,
+    InterventionContext,
+    InterventionRunMode,
+)
 from replayforge.interventions.router import InMemoryInterventionRouter
 from replayforge.interventions.service import (
     InterventionAuthorizationError,
@@ -87,6 +92,13 @@ def runtime_service() -> tuple[RuntimeInterventionService, str, FakeRetainedDriv
             viewport=Viewport(1280, 800),
             fingerprint="state",
             landmarks=(),
+        ),
+        context=InterventionContext(
+            run_mode=InterventionRunMode.DISCOVERY,
+            application_family="northstar",
+            tenant="harbor",
+            task_summary="Discovery run requires operator intervention.",
+            surface_route="/members/search",
         ),
     )
     worker = SerialSessionWorker("intervention-test")

@@ -40,6 +40,6 @@ class InterventionRouter(Protocol):
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
-        context: InterventionContext | None = None,
+        context: InterventionContext,
         explanation: str | None = None,
     ) -> str: ...

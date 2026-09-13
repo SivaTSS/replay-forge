@@ -229,7 +229,7 @@ class MemoryRecorder:
 @dataclass
 class MemoryInterventionRouter:
     created: list[str] = field(default_factory=list)
-    contexts: list[InterventionContext | None] = field(default_factory=list)
+    contexts: list[InterventionContext] = field(default_factory=list)
 
     def create(
         self,
@@ -240,7 +240,7 @@ class MemoryInterventionRouter:
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
-        context: InterventionContext | None = None,
+        context: InterventionContext,
         explanation: str | None = None,
     ) -> str:
         del run_id, session_id, code, step_id, observation, explanation

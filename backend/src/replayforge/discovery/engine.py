@@ -589,7 +589,7 @@ class DiscoveryEngine:
                 run_mode=InterventionRunMode.DISCOVERY,
                 application_family=request.application_family,
                 tenant=request.tenant,
-                task_summary=request.goal,
+                task_summary="Discovery run requires operator intervention.",
                 step_id=step_id,
                 surface_route=observation.route,
             ),

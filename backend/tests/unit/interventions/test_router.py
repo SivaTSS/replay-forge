@@ -19,6 +19,19 @@ from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, Viewport
 
 
+def context() -> InterventionContext:
+    return InterventionContext(
+        run_mode=InterventionRunMode.REPLAY,
+        application_family="northstar",
+        tenant="harbor",
+        task_summary="Lookup balance",
+        surface_route="/members/search",
+        capability_id="member.lookup",
+        capability_version="1.0.0",
+        capability_name="Lookup",
+    )
+
+
 def test_router_preserves_reserved_identity_and_observation() -> None:
     clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
     router = InMemoryInterventionRouter(clock)
@@ -42,16 +55,7 @@ def test_router_preserves_reserved_identity_and_observation() -> None:
         code="dialog_detected",
         step_id="search.submit",
         observation=observation,
-        context=InterventionContext(
-            run_mode=InterventionRunMode.REPLAY,
-            application_family="northstar",
-            tenant="harbor",
-            task_summary="Lookup balance",
-            surface_route="/members/search",
-            capability_id="member.lookup",
-            capability_version="1.0.0",
-            capability_name="Lookup",
-        ),
+        context=context(),
     )
 
     assert routed_id == intervention_id
@@ -69,6 +73,7 @@ def test_router_preserves_reserved_identity_and_observation() -> None:
             code="dialog_detected",
             step_id=None,
             observation=observation,
+            context=context(),
         )
 
 
@@ -93,6 +98,7 @@ def test_router_rejects_observation_from_another_session() -> None:
             code="stuck",
             step_id=None,
             observation=observation,
+            context=context(),
         )
 
 
@@ -128,6 +134,7 @@ def test_compare_and_swap_rejects_stale_status_and_identity_change() -> None:
         code="stuck",
         step_id=None,
         observation=observation,
+        context=context(),
     )
     current = router.get(intervention_id)
 
@@ -145,5 +152,6 @@ def test_compare_and_swap_rejects_stale_status_and_identity_change() -> None:
                 explanation=current.explanation,
                 status=current.status,
                 created_at=current.created_at,
+                context=current.context,
             ),
         )
