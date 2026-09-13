@@ -143,7 +143,8 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bun
 backend/src/replayforge/
 ├── api/             FastAPI contracts and adapter
 ├── capabilities/    artifact model, serialization, immutable registry
-├── discovery/       bounded model loop and specialized compiler
+├── applications/    validated application onboarding and surface launch policy
+├── discovery/       contract planning, bounded model loop, and generic compiler
 ├── replay/          deterministic, model-free interpreter
 ├── surfaces/        surface contracts and Playwright adapter
 ├── policy/          layered allowlists and risk decisions
@@ -169,8 +170,6 @@ docs/                implementation-accurate design documentation
 - [Safety, evidence, and human handoff](docs/safety-and-handoff.md)
 - [Implemented API and operations](docs/operations.md)
 - [Tests and evidence](docs/verification.md)
-- [Visual portability implementation plan](docs/plans/01-demo-realism-and-portability.md)
-- [Geometry-free responsive replay plan](docs/plans/02-geometry-free-responsive-replay.md)
 - [Assignment requirement matrix](docs/requirements.md)
 - [Required seven-part design report](REPORT.md)
 

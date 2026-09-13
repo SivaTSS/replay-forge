@@ -12,15 +12,16 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from replayforge.api.services import ApiServices
+from replayforge.applications.registry import ApplicationRegistry, load_application_registry
 from replayforge.capabilities.assets import LocalCapabilityAssetStore
-from replayforge.capabilities.models import BusinessOutcome
+from replayforge.capabilities.models import BusinessOutcome, CapabilityArtifact
 from replayforge.capabilities.registry import (
     CapabilityRegistry,
     CapabilityVersionRecord,
     InMemoryCapabilityRegistry,
 )
 from replayforge.capabilities.serialization import load_artifact_yaml
-from replayforge.discovery.compiler import SavingsBalanceCompiler
+from replayforge.discovery.compiler import TraceArtifactCompiler
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.evidence.local_store import LocalEvidenceStore
@@ -61,6 +62,7 @@ from replayforge.replay.engine import (
     ResumeValidationError,
 )
 from replayforge.runs.discovery_service import DiscoveryApplicationService, DiscoveryExecutor
+from replayforge.runs.discovery_suite import DiscoverySuiteService
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.runs.results import (
     FailureResult,
@@ -74,8 +76,20 @@ from replayforge.surfaces.models import HumanInput, SurfaceError, SurfaceFrame, 
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
 from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
 
-_ALLOWED_ROUTES = frozenset({"/members/search", "/accounts/:account_id/details"})
-_PLATFORM_ACTIONS = frozenset({"type", "click", "select", "extract", "wait_for", "assert"})
+_PLATFORM_ACTIONS = frozenset(
+    {
+        "navigate",
+        "type",
+        "click",
+        "select",
+        "press_keys",
+        "scroll",
+        "wait_for",
+        "assert",
+        "extract",
+        "switch_context",
+    }
+)
 
 
 def load_registry(directory: Path) -> CapabilityRegistry:
@@ -101,35 +115,95 @@ def origin_ready(origin: str) -> bool:
         return False
 
 
-def effective_replay_policy(record: CapabilityVersionRecord, origin: str) -> EffectivePolicy:
+def effective_replay_policy(
+    record: CapabilityVersionRecord,
+    origin: str,
+    application_registry: ApplicationRegistry | None = None,
+) -> EffectivePolicy:
     artifact = record.artifact
     capability_actions = artifact.policy.allowed_action_types
+    application = None
+    if application_registry is not None:
+        try:
+            application = application_registry.get(artifact.capability.application_family)
+        except ValueError:
+            return EffectivePolicy(
+                layer_names=("platform", "application", "tenant", "capability", "invocation"),
+                allowed_origins=frozenset(),
+                allowed_route_patterns=frozenset(),
+                allowed_action_types=frozenset(),
+                maximum_risk=Risk.READ_ONLY,
+                forbidden_field_classes=frozenset(
+                    {DataClassification.CREDENTIAL, DataClassification.SECRET}
+                ),
+            )
+    allowed_routes = (
+        application.policy.allowed_route_patterns
+        if application is not None
+        else _artifact_route_patterns(artifact)
+    )
+    capability_routes = getattr(artifact.policy, "allowed_route_patterns", None)
+    if capability_routes:
+        allowed_routes = frozenset(capability_routes).intersection(allowed_routes)
+    application_actions = (
+        application.policy.allowed_action_types
+        if application is not None
+        else _PLATFORM_ACTIONS
+    )
+    application_risk = (
+        application.policy.maximum_risk if application is not None else Risk.SENSITIVE
+    )
     layers = (
         PolicyLayer(
-            "platform", frozenset({origin}), _ALLOWED_ROUTES, _PLATFORM_ACTIONS, Risk.SENSITIVE
+            "platform", frozenset({origin}), allowed_routes, _PLATFORM_ACTIONS, Risk.SENSITIVE
         ),
         PolicyLayer(
-            "application", frozenset({origin}), _ALLOWED_ROUTES, _PLATFORM_ACTIONS, Risk.SENSITIVE
+            "application",
+            frozenset({origin}),
+            allowed_routes,
+            application_actions,
+            application_risk,
         ),
         PolicyLayer(
-            "tenant", frozenset({origin}), _ALLOWED_ROUTES, _PLATFORM_ACTIONS, Risk.SENSITIVE
+            "tenant", frozenset({origin}), allowed_routes, application_actions, application_risk
         ),
         PolicyLayer(
             "capability",
             frozenset({origin}),
-            _ALLOWED_ROUTES,
+            allowed_routes,
             capability_actions,
             artifact.policy.maximum_risk,
         ),
         PolicyLayer(
             "invocation",
             frozenset({origin}),
-            _ALLOWED_ROUTES,
+            allowed_routes,
             capability_actions,
             artifact.policy.maximum_risk,
         ),
     )
     return EffectivePolicy.intersect(*layers)
+
+
+def _artifact_route_patterns(artifact: object) -> frozenset[str]:
+    """Infer a legacy route allowlist from old immutable artifacts without app configuration."""
+    if not hasattr(artifact, "model_dump"):
+        return frozenset({"/"})
+    payload = artifact.model_dump(mode="json")
+    routes: set[str] = set()
+
+    def walk(value: object) -> None:
+        if isinstance(value, dict):
+            if value.get("kind") == "route" and isinstance(value.get("pattern"), str):
+                routes.add(value["pattern"])
+            for nested in value.values():
+                walk(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                walk(nested)
+
+    walk(payload)
+    return frozenset(routes or {"/"})
 
 
 class RetainedSurfaceDriver(Protocol):
@@ -478,6 +552,7 @@ class LocalRuntime:
     service: ReplayApplicationService
     discovery_service: DiscoveryApplicationService
     intervention_service: RuntimeInterventionService
+    discovery_suite_service: DiscoverySuiteService
     journals: dict[str, InMemoryRunJournal]
     interventions: InMemoryInterventionRouter
     live_sessions: dict[str, LiveBrowserSession]
@@ -486,7 +561,12 @@ class LocalRuntime:
 
     @property
     def api_services(self) -> ApiServices:
-        return ApiServices(self.service, self.discovery_service, self.intervention_service)
+        return ApiServices(
+            self.service,
+            self.discovery_service,
+            self.intervention_service,
+            self.discovery_suite_service,
+        )
 
     def close(self) -> None:
         with self._lock:
@@ -504,6 +584,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         raise TypeError("settings must be RuntimeSettings")
     clock = SystemClock()
     registry = load_registry(settings.artifact_directory)
+    application_registry = load_application_registry(settings.application_registry_file)
     capability_assets = LocalCapabilityAssetStore(settings.capability_asset_directory)
     text_recognizer = RapidOcrTextRecognizer()
     evidence_store = LocalEvidenceStore(settings.evidence_directory, clock)
@@ -546,6 +627,7 @@ def build_runtime(settings: object) -> LocalRuntime:
                 settings.browser_viewport_height,
                 settings.browser_device_scale_factor,
             ),
+            application_registry=application_registry,
         )
         worker = SerialSessionWorker(run_id)
         engine: ReplayEngine
@@ -559,10 +641,20 @@ def build_runtime(settings: object) -> LocalRuntime:
                     ),
                 )
 
+        try:
+            policy_origin = application_registry.get(
+                record.artifact.capability.application_family
+            ).origin
+        except ValueError:
+            policy_origin = settings.demo_base_url
         engine = ReplayEngine(
             driver,
             PolicyEvaluator(clock),
-            effective_replay_policy(record, settings.demo_base_url),
+            effective_replay_policy(
+                record,
+                policy_origin,
+                application_registry,
+            ),
             lease_service,
             journal,
             interventions,
@@ -571,7 +663,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         return ManagedReplayExecutor(engine, driver, worker, live_sessions, lock)
 
     def target_ready() -> bool:
-        return origin_ready(settings.demo_base_url)
+        return all(origin_ready(application.origin) for application in application_registry.all())
 
     def finalize_replay(result: RunResult) -> RunResult:
         if isinstance(result, InterventionRequiredResult):
@@ -584,7 +676,9 @@ def build_runtime(settings: object) -> LocalRuntime:
             result_classifications.pop(result.run_id, None)
         return result.model_copy(update={"evidence_manifest": manifest_key})
 
-    service = ReplayApplicationService(registry, executor_factory, (target_ready,), finalize_replay)
+    service = ReplayApplicationService(
+        registry, executor_factory, (target_ready, application_registry.ready), finalize_replay
+    )
     model_telemetry: ModelCallTelemetry = (
         LangfuseModelCallTelemetry.create(
             public_key=settings.langfuse_public_key.get_secret_value(),
@@ -628,33 +722,45 @@ def build_runtime(settings: object) -> LocalRuntime:
                 settings.browser_viewport_height,
                 settings.browser_device_scale_factor,
             ),
+            application_registry=application_registry,
         )
         worker = SerialSessionWorker(run_id)
-        engine = DiscoveryEngine(
-            driver,
-            provider.for_run(),
-            SavingsBalanceCompiler(clock),
-            PolicyEvaluator(clock),
-            EffectivePolicy.intersect(
+        def discovery_policy(request: DiscoveryRequest) -> EffectivePolicy:
+            application = application_registry.get(request.application_family)
+            return EffectivePolicy.intersect(
                 PolicyLayer(
                     "platform",
-                    frozenset({settings.demo_base_url}),
-                    _ALLOWED_ROUTES,
+                    frozenset({application.origin}),
+                    application.policy.allowed_route_patterns,
                     _PLATFORM_ACTIONS,
-                    Risk.READ_ONLY,
+                    Risk.SENSITIVE,
                 ),
                 PolicyLayer(
                     "application",
-                    frozenset({settings.demo_base_url}),
-                    _ALLOWED_ROUTES,
-                    frozenset({"type", "click", "extract"}),
-                    Risk.READ_ONLY,
+                    frozenset({application.origin}),
+                    application.policy.allowed_route_patterns,
+                    application.policy.allowed_action_types,
+                    application.policy.maximum_risk,
+                    application.policy.forbidden_field_classes,
                 ),
-            ),
+            )
+
+        run_provider = provider.for_run()
+        engine = DiscoveryEngine(
+            driver,
+            run_provider,
+            TraceArtifactCompiler(clock),
+            PolicyEvaluator(clock),
+            None,
             lease_service,
             journal,
             interventions,
             clock,
+            policy_resolver=discovery_policy,
+            contract_planner=run_provider.plan,
+            capability_id_resolver=lambda family, operation: (
+                f"{application_registry.get(family).capability_namespace}.{operation}"
+            ),
         )
         return ManagedDiscoveryExecutor(engine, driver, worker, live_sessions, lock)
 
@@ -685,7 +791,12 @@ def build_runtime(settings: object) -> LocalRuntime:
     discovery_service = DiscoveryApplicationService(
         registry,
         discovery_factory,
-        lambda: provider is not None and model_telemetry.ready() and target_ready(),
+        lambda: (
+            provider is not None
+            and application_registry.ready()
+            and model_telemetry.ready()
+            and target_ready()
+        ),
         finalize_discovery,
     )
     intervention_service = RuntimeInterventionService(
@@ -696,10 +807,37 @@ def build_runtime(settings: object) -> LocalRuntime:
         replay_continuations,
         finalize_replay,
     )
+
+    def validate_artifact(
+        artifact: CapabilityArtifact, tenant: str, inputs: dict[str, object]
+    ) -> bool:
+        result = service.validate_artifact(artifact, tenant, inputs)
+        if isinstance(result, InterventionRequiredResult):
+            with lock:
+                result_classifications.pop(result.run_id, None)
+            try:
+                transition = intervention_service.get(result.intervention_id)
+                intervention_service.terminate(
+                    result.intervention_id,
+                    transition.lease.version,
+                    None,
+                    "deterministic_validation_interrupted",
+                )
+            except Exception:
+                return False
+        return result.status == "success"
+
+    discovery_suite_service = DiscoverySuiteService(
+        discovery_service,
+        registry,
+        validator=validate_artifact,
+        application_registry=application_registry,
+    )
     return LocalRuntime(
         service,
         discovery_service,
         intervention_service,
+        discovery_suite_service,
         journals,
         interventions,
         live_sessions,

@@ -2,7 +2,7 @@
 
 ## Contract
 
-Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation inputs, and step/time limits. It returns success with a published artifact, a typed failure, or an intervention request.
+Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation inputs, and step/time limits. A contract-planning pass first produces a typed `CapabilityDraftSpec`; the action loop then returns a validated draft, a typed failure, or an intervention request. The legacy one-shot endpoint publishes read-only drafts for compatibility; discovery suites keep drafts unpublished until finalization.
 
 It is available only when all three conditions hold:
 
@@ -35,6 +35,8 @@ sequenceDiagram
     end
     E->>S: observe + screenshot
     E->>M: goal, field names, UI facts, frame, recent actions
+    M-->>E: typed contract draft
+    E->>M: goal + draft contract + UI facts
     M-->>E: typed act / complete / escalate proposal
     E->>S: resolve stable target
     E->>P: independently classify and authorize
@@ -96,19 +98,40 @@ The model policy is loaded from `config/model-policy.yaml`. API requests and env
 model says complete
        │
        ▼
-compiler validates exact trace shape
+generic compiler validates draft against the recorded trace
        │
        ▼
 runtime evaluates deterministic checkpoint
        │
        ▼
-all five outputs validate
+all planned outputs validate
        │
        ▼
-registry publishes next immutable patch
+suite finalization applies the risk publication gate
 ```
 
-The compiler is intentionally specific to the savings-balance flow. It requires eight actions in the expected order, read-only risk, and exactly the five declared extractions. For a geometry-free trace it emits schema `1.3` and capability `3.2.0`: rendered text, label relations, and a content-addressed group signature. A discovery-only icon region is used only to create that signature; any coordinate-only target that survives capture is rejected.
+`TraceArtifactCompiler` is task-independent. It validates symbolic inputs, exactly-once output bindings, stable targets, observed routes, risk ceilings, and verified checkpoints without knowing a page name, output name, or action count. New traces emit schema `1.4`, whose non-empty route policy is matched to the registered application. Rendered-only registrations enforce geometry-free targets; legacy schemas `1.0`–`1.3` remain loadable unchanged. Scenario traces are held by a discovery suite and can contribute observed business outcomes or application failures before publication.
+
+## Discovery suites
+
+```text
+primary goal
+    │
+    ▼
+typed draft ──► successful trace ──► optional observed scenarios
+                                      │
+                                      ▼
+                         deterministic finalization
+                         ├── read-only: publish
+                         └── other risk: operator approval
+```
+
+The suite endpoints are `/api/v1/discovery-suites`, `/scenarios`, `/validations`, `/finalize`, and `/approve`. Compatibility variants are only added after a deterministic replay proof. The model may describe an observed branch; it cannot publish an unseen branch from speculation.
+
+Suite states are `collecting → validated → published` for read-only work, or
+`collecting → validated → pending_approval → published` for sensitive/reversible work.
+Irreversible drafts stop at finalization. A failed tenant replay is retained as sanitized drift
+metadata and never changes `supported_variants`.
 
 ## Perception decision
 

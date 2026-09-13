@@ -6,6 +6,8 @@ The models are split by ownership. Pydantic is used at serialized trust boundari
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
     API[API boundary models] --> REQ[DiscoveryRequest / ReplayRequest]
+    REQ --> APP[ApplicationRegistration]
+    REQ --> SUITE[DiscoverySuite]
     REQ --> CAP[CapabilityArtifact]
     REQ --> SUR[Surface models]
     REQ --> POL[Policy models]
@@ -46,6 +48,23 @@ All runtime identities use a typed prefix plus 32 lowercase hexadecimal characte
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 classDiagram
     direction LR
+    class ApplicationRegistration {
+      origin
+      tenants[]
+      entry_points{}
+      routes + policy
+    }
+    class CapabilityDraftSpec {
+      operation_slug
+      inputs
+      outputs
+      risk
+    }
+    class DiscoverySuite {
+      status
+      primary trace
+      scenarios[]
+    }
     class CapabilityArtifact {
       schema_version
       preconditions[]
@@ -61,6 +80,9 @@ classDiagram
     CapabilityArtifact *-- Checkpoint
     CapabilityArtifact *-- CapabilityPolicy
     CapabilityArtifact *-- Provenance
+    ApplicationRegistration --> CapabilityDraftSpec : bounds
+    CapabilityDraftSpec --> CapabilityArtifact : generic compiler
+    DiscoverySuite --> CapabilityArtifact : finalizes
     Step *-- Action
     Step *-- LocatorBundle
     Step *-- RetryPolicy
@@ -73,16 +95,19 @@ classDiagram
 | Model | Important fields | Invariant |
 |---|---|---|
 | `CapabilityMetadata` | ID, semantic version, application family, surface, risk | Capability family matches compatibility; risk matches policy ceiling |
-| `Compatibility` | Base variant, supported variants, surface contract, entry point, landmarks | At least one supported tenant; entry point must be policy-allowed |
+| `Compatibility` | Base variant, supported variants, surface contract, entry point, rendered flag, landmarks | At least one supported tenant; entry point must be policy-allowed |
 | `ObjectContract` | Required names, property schemas, additional-properties flag | Required names exist; invocation/output objects reject undeclared values |
 | `ValueSchema` | Type, constraints, classification, persistence | Decimal and timestamp stay strings at artifact/API boundaries |
 | `Step` | ID, action, target, conditions, timeout, retry, references, risk | Target-required actions have a target; referenced objects exist |
-| `LocatorBundle` | Description, scope, ordered visual/legacy candidates, state | At least one candidate; schema `1.3` permits only rendered visual candidates |
+| `LocatorBundle` | Description, scope, ordered visual/legacy candidates, state | At least one candidate; schema `1.4` rejects persisted coordinates and rendered-only registrations permit only rendered visual candidates |
 | `Recovery` | Trigger, maximum uses, steps, resume target | No nested recovery; resume step exists; recovery cannot be sensitive |
 | `BusinessOutcome` | Stable code, detector, allowed step, result bindings | Only detectable after explicitly listed steps |
 | `ApplicationFailure` | Stable code, detector, expected/observed state, recoverability | Cannot collide with a business-outcome code |
 | `Checkpoint` | ID and composed condition | Must validate every required output |
 | `Provenance` | Discovery run, provider/model, adapter/compiler versions, fingerprint, evidence, hash | Optional declared hash must equal canonical artifact content |
+| `ApplicationRegistration` | Origin, tenants, entry points, route aliases, surface contract, policy | Launches and constrains a surface; contains no task semantics |
+| `CapabilityDraftSpec` | Model-proposed operation and typed contract | Names outputs but cannot change application policy or security ceilings; credential-like fields are rejected |
+| `DiscoverySuite` | Primary run, scenario evidence, artifact draft, lifecycle status | Publishes only after final validation and the risk gate |
 
 Action and condition models are discriminated unions. This makes invalid combinations impossible to interpret accidentally: an `extract` has an output binding; a `type` has a literal or input source; `all`/`any` contain nested conditions.
 
@@ -105,6 +130,7 @@ classDiagram
       target
       rationale
       expected_effect
+      expected_condition?
       declared_risk
       confidence
     }
@@ -147,7 +173,7 @@ visual tokens(text, confidence, screen region)
 active element + optional dialog/evidence reference
 ```
 
-`ResolvedTarget` does not expose a Playwright locator. It contains an adapter-owned opaque handle, description, chosen candidate index, observed count, reviewed risk, and an optional transient CSS-pixel visual region. Schema `1.3` durable candidates are `rendered_text`, `rendered_labeled_control`, `rendered_field_value`, and `rendered_group_image`; none carries a target region, offset, scale, or confidence threshold. The resolved region is tied to the current frame hash and is never serialized into the artifact.
+`ResolvedTarget` does not expose a Playwright locator. It contains an adapter-owned opaque handle, description, chosen candidate index, observed count, reviewed risk, and an optional transient CSS-pixel visual region. Schema `1.4` durable candidates are geometry-free rendered candidates for rendered-only registrations; none carries a target region, offset, scale, or confidence threshold. The resolved region is tied to the current frame hash and is never serialized into the artifact. Schemas `1.0`–`1.3` remain loadable for immutable fixtures.
 
 `SurfaceError` carries only safe, classified data: code, safe message, recoverability, whether the prior effect is absent, whether intervention is recommended, and sanitized expected/observed facts.
 

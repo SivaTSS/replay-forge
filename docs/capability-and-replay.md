@@ -95,7 +95,7 @@ The resolver never asks a model, selects the first ambiguous result, or clicks a
 | Role/label + iframe scope | Optional fallback | Precise when a trustworthy semantic surface exists |
 | Generated CSS selector | Supported but not primary | Often encodes incidental markup |
 
-Coordinates exist only as ephemeral browser input dispatch values. Discovery may observe a transient icon region to create a signature, but the compiler publishes only rendered candidates; schema `1.3` rejects coordinates, normalized regions, and target-specific tuning fields recursively.
+Coordinates exist only as ephemeral browser input dispatch values. Discovery may observe a transient icon region to create a signature, but the compiler publishes only rendered candidates; schema `1.4` rejects persisted coordinates, and rendered-only registrations reject legacy DOM targets recursively. Schemas `1.0`–`1.3` remain loadable for immutable fixtures.
 
 ### Contextual image anchors
 
@@ -198,4 +198,8 @@ No version means “latest,” currently `3.2.0`. Use `2.0.0` explicitly for hum
 | Immutable semantic versions | Mutable latest script | Replays remain reproducible and auditable |
 | SHA-256 over canonical serialization | Filename/version trust | Detects content changes independently of storage |
 | Explicit outcomes and checkpoints | Infer success from last click | Forces callers and reviewers to see what was actually proven |
-| Specialized compiler | Generic model-authored artifact | Fail-closed implementation for one deep workflow; less breadth, stronger validation |
+| Generic trace compiler + model draft | Direct model-authored artifact | The model proposes task semantics, but only observed, policy-approved actions become a durable artifact |
+
+Schema `1.4` carries the compiled capability route allowlist and the registered rendered-surface
+flag. The compiler records only routes observed during discovery, narrowed to application
+patterns; replay intersects them again with the application policy.

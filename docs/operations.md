@@ -16,8 +16,14 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | Method | Path | Behavior |
 |---|---|---|
 | `GET` | `/health/live` | Process is serving requests |
-| `GET` | `/health/ready` | Registry and demo target are available |
+| `GET` | `/health/ready` | Capability registry, application catalog, and every registered target are available |
 | `POST` | `/api/v1/discoveries` | Runs discovery synchronously; `202` only if intervention is returned |
+| `POST` | `/api/v1/discovery-suites` | Creates a draft suite and runs its primary discovery trace |
+| `GET` | `/api/v1/discovery-suites/{id}` | Reads sanitized suite status and coverage |
+| `POST` | `/api/v1/discovery-suites/{id}/scenarios` | Adds observed outcome, failure, or recovery evidence |
+| `POST` | `/api/v1/discovery-suites/{id}/validations` | Runs deterministic compatibility validation |
+| `POST` | `/api/v1/discovery-suites/{id}/finalize` | Compiles and applies the publication risk gate |
+| `POST` | `/api/v1/discovery-suites/{id}/approve` | Publishes a hash-bound non-read-only draft |
 | `GET` | `/api/v1/capabilities/schema` | Returns the artifact JSON Schema |
 | `POST` | `/api/v1/capabilities/validate` | Parses, validates, and hashes supplied YAML |
 | `POST` | `/api/v1/capabilities/{id}/replays` | Runs replay synchronously; `202` only if paused |
@@ -64,6 +70,7 @@ Pydantic models forbid unknown request fields. Validation errors contain field l
 | Setting | Default | Purpose |
 |---|---|---|
 | `REPLAYFORGE_ARTIFACT_DIRECTORY` | `capabilities` | Startup YAML registry |
+| `REPLAYFORGE_APPLICATION_REGISTRY_FILE` | `config/applications.yaml` | Reviewed application onboarding catalog |
 | `REPLAYFORGE_CAPABILITY_ASSET_DIRECTORY` | `capabilities/_assets` | Content-addressed visual templates |
 | `REPLAYFORGE_EVIDENCE_DIRECTORY` | `evidence/runtime` | Mutable local evidence |
 | `REPLAYFORGE_DEMO_BASE_URL` | `http://127.0.0.1:3001` | Credential-free target origin |
@@ -76,7 +83,7 @@ Pydantic models forbid unknown request fields. Validation errors contain field l
 | `REPLAYFORGE_LANGFUSE_BASE_URL` | `http://127.0.0.1:3100` | Must be loopback HTTP |
 | `REPLAYFORGE_LANGFUSE_PUBLIC_KEY` / `REPLAYFORGE_LANGFUSE_SECRET_KEY` | unset | Must be configured together |
 
-Settings reject credentials in URLs, non-local Langfuse endpoints, missing artifact directories, partial Langfuse credentials, and OpenAI discovery without Langfuse credentials.
+Settings reject credentials in URLs, non-local Langfuse endpoints, missing artifact or application-registry files, partial Langfuse credentials, and OpenAI discovery without Langfuse credentials.
 
 ## Operational decisions
 

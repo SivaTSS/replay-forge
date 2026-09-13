@@ -18,9 +18,11 @@ flowchart LR
         API[FastAPI adapter]
         API --> RS[Replay application service]
         API --> DS[Discovery application service]
+        API --> SS[Discovery suite service]
         API --> IS[Intervention service]
         RS --> RE[Replay engine]
         DS --> DE[Discovery engine]
+        SS --> DS
         DE --> MP[ModelProvider port]
         RE --> SP[Surface ports]
         DE --> SP
@@ -36,6 +38,7 @@ flowchart LR
         PW[Playwright adapter]
         DB[Demo bank]
         FS[(Local evidence store)]
+        AR[(Application registry YAML)]
         LF[Local Langfuse]
     end
 
@@ -45,6 +48,8 @@ flowchart LR
     SP --> PW
     PW --> DB
     EJ --> FS
+    API --> AR
+    PW --> AR
     OA --> LF
 
 ```
@@ -58,7 +63,13 @@ flowchart LR
 | Demo bank | `3001` | Synthetic two-tenant target and controlled faults | Expose a task-completion API |
 | Langfuse stack | `3100` | Local model-call metrics for discovery | Participate in replay |
 
-PostgreSQL is not part of the implemented runtime. Capability, lease, intervention, and journal metadata live in process memory. Sanitized evidence is written to disk.
+PostgreSQL is not part of the implemented runtime. Capability, lease, intervention, journal, application-registration, and discovery-suite metadata live in process memory. Sanitized evidence is written to disk. The application catalog is checked-in YAML so onboarding is reviewable; its repository interface is the later PostgreSQL seam.
+
+`config/applications.yaml` is the onboarding boundary. It owns only application facts: a
+credential-free origin, tenant variants, symbolic entry points, route aliases, readiness
+landmarks, and policy ceilings. A new task in a registered application therefore supplies a
+goal and a fresh discovery suite; it does not add task code or route constants. A new web app
+adds one reviewed registration. A new surface contract still requires a surface adapter.
 
 ## Dependency direction
 
@@ -89,13 +100,14 @@ The key rule is structural: `replay` does not import `providers`. A test enforce
 |---|---|---|
 | `api` | HTTP validation, correlation IDs, safe error mapping | [`api/app.py`](../backend/src/replayforge/api/app.py) |
 | `capabilities` | Artifact aggregate, YAML, schema, hashing, immutable versions | [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py) |
-| `discovery` | Observe-decide-act loop and savings-balance compilation | [`discovery/engine.py`](../backend/src/replayforge/discovery/engine.py) |
+| `applications` | Validated application onboarding, launch resolution, route aliases, and policy ceilings | [`applications/models.py`](../backend/src/replayforge/applications/models.py) |
+| `discovery` | Contract planning, bounded observe-decide-act loop, and generic trace compilation | [`discovery/engine.py`](../backend/src/replayforge/discovery/engine.py) |
 | `replay` | Model-free step interpreter, recovery, outcomes, checkpoint | [`replay/engine.py`](../backend/src/replayforge/replay/engine.py) |
 | `surfaces` | Technology-neutral session port and Playwright implementation | [`surfaces/ports.py`](../backend/src/replayforge/surfaces/ports.py) |
 | `policy` | Allowlist intersection, risk inference, decision records | [`policy/evaluator.py`](../backend/src/replayforge/policy/evaluator.py) |
 | `interventions` | Intervention lifecycle and exclusive lease transitions | [`interventions/service.py`](../backend/src/replayforge/interventions/service.py) |
 | `evidence` | Redaction, local storage, manifests, bundle verification/export | [`evidence/redaction.py`](../backend/src/replayforge/evidence/redaction.py) |
-| `runs` | Invocation orchestration, terminal results, ordered journal | [`runs/service.py`](../backend/src/replayforge/runs/service.py) |
+| `runs` | Invocation orchestration, discovery suites, terminal results, ordered journal | [`runs/service.py`](../backend/src/replayforge/runs/service.py) |
 | `providers` | OpenAI request/response translation only | [`providers/openai.py`](../backend/src/replayforge/providers/openai.py) |
 | `observability` | Bounded model-call metrics | [`observability/model_calls.py`](../backend/src/replayforge/observability/model_calls.py) |
 | `runtime` | Settings, dependency wiring, worker/session retention | [`runtime/composition.py`](../backend/src/replayforge/runtime/composition.py) |
@@ -148,7 +160,7 @@ The production path is rendered-surface first. Playwright is still the browser t
 
 `VisionGrounder` runs RapidOCR locally and resolves four geometry-free strategies: rendered text, a rendered label-to-control relation, a rendered label-to-value relation, and a rendered group label plus content-addressed visual signature. OCR phrases are rebuilt from the current frame; edge components are segmented from that same frame; relations use measured text height rather than saved offsets. Each result must be unique and satisfy the centrally loaded OCR, segmentation, similarity, pixel, and time budgets. Failure returns `target_absent` or `target_ambiguous`; replay never guesses.
 
-The `visual-terminal` demo route exposes the original workflow as one canvas with no usable control or value nodes. The `visual-workbench` route keeps that contract while switching between responsive cards and a wide table, rendering three account-row actions, and injecting delayed, notice, permission, ambiguity, changed-icon, and duplicate-label fixtures. Harbor and Summit change palette, font metrics, horizontal placement, and row order. Version `3.2.0` resolves the current rendered `Savings` label, ranks same-group visual components against a content-addressed signature, and dispatches the resulting CSS-pixel point only for that frame. No artifact target stores coordinates or target-specific geometry; schema `1.3` rejects them recursively.
+The `visual-terminal` demo route exposes the original workflow as one canvas with no usable control or value nodes. The `visual-workbench` route keeps that contract while switching between responsive cards and a wide table, rendering three account-row actions, and injecting delayed, notice, permission, ambiguity, changed-icon, and duplicate-label fixtures. Harbor and Summit change palette, font metrics, horizontal placement, and row order. Version `3.2.0` resolves the current rendered `Savings` label, ranks same-group visual components against a content-addressed signature, and dispatches the resulting CSS-pixel point only for that frame. No artifact target stores coordinates or target-specific geometry; new schema `1.4` artifacts reject them recursively while legacy `1.3` fixtures remain loadable.
 
 ## Decisions
 
