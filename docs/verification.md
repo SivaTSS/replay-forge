@@ -58,17 +58,28 @@ evidence/<scenario>/
 └── screenshots/        selected masked frames where required
 ```
 
-The runtime first writes mutable evidence under ignored `evidence/runtime/`. Export tooling verifies the source manifest and creates stable reviewer bundles without overwriting an existing destination.
+The runtime writes append-only evidence objects and successive manifest snapshots under ignored
+`evidence/runtime/`. Each completed run points to its final snapshot. Export tooling verifies that
+snapshot, copies only its declared content, and atomically publishes a reviewer bundle without
+overwriting an existing destination.
 
 `verify_evidence_bundles.py` checks:
 
 - Manifest schema.
-- Every declared file and SHA-256.
+- An exact file set: no undeclared files or symlinks.
+- Every declared file's size and SHA-256.
+- JSON size limits and secret-like text scanning.
 - Event order and run identity.
 - Exactly one terminal result.
 - Artifact hash when present.
 - Attachment ownership, size, media type, and PNG/ZIP signatures.
-- Source-manifest linkage and declared redaction.
+- Source-manifest hash and declared redaction metadata.
+
+SHA-256 detects a changed or omitted file relative to its manifest; it does not authenticate the
+author. A party able to replace both payloads and manifest can construct a different consistent
+bundle. Here, the Git commit containing the bundle supplies the reviewer-visible provenance anchor.
+Retention classes are recorded for policy and later lifecycle enforcement; this local slice does
+not delete evidence automatically.
 
 ## Scenario matrix
 
@@ -113,8 +124,9 @@ No Playwright trace archive is committed. This is an explicit optional evidence 
 | Mock-only browser tests | Rejected | Would not prove iframe, locator, navigation, or screenshot behavior |
 | Live-model tests on every CI run | Rejected | Non-deterministic, credentialed, and paid |
 | Unit fakes + real Chromium + committed live evidence | **Chosen** | Deterministic gates plus auditable proof of four genuine model runs, including three distinct tasks |
-| Trust exported evidence files | Rejected | Hash and structure verification makes tampering or omission visible |
+| Trust exported evidence files | Rejected | Closed-set validation and hashes expose changes relative to the committed manifest |
 | Store raw screenshots | Rejected | Evidence is masked before persistence |
+| Add S3-compatible storage | Rejected for this slice | Local durable files satisfy single-node execution and repository review; remote distribution adds no requirement coverage here |
 
 ## Secret audit
 

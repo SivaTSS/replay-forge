@@ -119,7 +119,7 @@ Each action crosses three independent controls: current lease ownership, effecti
 
 Risk is independently inferred from action type, target language, and observed target facts, then combined with the declared risk. Irreversible actions are always denied. Sensitive replay steps pause for same-session human intervention. Discovery publishes only deterministically validated read-only or reversible capabilities; sensitive and irreversible drafts are blocked. Origins, normalized routes, and action types must be explicitly allowed.
 
-Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted DOM screenshots mask inputs and value cells; both canvas-only visual routes mask the entire canvas because their sensitive pixels have no element boundary. Atomic writes, SHA-256 metadata, and manifests make incomplete or changed evidence detectable. API errors expose stable codes and safe messages without submitted values or raw provider errors.
+Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted DOM screenshots mask inputs and value cells; both canvas-only visual routes mask the entire canvas because their sensitive pixels have no element boundary. Durable writes, closed-set bundle verification, SHA-256 metadata, and manifests expose incomplete or changed evidence relative to the committed manifest. These hashes provide integrity, not signer authenticity. API errors expose stable codes and safe messages without submitted values or raw provider errors.
 
 The trade-off is conservative capability: the system may stop where a broader automation could continue. That is intentional for financial operations. Authentication, operator authorization, TLS, automated evidence expiry, and durable control transactions are required before production deployment and are outside this local submission.
 
@@ -133,7 +133,7 @@ compiler, policy engine, and replay interpreter.
 | Cut | What exists instead | Next production step |
 |---|---|---|
 | PostgreSQL repositories | Atomic local capability registry; in-memory journal metadata, leases, interventions, and suites | Transactional operational history when multi-process coordination requires it |
-| S3-compatible evidence | Opaque keys over atomic local files | Object store plus authorized download service |
+| S3-compatible evidence | Not implemented: opaque keys over durable local files satisfy this single-node, repository-reviewed slice | Revisit only if remote distribution or multi-node retention becomes a requirement |
 | Full operations UI | Focused intervention console | Run list, capability catalog, evidence viewer, authentication |
 | WebSocket/video co-browsing | PNG polling and bounded HTTP input | Backpressured stream with durable control events |
 | Native desktop execution | Reusable PNG vision layer and surface ports | OS capture/input transport and window identity |

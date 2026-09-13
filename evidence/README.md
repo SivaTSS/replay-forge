@@ -1,6 +1,9 @@
 # Evidence
 
-These immutable reviewer bundles were exported from runtime evidence produced through the public API against real Chromium. Each `manifest.json` binds the scenario to its command, commit, artifact where applicable, source manifest, redaction directives, and SHA-256 file hashes.
+These reviewer bundles were exported from runtime evidence produced through the public API against
+real Chromium. The exporter never overwrites a bundle. Each `manifest.json` binds the scenario to
+its command, commit, artifact where applicable, verified source manifest, redaction directives, and
+SHA-256 file hashes.
 
 ```text
 runtime action
@@ -32,7 +35,9 @@ From the repository root:
 UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bundles.py evidence
 ```
 
-The verifier checks manifest schemas, hashes, event ordering, run identity, exactly one terminal result, artifact integrity, source-manifest linkage, and attachment media signatures.
+The verifier accepts only the files declared by the manifest and rejects symlinks, oversized JSON,
+unsafe text, invalid hashes, unordered or cross-run events, missing terminal results, artifact
+mismatches, and invalid attachment signatures.
 
 ## Bundle shape
 
@@ -46,6 +51,10 @@ The verifier checks manifest schemas, hashes, event ordering, run identity, exac
 ```
 
 Playwright trace archives are not included. Masked screenshots are the selected richer failure and handoff signal. Unit fixtures are never represented as genuine run evidence. See [Verification](../docs/verification.md) for the proof matrix and [Safety and handoff](../docs/safety-and-handoff.md) for the redaction path.
+
+SHA-256 proves that files still match the reviewed manifest; it is not a digital signature. A
+malicious party able to rewrite both files and manifest could create a new internally consistent
+bundle. The committed Git revision is the reviewer-visible anchor for these bundles.
 
 ## Rich evidence examples
 

@@ -206,8 +206,8 @@ it identifies a live paused session and therefore has no finalized manifest requ
 The journal owns monotonic sequences and exactly-once finalization. Redaction produces
 `SanitizedEvidence`; only that type crosses the storage port. Each `EvidenceRecord` contains an
 opaque key, media type, bounded size, SHA-256 hash, retention class, directives, and aware time.
-The authoritative `RunEvidenceManifest` requires unique run-owned keys and separates JSON events,
-binary attachments, and the optional terminal result.
+The authoritative `RunEvidenceManifest` requires unique evidence identities, unique run-owned keys,
+and separate JSON events, binary attachments, and optional terminal result.
 
 ## Choice record
 
