@@ -92,7 +92,7 @@ The key rule is structural: `replay` does not import `providers`. A test enforce
 | Artifact storage | `CapabilityRegistry` | Thread-safe memory loaded from YAML |
 | Evidence bytes | `EvidenceStore` | Atomic local files |
 | Run audit | `RunRecorder` | In-memory journal backed by evidence files |
-| Control ownership | `ControlLeaseRepository` | Thread-safe compare-and-swap memory |
+| Handoff state | `InterventionTransitionRepository` | Atomic intervention-and-lease memory adapter |
 
 ## Module ownership
 

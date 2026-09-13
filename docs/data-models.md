@@ -1,319 +1,241 @@
 # Data models
 
-The models are split by ownership. Pydantic is used at serialized trust boundaries; frozen dataclasses are used for internal domain values; protocols define replaceable dependencies.
+ReplayForge separates data by trust and lifetime. Serialized boundaries use strict Pydantic
+models with unknown fields rejected; durable contracts are frozen. Internal state uses frozen
+dataclasses. Repository protocols own mutation.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-flowchart LR
-    API[API boundary models] --> REQ[DiscoveryRequest / ReplayRequest]
-    REQ --> APP[ApplicationRegistration]
-    REQ --> SUITE[DiscoverySuite]
-    REQ --> CAP[CapabilityArtifact]
-    REQ --> SUR[Surface models]
-    REQ --> POL[Policy models]
-    REQ --> INT[Intervention models]
-    REQ --> EVT[RunEvent / evidence]
-    REQ --> RES[RunResult union]
+flowchart TB
+    U[Untrusted input] --> B[Boundary models]
+    B --> D[Domain values]
+    D --> R[Repository ports]
+    R --> P[(Persisted records)]
+    D --> T[Transient session state]
 ```
 
-## Identity model
-
-All runtime identities use a typed prefix plus 32 lowercase hexadecimal characters.
-
-| Entity | Prefix | Created for |
+| Layer | Representative models | Rule |
 |---|---|---|
-| Run | `run_` | One discovery or replay invocation |
-| Session | `ses_` | One isolated browser context |
-| Event | `evt_` | One ordered journal event or normalized observation |
-| Decision | `dec_` | One policy evaluation |
-| Intervention | `int_` | One routed human handoff |
-| Evidence | `evd_` | One stored evidence object |
-| Trace | `trc_` | One API correlation identity |
+| Boundary | API requests, `CapabilityArtifact`, `RunResult`, evidence manifest | Parse strictly; reject extra or contradictory fields |
+| Domain | observations, decisions, receipts, leases, interventions | Construct only valid states; use aware timestamps and typed IDs |
+| Repository | capability, suite, evidence, lease/intervention ports | Mutation and concurrency belong here |
+| Transient | provider context, browser handle, current visual region | Never becomes a capability artifact |
 
-`EntityId` validates both syntax and expected kind at boundaries. IDs are opaque; business meaning never depends on parsing their random component.
+## Identity
 
-### Decision
+Every runtime ID is a prefix plus 32 lowercase hexadecimal characters.
 
-| Alternative | Choice | Reason |
+| Prefix | Entity | Scope |
 |---|---|---|
-| Database integers | Rejected | Leak ordering and require a central allocator |
-| Untyped UUID strings | Rejected | Easy to mix run, session, and evidence IDs |
-| Prefixed random IDs | **Chosen** | Locally generated, log-readable, and kind-checkable |
+| `run_` | Run | One discovery or replay invocation |
+| `sui_` | Discovery suite | One draft, its scenarios, and publication outcome |
+| `ses_` | Surface session | One isolated live browser context |
+| `evt_` | Event or observation | One ordered audit event or normalized observation |
+| `dec_` | Policy decision | One evaluation |
+| `int_` | Intervention | One human handoff |
+| `evd_` | Evidence record | One stored object |
+| `trc_` | Trace | One API correlation identity |
 
-## Capability aggregate
+IDs are opaque. The prefix prevents cross-entity substitution; code never interprets the random
+component.
 
-`CapabilityArtifact` is the root of the replay contract.
+## Capability artifact
+
+`CapabilityArtifact` is the immutable replay contract. Application registration supplies where
+and under what ceiling a task may run; discovery supplies task semantics.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-classDiagram
-    direction LR
-    class ApplicationRegistration {
-      origin
-      tenants[]
-      entry_points{}
-      routes + policy
-    }
-    class CapabilityDraftSpec {
-      operation_slug
-      inputs
-      outputs
-      risk
-    }
-    class DiscoverySuite {
-      status
-      primary trace
-      scenarios[]
-    }
-    class CapabilityArtifact {
-      schema_version
-      preconditions[]
-      steps[]
-      recoveries[]
-      outcomes[]
-      failures[]
-    }
-    CapabilityArtifact *-- CapabilityMetadata
-    CapabilityArtifact *-- Compatibility
-    CapabilityArtifact *-- ObjectContract : inputs
-    CapabilityArtifact *-- ObjectContract : outputs
-    CapabilityArtifact *-- Checkpoint
-    CapabilityArtifact *-- CapabilityPolicy
-    CapabilityArtifact *-- Provenance
-    ApplicationRegistration --> CapabilityDraftSpec : bounds
-    CapabilityDraftSpec --> CapabilityArtifact : generic compiler
-    DiscoverySuite --> CapabilityArtifact : finalizes
-    Step *-- Action
-    Step *-- LocatorBundle
-    Step *-- RetryPolicy
-    LocatorBundle *-- LocatorScope
-    LocatorBundle *-- LocatorCandidate : optional DOM/coordinate legacy
-    LocatorBundle *-- VisualLocatorCandidate : rendered visual
-
+flowchart TB
+    APP[Application registration] --> COMP[Compatibility]
+    DRAFT[Discovery draft] --> META[Metadata and contracts]
+    TRACE[Verified trace] --> STEPS[Steps and recoveries]
+    TRACE --> END[Outcomes and failures]
+    COMP --> ART[Capability artifact]
+    META --> ART
+    STEPS --> ART
+    END --> ART
+    ART --> CHECK[Completion checkpoint]
+    ART --> POLICY[Capability policy]
+    ART --> PROV[Provenance and hash]
 ```
 
-| Model | Important fields | Invariant |
-|---|---|---|
-| `CapabilityMetadata` | ID, semantic version, application family, surface, risk | Capability family matches compatibility; risk matches policy ceiling |
-| `Compatibility` | Base variant, supported variants, surface contract, entry point, rendered flag, landmarks | At least one supported tenant; entry point must be policy-allowed |
-| `ObjectContract` | Required names, property schemas, additional-properties flag | Required names exist; invocation/output objects reject undeclared values |
-| `ValueSchema` | Type, constraints, classification, persistence | Decimal and timestamp stay strings at artifact/API boundaries |
-| `Step` | ID, action, target, conditions, timeout, retry, references, risk | Target-required actions have a target; referenced objects exist |
-| `LocatorBundle` | Description, scope, ordered visual/legacy candidates, state | At least one candidate; schema `1.4` rejects persisted coordinates and rendered-only registrations permit only rendered visual candidates |
-| `Recovery` | Trigger, maximum uses, steps, resume target | No nested recovery; resume step exists; recovery cannot be sensitive |
-| `BusinessOutcome` | Stable code, detector, allowed step, result bindings | Only detectable after explicitly listed steps |
-| `ApplicationFailure` | Stable code, detector, expected/observed state, recoverability | Cannot collide with a business-outcome code |
-| `Checkpoint` | ID and composed condition | Must validate every required output |
-| `Provenance` | Discovery run, provider/model, adapter/compiler versions, fingerprint, evidence, hash | Optional declared hash must equal canonical artifact content |
-| `ApplicationRegistration` | Origin, tenants, entry points, route aliases, surface contract, policy | Launches and constrains a surface; contains no task semantics |
-| `CapabilityDraftSpec` | Model-proposed operation and typed contract | Names outputs but cannot change application policy or security ceilings; credential-like fields are rejected |
-| `DiscoverySuite` | Primary run, scenario evidence, artifact draft, lifecycle status | Publishes only after final validation and the risk gate |
-
-Action and condition models are discriminated unions. This makes invalid combinations impossible to interpret accidentally: an `extract` has an output binding; a `type` has a literal or input source; `all`/`any` contain nested conditions.
-
-## Discovery model
-
-```mermaid
-%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-classDiagram
-    direction LR
-    class ProviderContext {
-      goal
-      screenshot_png
-      action_history[]
-      allowed_action_types[]
-      captured_output_names[]
-    }
-    class DiscoveryProposal
-    class ActProposal {
-      action
-      target
-      rationale
-      expected_effect
-      expected_condition?
-      declared_risk
-      confidence
-    }
-    class CompleteProposal
-    class EscalateProposal
-    class RecordedDiscoveryStep {
-      observation_before
-      observation_after
-      stable target
-    }
-    ProviderContext --> DiscoveryProposal
-    DiscoveryProposal <|-- ActProposal
-    DiscoveryProposal <|-- CompleteProposal
-    DiscoveryProposal <|-- EscalateProposal
-    ActProposal --> RecordedDiscoveryStep : after policy + execution
-
-```
-
-The provider proposal is not the recording. Only a policy-approved, successfully executed action becomes a `RecordedDiscoveryStep`. Before/after observations and the adapter-captured locator are retained separately from provider output.
-
-### Decision
-
-| Alternative | Choice | Reason |
-|---|---|---|
-| Persist provider response as the workflow | Rejected | Provider-specific and not execution-safe |
-| Let free-form text drive the browser | Rejected | Cannot validate action, target, risk, or bounds |
-| Parse into a strict proposal, then record verified effects | **Chosen** | Separates model suggestion from trusted capability input |
-
-## Surface model
-
-`NormalizedObservation` is the portable perception record:
-
-```text
-identity + session + timestamp
-route + viewport + fingerprint
-landmarks + frame titles
-actionable controls(role, name, count)
-extractable fields(label, count)
-visual tokens(text, confidence, screen region)
-active element + optional dialog/evidence reference
-```
-
-`ResolvedTarget` does not expose a Playwright locator. It contains an adapter-owned opaque handle, description, chosen candidate index, observed count, reviewed risk, and an optional transient CSS-pixel visual region. Schema `1.4` durable candidates are geometry-free rendered candidates for rendered-only registrations; none carries a target region, offset, scale, or confidence threshold. The resolved region is tied to the current frame hash and is never serialized into the artifact. Schemas `1.0`–`1.3` remain loadable for immutable fixtures.
-
-`SurfaceError` carries only safe, classified data: code, safe message, recoverability, whether the prior effect is absent, whether intervention is recommended, and sanitized expected/observed facts.
-
-### Decision
-
-| Alternative | Choice | Reason |
-|---|---|---|
-| Pass Playwright objects into engines | Rejected | Prevents fake, visual, or desktop adapters |
-| Serialize full DOM | Rejected | Large, sensitive, and web-specific |
-| Compact normalized facts + OCR tokens + opaque handle | **Chosen** | Keeps domain logic portable while the adapter owns grounding technology |
-
-## Policy model
-
-```mermaid
-%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-flowchart LR
-    C[ActionContext] --> E[PolicyEvaluator]
-    L[EffectivePolicy] --> E
-    E --> D[PolicyDecision]
-    D --> A([allow])
-    D --> N([deny])
-    D --> H([require human intervention])
-
-```
-
-| Model | Contains |
+| Part | Enforced invariant |
 |---|---|
-| `PolicyLayer` | Name, origin/route/action allowlists, risk ceiling, forbidden field classes |
-| `EffectivePolicy` | Intersection of allowed sets, union of forbidden classes, lowest risk ceiling |
-| `ActionContext` | Principal, mode, app, tenant, location, action, target, declared/observed risk, owner |
-| `PolicyDecision` | Stable reason, explanation, matched layers, effective risk, evidence/redaction requirements, timestamp |
+| Metadata | Capability ID and semantic version are stable; application family matches compatibility |
+| Input/output contracts | Required properties exist; unknown invocation values are rejected; secrets and credentials cannot enter discovered contracts |
+| Compatibility | Tenant set is non-empty; entry point is registered and policy-allowed; landmarks describe the expected surface |
+| Step | ID is unique; action and target agree; references resolve; timeout and retry counts are bounded |
+| Target | Candidate order is explicit; every candidate has exactly the fields its strategy needs |
+| Recovery | Trigger, bounded uses, and resume step are valid; nested and sensitive recovery are rejected |
+| Outcome/failure | Codes are unique and disjoint; detection is limited to declared steps |
+| Checkpoint | Every required output is validated before success |
+| Policy | Entry points, routes, actions, risk ceiling, and forbidden data classes are explicit |
+| Provenance | Run, provider/model, component versions, timestamp, fingerprint, evidence key, and optional canonical hash are recorded |
 
-The decision is data rather than an exception so the same reason can control execution and produce an audit event.
+Actions and conditions are discriminated unions. For example, `type` requires a value source and a
+target; `navigate` accepts an entry-point name and cannot carry a target. The same pairing is
+checked on model proposals, recorded discovery steps, and final artifact steps.
 
-## Intervention and lease model
+Schema `1.4` stores no coordinates. Rendered candidates describe text, labeled controls, fields,
+or image groups. The surface adapter derives a region from the current frame and viewport, uses it
+once, and discards it. Older `1.0`–`1.3` fixtures remain readable for compatibility.
 
-```mermaid
-%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-classDiagram
-    direction LR
-    class Intervention {
-      id
-      run_id
-      session_id
-      trigger_code
-      status
-      operator_id
-      resolution
-    }
-    class ControlLease {
-      session_id
-      owner
-      version
-      expires_at
-      intervention_id
-    }
-    class HumanInputCommand {
-      client_sequence
-      source_frame_sequence
-      viewport
-      action
-    }
-    class InterventionFrame {
-      PNG
-      sequence
-      viewport
-      next_client_sequence
-    }
-    Intervention --> ControlLease : same session
-    HumanInputCommand --> InterventionFrame : must match
-
-```
-
-`Intervention.status` is `open → claimed → resuming → resolved`, with termination allowed from open or claimed. Release returns claimed to open. Failed resume validation returns resuming to open. The lease separately tracks the actual control owner: automation, automation-paused, one named human, or none.
-
-Keeping intervention workflow and control ownership separate prevents a UI status change from granting browser authority. Every lease replacement increments exactly one version and is installed with compare-and-swap.
-
-## Run result model
-
-```text
-RunResult
-├── SuccessResult
-│   └── capability ref + outputs + VerifiedCheckpoint(true) + evidence
-├── BusinessOutcomeResult
-│   └── stable code + redacted details + evidence
-├── FailureResult
-│   └── code + safe message + recoverable + step + expected/observed + evidence
-└── InterventionRequiredResult
-    └── intervention ID + code + step + live-session flag + paused owner
-```
-
-The `status` field is the discriminator. A caller cannot mistake “member not found” for a crash or a paused live session for a terminal failure.
-
-## Evidence model
+## Discovery
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-classDiagram
-    direction LR
-    class RunEvent {
-      event_id
-      run_id
-      sequence
-      event_type
-      occurred_at
-      step_id
-      sanitized details
-    }
-    class EvidenceRecord {
-      evidence_id
-      opaque key
-      media_type
-      size
-      SHA-256
-      retention class
-      redaction directives
-    }
-    class RunEvidenceManifest {
-      events[]
-      attachments[]
-      terminal_result
-    }
-    RunEvent --> EvidenceRecord : serialized as
-    RunEvidenceManifest *-- EvidenceRecord
-
+flowchart TB
+    C[Provider context] --> P[Strict proposal]
+    P --> X[Policy and execution]
+    X --> S[Verified recording]
+    S --> Q[Suite validation]
+    Q --> PUB[Published version]
 ```
 
-The journal owns monotonic event sequence and exactly-one finalization. The store owns bytes, hashes, sidecars, atomic replacement, and root confinement. The redactor produces `SanitizedEvidence`; the store does not accept an untyped raw byte payload.
+`ProviderContext` and `PlanningContext` are transient and may contain the goal, synthetic inputs,
+and a sanitized PNG. A provider response is only a proposal. It becomes a recording after policy
+allows it, the adapter executes it, and deterministic postconditions pass.
 
-## Durability matrix
+`DiscoverySuccess` binds a typed run ID to that run's evidence manifest. `DiscoverySuite` has its
+own `sui_` identity and four states: `collecting`, `validated`, `published`, or `failed`. A suite can
+publish only a successful, validated artifact whose version matches the published version. There
+is no reviewer or approval state after discovery.
 
-| Data | Current owner | Durable? | Lost on API restart? |
-|---|---|---:|---:|
-| Committed capability YAML | Repository | Yes | No |
-| Runtime capability records | In-memory registry | No | Reloaded from YAML |
-| Run journal objects | Process memory | No | Yes |
-| Event/result/attachment bytes | Local evidence directory | Yes | No |
-| Leases and interventions | Process memory | No | Yes |
-| Retained browser sessions | Worker thread + Chromium | No | Yes |
-| Stable reviewer bundles | Repository under `evidence/` | Yes | No |
-| Model telemetry | Local Langfuse deployment | External local service | Depends on its volumes |
+## Surface
 
-PostgreSQL was considered for registry, run, intervention, and lease durability. It was deferred to keep the submission's core runnable without infrastructure. The protocols and compare-and-swap semantics identify the intended persistence boundary, but crash recovery is not implemented and is not implied by those interfaces.
+```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart TB
+    F[Current frame] --> O[Normalized observation]
+    O --> G[Ground current target]
+    G --> A[Action and receipt]
+```
+
+`NormalizedObservation` contains a typed event and session ID, aware timestamp, absolute route,
+viewport, fingerprint, unique landmarks/frame titles, semantic controls and fields, OCR tokens,
+and an optional evidence reference. It contains no Playwright object or full DOM.
+
+`ResolvedTarget` contains an adapter-owned handle, candidate index, exactly-one match count,
+registered risk, and optional current-frame visual data. A visual region is valid only with the
+frame hash that produced it. `ActionReceipt` is either `completed` or `failed`; timestamps are
+ordered and only failure may contain an error code.
+
+## Policy
+
+```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart TB
+    L1[Platform layer] --> I[Intersection]
+    L2[Application layer] --> I
+    L3[Capability layer] --> I
+    C[Observed action context] --> E[Evaluator]
+    I --> E
+    E --> D{Decision}
+    D --> AL[Allow]
+    D --> DN[Deny]
+    D --> HU[Human required]
+```
+
+Each `PolicyLayer` contains credential-free HTTP origins, safe route patterns, action identifiers,
+a risk ceiling, and forbidden data classes. Intersection keeps only shared allowlists, unions
+forbidden classes, and chooses the lowest risk ceiling. Empty intersections are valid and fail
+closed.
+
+`ActionContext` deliberately accepts hostile observed values so the evaluator can return a stable
+denial instead of failing during parsing. `PolicyDecision` is strict: typed `dec_` ID, stable
+reason, matched layers, effective risk, evidence/redaction requirements, and aware timestamp.
+
+## Intervention and control lease
+
+An intervention describes workflow. A lease grants browser authority. Neither is sufficient alone.
+
+```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+stateDiagram-v2
+    [*] --> Open: pause atomically
+    Open --> Claimed: claim
+    Claimed --> Open: release
+    Claimed --> Claimed: expired reassignment
+    Claimed --> Resuming: resume requested
+    Resuming --> Open: validation failed
+    Resuming --> Resolved: checkpoint passed
+    Open --> Terminated: terminate
+    Claimed --> Terminated: terminate
+```
+
+| Intervention state | Required lease owner | Binding |
+|---|---|---|
+| `open` | `automation_paused` | Same intervention |
+| `claimed` | `human:<operator>` | Same intervention and operator |
+| `resuming` | `automation_paused` | Same intervention |
+| `resolved` | `automation` | No intervention binding |
+| `terminated` | `none` | No intervention binding |
+
+Every ownership change increments the lease version exactly once. Opening, claiming, releasing,
+heartbeating, resuming, reopening, resolving, and terminating use a paired compare-and-swap
+repository. Reads also return the pair under the same lock, so no caller can observe half a local
+transition. The repository protocol is the required transaction boundary for PostgreSQL.
+
+Operator input is tied to both the current frame sequence and lease version. Pointer coordinates
+are transient input coordinates inside the source viewport—not stored replay locators. Audit data
+records pointer position, sequences, and viewport; typed text is represented only by character
+count.
+
+## Results and evidence
+
+```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart TB
+    RUN[Run] --> MAN[Events and attachments]
+    RUN --> STATE{Run state}
+    STATE --> DONE[Terminal result]
+    STATE --> LIVE[Intervention required]
+    DONE --> OK[Success and checkpoint]
+    DONE --> BO[Business outcome]
+    DONE --> FAIL[Failure]
+    OK --> MAN
+    BO --> MAN
+    FAIL --> MAN
+```
+
+Terminal completed results are `success`, `business_outcome`, or `failure`; each accepts only
+JSON-safe values and a manifest key belonging to its run. `intervention_required` is non-terminal:
+it identifies a live paused session and therefore has no finalized manifest requirement.
+
+The journal owns monotonic sequences and exactly-once finalization. Redaction produces
+`SanitizedEvidence`; only that type crosses the storage port. Each `EvidenceRecord` contains an
+opaque key, media type, bounded size, SHA-256 hash, retention class, directives, and aware time.
+The authoritative `RunEvidenceManifest` requires unique run-owned keys and separates JSON events,
+binary attachments, and the optional terminal result.
+
+## Choice record
+
+| Decision | Alternatives considered | Chosen and why |
+|---|---|---|
+| Runtime identity | Integers; bare UUIDs | Prefixed random IDs: local generation plus kind checking without leaked ordering |
+| Boundary modeling | Dictionaries; one model system everywhere | Strict Pydantic at serialized boundaries and frozen dataclasses internally: validation without framework coupling |
+| Capability shape | Recorded script; provider response; typed aggregate | Typed aggregate: reviewable, hashable, versioned, and deterministic |
+| Discovery trust | Execute free text; persist provider output | Parse proposal, policy-check, execute, then record verified effect |
+| Perception | Playwright handles; full DOM; screenshots only | Compact semantic observation plus current frame: portable and bounded |
+| Targeting | Fixed coordinates; DOM-only selectors; current-frame grounding | Ordered semantic/visual candidates with transient grounding: survives layout changes and poor DOMs |
+| Policy | Boolean guard; exceptions; decision record | Layer intersection plus data decision: fail-closed execution and auditable reasons |
+| Human handoff | UI status flag; lease only; separate writes | Intervention plus versioned lease in one transaction: workflow and authority cannot diverge |
+| Run completion | Nullable fields in one result | Discriminated result union: impossible states are rejected |
+| Evidence | Raw logs; arbitrary blobs; typed manifest | Redact before storage, hash every object, and bind every key to its run |
+| Persistence now | PostgreSQL immediately; memory only | Memory metadata plus durable local evidence for the runnable slice; explicit repository seams preserve the migration path |
+
+## Durability
+
+| Data | Current storage | Restart behavior |
+|---|---|---|
+| Checked-in capability versions | YAML repository | Survives; registry reloads them |
+| Application registrations | YAML repository | Survives; registry reloads them |
+| Evidence objects and manifests | Confined local directory | Survive |
+| Capability registry records | Process memory | Rebuilt from YAML |
+| Runs and discovery suites | Process memory | Lost |
+| Interventions and leases | Process memory | Lost together |
+| Retained browser sessions | Worker thread and Chromium | Lost |
+
+The paired repository guarantees atomicity inside the current process, not crash recovery.
+PostgreSQL durability, migrations, and restart reconciliation are the next architecture task.

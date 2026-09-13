@@ -17,7 +17,6 @@ class EntityKind(StrEnum):
     INTERVENTION = "int"
     EVIDENCE = "evd"
     DECISION = "dec"
-    APPROVAL = "apr"
     EVENT = "evt"
     TRACE = "trc"
 

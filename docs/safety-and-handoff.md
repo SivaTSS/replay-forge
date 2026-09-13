@@ -65,7 +65,9 @@ stateDiagram-v2
 
 ```
 
-Every mutation supplies the expected lease version and owner. The repository changes it with compare-and-swap. A stale operator tab, duplicate request, expired lease, or automation action after pause is rejected.
+Every mutation supplies the expected intervention state, lease version, and owner. The paired
+repository changes workflow and control ownership in one compare-and-swap operation. A stale
+operator tab, duplicate request, expired lease, or automation action after pause is rejected.
 
 An active human lease cannot be stolen. If its heartbeat expires, the claim transition may atomically assign the session to a new operator and increment the version. A passive `automation_paused` lease remains claimable after its timestamp so queue delay does not strand the retained browser.
 
