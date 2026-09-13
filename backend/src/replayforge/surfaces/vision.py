@@ -318,6 +318,17 @@ class VisionGrounder:
         label = labels[0]
         components = self._visual_components(png, viewport)
         median_height = self._median_text_height(self._tokens(png))
+        # Edge maps also contain the glyphs that formed the label and any
+        # placeholder text inside the control. A text input is the larger
+        # frame-local component, so reject text-sized contours before applying
+        # the label-to-control relationship.
+        components = tuple(
+            component
+            for component in components
+            if component.region.height >= median_height * 1.8
+            and component.region.width >= median_height * 4
+            and self._region_iou(component.region, label.region) == 0
+        )
         related = [
             (self._control_relation(label.region, component.region, median_height), component)
             for component in components
