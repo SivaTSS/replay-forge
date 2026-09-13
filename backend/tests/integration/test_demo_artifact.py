@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 from replayforge.capabilities.serialization import artifact_content_hash, load_artifact_yaml
 
@@ -24,3 +25,37 @@ def test_reviewed_demo_artifacts_are_valid_and_hash_locked(artifact_path: Path) 
         if step.target is not None
         for candidate in step.target.candidates
     )
+
+
+def test_geometry_free_artifact_contains_only_semantic_visual_identity() -> None:
+    artifact_path = REPOSITORY / "capabilities/member.lookup_savings_balance/3.2.0.yaml"
+    raw = yaml.safe_load(artifact_path.read_text())
+    forbidden = {
+        "x",
+        "y",
+        "width",
+        "height",
+        "viewport_width",
+        "viewport_height",
+        "search_region",
+        "relative_region",
+        "relative_search_region",
+        "minimum_confidence",
+        "minimum_score",
+        "uniqueness_margin",
+        "minimum_scale",
+        "maximum_scale",
+        "scale_step",
+    }
+
+    def walk(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value).intersection(forbidden) | set().union(
+                *(walk(item) for item in value.values())
+            )
+        if isinstance(value, list):
+            return set().union(*(walk(item) for item in value))
+        return set()
+
+    assert raw["schema_version"] == "1.3"
+    assert walk(raw) == set()
