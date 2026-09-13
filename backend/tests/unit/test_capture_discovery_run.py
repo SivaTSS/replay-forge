@@ -15,7 +15,9 @@ import pytest
 from replayforge.capabilities import artifact_content_hash, load_artifact_yaml
 from replayforge.evidence import discovery_capture
 from replayforge.evidence.discovery_capture import (
+    SuiteCaptureRequest,
     capture,
+    capture_suite,
     invoke,
     validate_result,
     write_new_artifact,
@@ -127,6 +129,45 @@ def test_capture_returns_review_summary(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert summary["model"] == "test-vision-model"
     assert summary["artifact_provenance_manifest"].endswith("manifest-compile-snapshot.bin")
     assert summary["artifact_output"] == str(output)
+    assert output.is_file()
+
+
+def test_suite_capture_requires_real_provenance_and_validated_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    result = discovery_result()
+    artifact = result["artifact"]
+    request = SuiteCaptureRequest(
+        goal="Look up the synthetic member balance",
+        application_family="northstar_member_service",
+        tenant="harbor",
+        entry_point="visual_member_workbench",
+        inputs={"member_id": "12345"},
+        validation_tenants=("summit",),
+        expected_capability_id="member.lookup_savings_balance",
+        expected_risk="read_only",
+        expected_inputs=("member_id",),
+        expected_outputs=("member_id", "account_type", "currency", "available_balance", "as_of"),
+    )
+    monkeypatch.setattr(
+        discovery_capture,
+        "invoke_suite",
+        lambda *_args: {
+            "suite": {"suite_id": "run_suite", "status": "published"},
+            "primary": {
+                "status": "success",
+                "run_id": result["run_id"],
+                "evidence_manifest": result["evidence_manifest"],
+            },
+            "artifact": artifact,
+        },
+    )
+    output = tmp_path / "suite.yaml"
+
+    summary = capture_suite("http://localhost:8000", 120, output, request)
+
+    assert summary["suite_id"] == "run_suite"
+    assert summary["capability_id"] == "member.lookup_savings_balance"
     assert output.is_file()
 
 

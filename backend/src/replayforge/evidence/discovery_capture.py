@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError
@@ -14,6 +15,21 @@ from replayforge.capabilities import (
     artifact_content_hash,
     dump_artifact_yaml,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class SuiteCaptureRequest:
+    goal: str
+    application_family: str
+    tenant: str
+    entry_point: str
+    inputs: dict[str, Any]
+    validation_tenants: tuple[str, ...]
+    expected_capability_id: str
+    expected_risk: str
+    expected_inputs: tuple[str, ...]
+    expected_outputs: tuple[str, ...]
+    max_steps: int = 40
 
 
 def invoke(base_url: str, timeout_seconds: int) -> dict[str, Any]:
@@ -43,6 +59,81 @@ def invoke(base_url: str, timeout_seconds: int) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise RuntimeError("ReplayForge returned a non-object discovery result")
     return parsed
+
+
+def _request_json(
+    base_url: str,
+    path: str,
+    timeout_seconds: int,
+    *,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    encoded = None if payload is None else json.dumps(payload, separators=(",", ":")).encode()
+    request = Request(
+        f"{base_url.rstrip('/')}{path}",
+        data=encoded,
+        headers={"content-type": "application/json"} if encoded is not None else {},
+        method=method,
+    )
+    try:
+        with urlopen(request, timeout=timeout_seconds + 30) as response:
+            parsed = json.loads(response.read())
+    except HTTPError as exc:
+        raise RuntimeError(f"discovery API returned HTTP {exc.code} for {path}") from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeError("ReplayForge returned a non-object discovery result")
+    return parsed
+
+
+def invoke_suite(
+    base_url: str, timeout_seconds: int, request: SuiteCaptureRequest
+) -> dict[str, Any]:
+    suite = _request_json(
+        base_url,
+        "/api/v1/discovery-suites",
+        timeout_seconds,
+        method="POST",
+        payload={
+            "goal": request.goal,
+            "application_family": request.application_family,
+            "tenant": request.tenant,
+            "entry_point": request.entry_point,
+            "inputs": request.inputs,
+            "max_steps": request.max_steps,
+            "timeout_seconds": timeout_seconds,
+        },
+    )
+    suite_id = suite.get("suite_id")
+    primary = suite.get("primary")
+    if not isinstance(suite_id, str) or not isinstance(primary, dict):
+        raise RuntimeError("discovery suite response is incomplete")
+    if primary.get("status") != "success":
+        raise RuntimeError("model-driven discovery suite did not return success")
+
+    for tenant in request.validation_tenants:
+        suite = _request_json(
+            base_url,
+            f"/api/v1/discovery-suites/{suite_id}/validations",
+            timeout_seconds,
+            method="POST",
+            payload={"tenant": tenant, "inputs": request.inputs},
+        )
+    suite = _request_json(
+        base_url,
+        f"/api/v1/discovery-suites/{suite_id}/finalize",
+        timeout_seconds,
+        method="POST",
+        payload={},
+    )
+    if suite.get("status") != "published":
+        raise RuntimeError("validated discovery suite was not published")
+    artifact = _request_json(
+        base_url,
+        f"/api/v1/discovery-suites/{suite_id}/artifact",
+        timeout_seconds,
+    )
+    return {"suite": suite, "primary": primary, "artifact": artifact}
 
 
 def validate_result(result: dict[str, Any]) -> CapabilityArtifact:
@@ -106,5 +197,47 @@ def capture(base_url: str, timeout_seconds: int, artifact_output: Path) -> dict[
         "model": artifact.provenance.model,
         "run_id": str(result["run_id"]),
         "status": str(result["status"]),
+        "version": artifact.capability.version,
+    }
+
+
+def capture_suite(
+    base_url: str,
+    timeout_seconds: int,
+    artifact_output: Path,
+    request: SuiteCaptureRequest,
+) -> dict[str, str]:
+    response = invoke_suite(base_url, timeout_seconds, request)
+    primary = response["primary"]
+    result = {
+        "status": primary.get("status"),
+        "run_id": primary.get("run_id"),
+        "evidence_manifest": primary.get("evidence_manifest"),
+        "artifact": response["artifact"],
+    }
+    artifact = validate_result(result)
+    if artifact.capability.id != request.expected_capability_id:
+        raise RuntimeError("discovered capability ID does not match the reviewed demo contract")
+    if artifact.capability.risk.value != request.expected_risk:
+        raise RuntimeError("discovered capability risk does not match the reviewed demo contract")
+    if tuple(artifact.inputs.required) != request.expected_inputs:
+        raise RuntimeError("discovered input contract does not match the reviewed demo contract")
+    if tuple(artifact.outputs.required) != request.expected_outputs:
+        raise RuntimeError("discovered output contract does not match the reviewed demo contract")
+    supported = set(artifact.compatibility.supported_variants)
+    required_tenants = {request.tenant, *request.validation_tenants}
+    if not required_tenants.issubset(supported):
+        raise RuntimeError("published artifact omitted a validated tenant")
+    write_new_artifact(artifact_output, artifact)
+    return {
+        "artifact_content_hash": artifact.provenance.artifact_content_hash or "",
+        "artifact_output": str(artifact_output),
+        "artifact_provenance_manifest": artifact.provenance.evidence_manifest_key,
+        "capability_id": artifact.capability.id,
+        "evidence_manifest": str(result["evidence_manifest"]),
+        "model": artifact.provenance.model,
+        "run_id": str(result["run_id"]),
+        "status": str(result["status"]),
+        "suite_id": str(response["suite"]["suite_id"]),
         "version": artifact.capability.version,
     }
