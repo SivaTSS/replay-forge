@@ -546,13 +546,25 @@ class PlaywrightSurfaceSession:
             asset_key=asset_key,
             content_hash=content_hash,
         )
-        semantic = tuple(
-            item for item in bundle.candidates if item.strategy is not LocatorStrategy.COORDINATES
+        # A captured coordinate is only a discovery-time hint. Once converted,
+        # publish the geometry-free rendered signature and discard every
+        # legacy visual/DOM alternative so schema 1.3 cannot carry a mixed
+        # target contract.
+        rendered = tuple(
+            item
+            for item in bundle.visual_candidates
+            if item.strategy
+            in {
+                "rendered_text",
+                "rendered_labeled_control",
+                "rendered_field_value",
+                "rendered_group_image",
+            }
         )
         return bundle.model_copy(
             update={
-                "visual_candidates": (template, *bundle.visual_candidates),
-                "candidates": semantic,
+                "visual_candidates": (template, *rendered),
+                "candidates": (),
             }
         )
 
