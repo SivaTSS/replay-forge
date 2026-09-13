@@ -41,7 +41,6 @@ from replayforge.capabilities.models import (
     ElementCondition,
     ExtractAction,
     IdentityMatchesCondition,
-    ImageAnchorCandidate,
     InputValue,
     LiteralValue,
     LocatorBundle,
@@ -53,6 +52,7 @@ from replayforge.capabilities.models import (
     NotCondition,
     OutputValidCondition,
     PressKeysAction,
+    RenderedGroupImageCandidate,
     RenderedTextCondition,
     RouteCondition,
     ScrollAction,
@@ -529,19 +529,22 @@ class PlaywrightSurfaceSession:
         assert target.visual is not None
         if self.vision is None:
             raise SurfaceError("visual_grounder_unavailable", "Template capture is unavailable.")
-        asset_key, content_hash = self.vision.create_edge_template(
+        if candidate.capture_group_label is None:
+            raise SurfaceError(
+                "visual_group_label_required",
+                "Transient image capture requires a semantic group label.",
+                recoverable=True,
+                effect_absent=True,
+            )
+        asset_key, content_hash = self.vision.create_visual_signature(
             self._capture_grounding_frame(), target.visual.region
         )
-        template = ImageAnchorCandidate(
-            strategy="image_anchor",
+        template = RenderedGroupImageCandidate(
+            strategy="rendered_group_image",
+            group_label=candidate.capture_group_label,
+            group_label_match=MatchMode.EXACT,
             asset_key=asset_key,
             content_hash=content_hash,
-            search_region=self._template_search_region(target.visual.region, self._viewport()),
-            minimum_score=0.75,
-            uniqueness_margin=0.03,
-            minimum_scale=0.8,
-            maximum_scale=1.2,
-            scale_step=0.05,
         )
         semantic = tuple(
             item for item in bundle.candidates if item.strategy is not LocatorStrategy.COORDINATES

@@ -139,6 +139,7 @@ class LocatorCandidate(ArtifactModel):
     relation: str | None = None
     element: str | None = None
     text: str | None = None
+    capture_group_label: str | None = Field(default=None, min_length=1, max_length=200)
     x: int | None = Field(default=None, ge=0)
     y: int | None = Field(default=None, ge=0)
     width: int | None = Field(default=None, gt=0)

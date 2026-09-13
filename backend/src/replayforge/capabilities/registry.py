@@ -99,7 +99,8 @@ class InMemoryCapabilityRegistry:
             proposed = _semantic_version(artifact.capability.version)
             if registered_versions:
                 latest = max(registered_versions)
-                version = (latest[0], latest[1], latest[2] + 1)
+                patch_version = (latest[0], latest[1], latest[2] + 1)
+                version = max(proposed, patch_version)
             else:
                 version = proposed
             version_text = ".".join(str(part) for part in version)

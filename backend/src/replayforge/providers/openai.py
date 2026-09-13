@@ -37,10 +37,11 @@ from replayforge.runtime.model_policy import ModelPolicy
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
 Return only the provided structured proposal. Use symbolic input paths, never literal customer
-values. When visual_tokens is non-empty, use OCR-based visual candidates before semantic
-locators. For an icon-only click target that OCR cannot name, you may provide one coordinates
-candidate covering its tight bounding box; discovery converts that transient region into a
-content-addressed image template before recording it. Never use coordinates for type or extract.
+values. When visual_tokens is non-empty, prefer rendered semantic candidates. For an icon-only
+click target that OCR cannot name, you may provide one transient coordinates candidate covering
+its tight bounding box and set capture_group_label to the unique rendered label for its row/card;
+discovery converts that temporary region into a content-addressed image signature before
+recording it. Never use coordinates for type or extract.
 Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
 Declare risk conservatively. Extract every required output using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
@@ -128,6 +129,36 @@ class ProviderOcrRelativeCandidate(ProviderModel):
     expected_count: Literal[1] = 1
 
 
+class ProviderRenderedTextCandidate(ProviderModel):
+    strategy: Literal["rendered_text"]
+    value: str = Field(min_length=1, max_length=200)
+    match: MatchMode = MatchMode.EXACT
+    expected_count: Literal[1] = 1
+
+
+class ProviderRenderedLabeledControlCandidate(ProviderModel):
+    strategy: Literal["rendered_labeled_control"]
+    label: str = Field(min_length=1, max_length=200)
+    label_match: MatchMode = MatchMode.EXACT
+    control_kind: Literal["text_input"]
+    expected_count: Literal[1] = 1
+
+
+class ProviderRenderedFieldValueCandidate(ProviderModel):
+    strategy: Literal["rendered_field_value"]
+    label: str = Field(min_length=1, max_length=200)
+    label_match: MatchMode = MatchMode.EXACT
+    expected_count: Literal[1] = 1
+
+
+class ProviderRenderedGroupImageCandidate(ProviderModel):
+    strategy: Literal["rendered_group_image"]
+    group_label: str = Field(min_length=1, max_length=200)
+    group_label_match: MatchMode = MatchMode.EXACT
+    asset_key: str = Field(pattern=r"^asset://sha256/[0-9a-f]{64}$")
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
 class ProviderFrameTitleCandidate(ProviderModel):
     strategy: Literal["title"]
     value: str = Field(min_length=1, max_length=200)
@@ -143,6 +174,7 @@ class ProviderCoordinateCandidate(ProviderModel):
     height: int = Field(gt=0)
     viewport_width: int = Field(gt=0)
     viewport_height: int = Field(gt=0)
+    capture_group_label: str | None = Field(default=None, min_length=1, max_length=200)
     portability: Literal["low"] = "low"
     expected_count: Literal[1] = 1
 
@@ -163,21 +195,31 @@ class ProviderLocatorBundleBase(ProviderModel):
 
 
 class ProviderClickLocatorBundle(ProviderLocatorBundleBase):
-    visual_candidates: tuple[ProviderOcrTextCandidate | ProviderOcrRelativeCandidate, ...] = ()
+    visual_candidates: tuple[
+        ProviderOcrTextCandidate
+        | ProviderOcrRelativeCandidate
+        | ProviderRenderedTextCandidate
+        | ProviderRenderedGroupImageCandidate,
+        ...,
+    ] = ()
     candidates: tuple[ProviderRoleNameCandidate | ProviderCoordinateCandidate, ...] = Field(
         default=(), max_length=5
     )
 
 
 class ProviderTypeLocatorBundle(ProviderLocatorBundleBase):
-    visual_candidates: tuple[ProviderOcrRelativeCandidate, ...] = ()
+    visual_candidates: tuple[
+        ProviderOcrRelativeCandidate | ProviderRenderedLabeledControlCandidate, ...
+    ] = ()
     candidates: tuple[ProviderRoleNameCandidate | ProviderInputCandidate, ...] = Field(
         default=(), max_length=5
     )
 
 
 class ProviderExtractLocatorBundle(ProviderLocatorBundleBase):
-    visual_candidates: tuple[ProviderOcrRelativeCandidate, ...] = ()
+    visual_candidates: tuple[
+        ProviderOcrRelativeCandidate | ProviderRenderedFieldValueCandidate, ...
+    ] = ()
     candidates: tuple[
         ProviderRoleNameCandidate
         | ProviderDisplayedTextCandidate

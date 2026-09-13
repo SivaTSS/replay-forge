@@ -98,6 +98,20 @@ def test_publish_next_atomically_versions_and_rehashes(valid_artifact_data: dict
     assert registry.get(original.capability.id, "1.0.0").artifact == original
 
 
+def test_publish_next_preserves_a_requested_newer_minor_version(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
+    registry.publish(_artifact(valid_artifact_data, "3.1.0"))
+
+    proposed = _artifact(valid_artifact_data, "3.2.0")
+    first = registry.publish_next(proposed)
+    second = registry.publish_next(proposed)
+
+    assert first.artifact.capability.version == "3.2.0"
+    assert second.artifact.capability.version == "3.2.1"
+
+
 @pytest.mark.parametrize("operation", ["get", "latest", "versions"])
 def test_unknown_capability_is_safe_not_found(operation: str) -> None:
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))

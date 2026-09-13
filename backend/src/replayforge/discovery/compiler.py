@@ -26,6 +26,7 @@ from replayforge.capabilities.models import (
     OutputValidCondition,
     PersistenceMode,
     Provenance,
+    RenderedTextCondition,
     RetryPolicy,
     RouteCondition,
     Step,
@@ -86,12 +87,28 @@ class SavingsBalanceCompiler:
     ) -> CapabilityArtifact:
         self._validate_trace(steps)
         visual_mode = any(step.target and step.target.visual_candidates for step in steps)
-        compiled_steps = self._compile_steps(steps, visual_mode=visual_mode)
+        semantic_visual_mode = any(
+            step.target
+            and any(
+                candidate.strategy
+                in {
+                    "rendered_text",
+                    "rendered_labeled_control",
+                    "rendered_field_value",
+                    "rendered_group_image",
+                }
+                for candidate in step.target.visual_candidates
+            )
+            for step in steps
+        )
+        compiled_steps = self._compile_steps(
+            steps, visual_mode=visual_mode, semantic_visual_mode=semantic_visual_mode
+        )
         artifact = CapabilityArtifact(
-            schema_version=("1.1" if visual_mode else "1.0"),
+            schema_version=("1.3" if semantic_visual_mode else "1.1" if visual_mode else "1.0"),
             capability=CapabilityMetadata(
                 id="member.lookup_savings_balance",
-                version="3.0.0" if visual_mode else "1.0.0",
+                version="3.2.0" if semantic_visual_mode else "3.0.0" if visual_mode else "1.0.0",
                 name="Lookup savings balance",
                 description=goal.strip(),
                 application_family=application_family,
@@ -119,8 +136,14 @@ class SavingsBalanceCompiler:
             outputs=self._outputs(),
             preconditions=(RouteCondition(kind="route", pattern="/members/search"),),
             steps=compiled_steps,
-            outcomes=(self._member_not_found_outcome(visual_mode=visual_mode),),
-            checkpoint=self._checkpoint(visual_mode=visual_mode),
+            outcomes=(
+                self._member_not_found_outcome(
+                    visual_mode=visual_mode, semantic_visual_mode=semantic_visual_mode
+                ),
+            ),
+            checkpoint=self._checkpoint(
+                visual_mode=visual_mode, semantic_visual_mode=semantic_visual_mode
+            ),
             policy=CapabilityPolicy(
                 allowed_action_types=frozenset({"type", "click", "extract"}),
                 allowed_entry_points=frozenset({entry_point}),
@@ -180,7 +203,10 @@ class SavingsBalanceCompiler:
 
     @staticmethod
     def _compile_steps(
-        recordings: tuple[RecordedDiscoveryStep, ...], *, visual_mode: bool
+        recordings: tuple[RecordedDiscoveryStep, ...],
+        *,
+        visual_mode: bool,
+        semantic_visual_mode: bool,
     ) -> tuple[Step, ...]:
         compiled: list[Step] = []
         for index, recording in enumerate(recordings):
@@ -194,7 +220,11 @@ class SavingsBalanceCompiler:
             elif isinstance(action, ClickAction) and index == 1:
                 step_id = "search.submit"
                 postconditions = (
-                    VisualTextCondition(
+                    RenderedTextCondition(
+                        kind="rendered_text", value="Member Results", match=MatchMode.EXACT
+                    )
+                    if semantic_visual_mode
+                    else VisualTextCondition(
                         kind="visual_text", value="Member Results", match=MatchMode.EXACT
                     )
                     if visual_mode
@@ -205,6 +235,14 @@ class SavingsBalanceCompiler:
                 step_id = "account.open_savings"
                 postconditions = (
                     (
+                        RenderedTextCondition(
+                            kind="rendered_text",
+                            value="Savings Account Details",
+                            match=MatchMode.EXACT,
+                        ),
+                    )
+                    if semantic_visual_mode
+                    else (
                         VisualTextCondition(
                             kind="visual_text",
                             value="Savings Account Details",
@@ -302,14 +340,20 @@ class SavingsBalanceCompiler:
         return ObjectContract(required=_REQUIRED_OUTPUTS, properties=schemas)
 
     @staticmethod
-    def _member_not_found_outcome(*, visual_mode: bool = False) -> BusinessOutcome:
+    def _member_not_found_outcome(
+        *, visual_mode: bool = False, semantic_visual_mode: bool = False
+    ) -> BusinessOutcome:
         return BusinessOutcome(
             code="member_not_found",
             description="The search completed and no matching member exists.",
             detect=AllCondition(
                 kind="all",
                 conditions=(
-                    VisualTextCondition(
+                    RenderedTextCondition(
+                        kind="rendered_text", value="No member found", match=MatchMode.EXACT
+                    )
+                    if semantic_visual_mode
+                    else VisualTextCondition(
                         kind="visual_text", value="No member found", match=MatchMode.EXACT
                     )
                     if visual_mode
@@ -324,7 +368,7 @@ class SavingsBalanceCompiler:
         )
 
     @staticmethod
-    def _checkpoint(*, visual_mode: bool = False) -> Checkpoint:
+    def _checkpoint(*, visual_mode: bool = False, semantic_visual_mode: bool = False) -> Checkpoint:
         output_checks = tuple(
             OutputValidCondition(kind="output_valid", output=name) for name in _REQUIRED_OUTPUTS
         )
@@ -333,12 +377,24 @@ class SavingsBalanceCompiler:
             condition=AllCondition(
                 kind="all",
                 conditions=(
-                    VisualTextCondition(
+                    RenderedTextCondition(
+                        kind="rendered_text",
+                        value="Savings Account Details",
+                        match=MatchMode.EXACT,
+                    )
+                    if semantic_visual_mode
+                    else VisualTextCondition(
                         kind="visual_text", value="Savings Account Details", match=MatchMode.EXACT
                     )
                     if visual_mode
                     else RouteCondition(kind="route", pattern="/accounts/*/details"),
-                    VisualTextCondition(kind="visual_text", value="Savings", match=MatchMode.EXACT)
+                    RenderedTextCondition(
+                        kind="rendered_text", value="Savings", match=MatchMode.EXACT
+                    )
+                    if semantic_visual_mode
+                    else VisualTextCondition(
+                        kind="visual_text", value="Savings", match=MatchMode.EXACT
+                    )
                     if visual_mode
                     else TextCondition(kind="text", value="Savings", match=MatchMode.EXACT),
                     *output_checks,

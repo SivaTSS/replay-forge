@@ -10,6 +10,7 @@ from replayforge.capabilities.models import (
     InputValue,
     LocatorBundle,
     OcrTextCandidate,
+    RenderedTextCandidate,
     TypeAction,
 )
 from replayforge.capabilities.serialization import artifact_content_hash
@@ -142,6 +143,33 @@ def test_compiler_emits_visual_schema_and_conditions(
     assert artifact.compatibility.fingerprint.required_landmarks[0].kind == "visual_text"
     assert artifact.steps[1].postconditions[0].kind == "visual_text"
     assert artifact.steps[2].postconditions[0].kind == "visual_text"
+    assert artifact.provenance.artifact_content_hash == artifact_content_hash(artifact)
+
+
+def test_compiler_emits_geometry_free_schema_and_conditions(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    trace = tuple(
+        recording(
+            item.action,
+            LocatorBundle(
+                description=item.target.description if item.target else "Rendered target",
+                registered_risk=Risk.READ_ONLY,
+                visual_candidates=(
+                    RenderedTextCandidate(strategy="rendered_text", value=f"Target {index}"),
+                ),
+            ),
+            index,
+        )
+        for index, item in enumerate(complete_trace(valid_artifact_data))
+    )
+
+    artifact = compile_trace(trace)
+
+    assert artifact.schema_version == "1.3"
+    assert artifact.capability.version == "3.2.0"
+    assert artifact.steps[1].postconditions[0].kind == "rendered_text"
+    assert artifact.steps[2].postconditions[0].kind == "rendered_text"
     assert artifact.provenance.artifact_content_hash == artifact_content_hash(artifact)
 
 
