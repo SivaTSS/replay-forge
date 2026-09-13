@@ -71,3 +71,18 @@ def test_store_rejects_oversized_payload_before_writing(
 def test_read_rejects_invalid_or_escaping_key(store: LocalEvidenceStore, key: str) -> None:
     with pytest.raises(ValueError):
         store.read(key)
+
+
+def test_store_refuses_to_replace_an_existing_evidence_identity(
+    store: LocalEvidenceStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    evidence_id = new_id(EntityKind.EVIDENCE)
+    monkeypatch.setattr(local_store, "new_id", lambda _kind: evidence_id)
+    payload = StructuredRedactor().sanitize_json({"event": "started"}, {}, run_salt="test")
+    run_id = new_id(EntityKind.RUN)
+    store.write(run_id, "event", payload, RetentionClass.OPERATIONAL)
+
+    with pytest.raises(RuntimeError, match="identity collision"):
+        store.write(run_id, "event", payload, RetentionClass.OPERATIONAL)
+
+    assert len(tuple(path for path in store.root.rglob("*") if path.is_file())) == 2

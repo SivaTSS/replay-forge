@@ -11,6 +11,7 @@ from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.policy.types import DataClassification
+from replayforge.runs import journal as journal_module
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
@@ -252,3 +253,50 @@ def test_journal_rejects_invalid_terminal_result(result: dict[str, object]) -> N
 
     with pytest.raises(ValueError):
         recorder.finalize(result)
+
+
+def test_journal_rejects_event_larger_than_the_verifier_accepts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "evidence", clock)
+    recorder = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+    monkeypatch.setattr(journal_module, "MAX_EVENT_BYTES", 10)
+
+    with pytest.raises(ValueError, match="event exceeds"):
+        recorder.record("replay_started", recorder.run_id, details={"value": "too large"})
+
+    assert recorder.events() == ()
+    assert not tuple(store.root.rglob("*.bin"))
+
+
+def test_journal_rejects_terminal_result_larger_than_the_verifier_accepts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "evidence", clock)
+    recorder = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+    recorder.record("replay_started", recorder.run_id)
+    monkeypatch.setattr(journal_module, "MAX_EVENT_BYTES", 10)
+
+    with pytest.raises(ValueError, match="terminal result exceeds"):
+        recorder.finalize(
+            {"status": "success", "run_id": recorder.run_id, "outputs": {"value": "large"}}
+        )
+
+    assert not recorder._finalized
+
+
+def test_journal_rejects_manifest_larger_than_the_verifier_accepts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "evidence", clock)
+    recorder = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+    monkeypatch.setattr(journal_module, "MAX_MANIFEST_BYTES", 10)
+
+    with pytest.raises(ValueError, match="manifest exceeds"):
+        recorder.record("replay_started", recorder.run_id)
+
+    assert recorder.events() == ()
+    assert not tuple(store.root.rglob("manifest-*.bin"))

@@ -46,6 +46,7 @@ class LocalEvidenceStore:
         relative = Path(run_id) / f"{kind}-{evidence_id}.bin"
         destination = self._resolve_key(relative.as_posix())
         destination.parent.mkdir(parents=True, exist_ok=True)
+        self._sync_directory(self.root)
         digest = f"sha256:{hashlib.sha256(payload.content).hexdigest()}"
         created_at = self.clock.now()
         self._atomic_write(destination, payload.content)
@@ -94,7 +95,18 @@ class LocalEvidenceStore:
                 stream.write(content)
                 stream.flush()
                 os.fsync(stream.fileno())
-            temporary.replace(destination)
-        except BaseException:
+            try:
+                os.link(temporary, destination)
+            except FileExistsError as error:
+                raise RuntimeError("evidence identity collision") from error
+            LocalEvidenceStore._sync_directory(destination.parent)
+        finally:
             temporary.unlink(missing_ok=True)
-            raise
+
+    @staticmethod
+    def _sync_directory(directory: Path) -> None:
+        descriptor = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)

@@ -13,6 +13,8 @@ from pydantic import JsonValue
 
 from replayforge.evidence.models import (
     MAX_ATTACHMENT_BYTES,
+    MAX_EVENT_BYTES,
+    MAX_MANIFEST_BYTES,
     EventEvidence,
     EvidenceRecord,
     ManifestEntry,
@@ -86,6 +88,8 @@ class InMemoryRunJournal:
         with self._lock:
             if self._finalized:
                 raise RuntimeError("cannot record an event after run finalization")
+            if len(self._events) >= 10_000:
+                raise ValueError("run journal exceeds the event-count limit")
             event = RunEvent(
                 id=new_id(EntityKind.EVENT),
                 run_id=parse_id(run_id, EntityKind.RUN),
@@ -96,10 +100,13 @@ class InMemoryRunJournal:
                 details=cast(dict[str, JsonValue], cleaned),
             )
             if self.evidence_store is not None:
+                event_payload = _event_payload(event, sanitized.redaction_directives)
+                if len(event_payload.content) > MAX_EVENT_BYTES:
+                    raise ValueError("run event exceeds the evidence verification limit")
                 evidence_record = self.evidence_store.write(
                     run_id,
                     f"run-event-{event.sequence:06d}",
-                    _event_payload(event, sanitized.redaction_directives),
+                    event_payload,
                     _retention_class(event_type),
                 )
                 manifest_record = self.evidence_store.write(
@@ -142,6 +149,8 @@ class InMemoryRunJournal:
                 raise RuntimeError("cannot attach evidence after run finalization")
             if self.evidence_store is None:
                 raise RuntimeError("run attachments require an evidence store")
+            if len(self._attachments) >= 100:
+                raise ValueError("run journal exceeds the attachment-count limit")
             attachment = self.evidence_store.write(
                 self.run_id,
                 kind,
@@ -179,6 +188,8 @@ class InMemoryRunJournal:
         if result.get("status") not in {"success", "business_outcome", "failure"}:
             raise ValueError("only completed runs may be finalized")
         sanitized = self.redactor.sanitize_json(result, classifications or {}, run_salt=self.run_id)
+        if len(sanitized.content) > MAX_EVENT_BYTES:
+            raise ValueError("terminal result exceeds the evidence verification limit")
         with self._lock:
             if self._finalized:
                 raise RuntimeError("run evidence has already been finalized")
@@ -248,6 +259,8 @@ def _manifest_payload(
         indent=2,
         sort_keys=True,
     ).encode()
+    if len(content) > MAX_MANIFEST_BYTES:
+        raise ValueError("run manifest exceeds the evidence verification limit")
     all_records = (
         *records,
         *attachments,
