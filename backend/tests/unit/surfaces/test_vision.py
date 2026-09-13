@@ -16,7 +16,12 @@ from replayforge.capabilities.models import (
     OcrRelativeCandidate,
     OcrTextCandidate,
     RelativeRegion,
+    RenderedFieldValueCandidate,
+    RenderedGroupImageCandidate,
+    RenderedLabeledControlCandidate,
+    RenderedTextCandidate,
 )
+from replayforge.runtime.vision_policy import load_vision_policy
 from replayforge.surfaces.models import ScreenRegion, SurfaceError, Viewport, VisualToken
 from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
 
@@ -28,6 +33,14 @@ class StubRecognizer:
     def recognize(self, png: bytes) -> tuple[VisualToken, ...]:
         del png
         return self.result
+
+
+def semantic_vision(tmp_path: Path, tokens: tuple[VisualToken, ...]) -> VisionGrounder:
+    return VisionGrounder(
+        StubRecognizer(tokens),
+        LocalCapabilityAssetStore(tmp_path),
+        load_vision_policy(Path("config/vision-policy.yaml")),
+    )
 
 
 def png_with_icon(x: int, y: int) -> bytes:
@@ -84,6 +97,81 @@ def test_ocr_requires_exactly_one_match(tmp_path: Path) -> None:
             b"other-frame",
             Viewport(400, 240),
         )
+    assert error.value.code == "target_ambiguous"
+
+
+def test_rendered_text_resolves_current_frame_phrase(tmp_path: Path) -> None:
+    token = VisualToken("Search", 0.98, ScreenRegion(200, 80, 70, 24))
+    vision = semantic_vision(tmp_path, (token,))
+
+    resolved = vision.resolve(
+        RenderedTextCandidate(strategy="rendered_text", value="search"),
+        b"rendered-frame",
+        Viewport(400, 240),
+    )
+
+    assert resolved.region == token.region
+    assert resolved.method == "rendered_text"
+
+
+def test_rendered_labeled_control_uses_detected_control_rectangle(tmp_path: Path) -> None:
+    image = np.full((240, 400, 3), 245, dtype=np.uint8)
+    cv2.rectangle(image, (150, 80), (300, 130), (20, 80, 140), 3)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    vision = semantic_vision(
+        tmp_path, (VisualToken("Member ID", 0.99, ScreenRegion(20, 90, 90, 20)),)
+    )
+
+    resolved = vision.resolve(
+        RenderedLabeledControlCandidate(
+            strategy="rendered_labeled_control", label="Member ID", control_kind="text_input"
+        ),
+        encoded.tobytes(),
+        Viewport(400, 240),
+    )
+
+    assert resolved.method == "rendered_labeled_control"
+    assert resolved.region.x <= 150 <= resolved.region.x + resolved.region.width
+    assert resolved.region.y <= 80 <= resolved.region.y + resolved.region.height
+
+
+def test_rendered_field_value_associates_horizontal_value(tmp_path: Path) -> None:
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Currency", 0.99, ScreenRegion(20, 80, 80, 20)),
+            VisualToken("USD", 0.98, ScreenRegion(150, 80, 45, 20)),
+        ),
+    )
+
+    resolved = vision.resolve(
+        RenderedFieldValueCandidate(strategy="rendered_field_value", label="Currency"),
+        b"field-frame",
+        Viewport(400, 240),
+    )
+
+    assert resolved.region == ScreenRegion(150, 80, 45, 20)
+    assert resolved.method == "rendered_field_value"
+
+
+def test_rendered_field_value_rejects_duplicate_labels(tmp_path: Path) -> None:
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Currency", 0.99, ScreenRegion(20, 80, 80, 20)),
+            VisualToken("Currency", 0.99, ScreenRegion(20, 140, 80, 20)),
+            VisualToken("USD", 0.98, ScreenRegion(150, 80, 45, 20)),
+        ),
+    )
+
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            RenderedFieldValueCandidate(strategy="rendered_field_value", label="Currency"),
+            b"duplicate-field-frame",
+            Viewport(400, 240),
+        )
+
     assert error.value.code == "target_ambiguous"
 
 
@@ -192,6 +280,50 @@ def test_edge_template_moves_without_persisting_target_coordinates(tmp_path: Pat
 
     assert resolved.region == ScreenRegion(250, 130, 61, 51)
     assert resolved.method == "image_anchor"
+
+
+def test_rendered_group_image_uses_semantic_row_context(tmp_path: Path) -> None:
+    frame = png_with_icons((40, 20), (180, 100), (300, 180))
+    recognizer_tokens = (VisualToken("Savings", 0.99, ScreenRegion(10, 105, 75, 20)),)
+    vision = semantic_vision(tmp_path, recognizer_tokens)
+    key, digest = vision.create_visual_signature(frame, ScreenRegion(180, 100, 61, 51))
+
+    resolved = vision.resolve(
+        RenderedGroupImageCandidate(
+            strategy="rendered_group_image",
+            group_label="Savings",
+            asset_key=key,
+            content_hash=digest,
+        ),
+        frame,
+        Viewport(400, 240),
+    )
+
+    assert resolved.method == "rendered_group_image"
+    assert resolved.region.x == 176
+    assert resolved.region.y == 96
+
+
+def test_rendered_group_image_rejects_competing_components(tmp_path: Path) -> None:
+    frame = png_with_icons((160, 100), (300, 100))
+    vision = semantic_vision(
+        tmp_path, (VisualToken("Savings", 0.99, ScreenRegion(10, 105, 75, 20)),)
+    )
+    key, digest = vision.create_visual_signature(frame, ScreenRegion(160, 100, 61, 51))
+
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            RenderedGroupImageCandidate(
+                strategy="rendered_group_image",
+                group_label="Savings",
+                asset_key=key,
+                content_hash=digest,
+            ),
+            frame,
+            Viewport(400, 240),
+        )
+
+    assert error.value.code == "target_ambiguous"
 
 
 def test_global_template_matching_rejects_identical_same_scale_icons(tmp_path: Path) -> None:
