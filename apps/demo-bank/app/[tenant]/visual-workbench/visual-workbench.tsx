@@ -9,6 +9,21 @@ type Screen =
   | "results"
   | "notice"
   | "details"
+  | "account-menu"
+  | "transaction-filter"
+  | "transaction-results"
+  | "transaction-detail"
+  | "transaction-empty"
+  | "transaction-ambiguous"
+  | "payoff-form"
+  | "payoff-result"
+  | "payoff-invalid"
+  | "card-filter"
+  | "card-list"
+  | "card-not-found"
+  | "card-confirm"
+  | "card-result"
+  | "card-already-locked"
   | "not-found"
   | "permission-denied";
 type AccountKind = "checking" | "savings" | "auto_loan";
@@ -20,7 +35,9 @@ type FixtureName =
   | "missing"
   | "duplicate_search"
   | "changed_icon"
-  | "duplicate_field";
+  | "duplicate_field"
+  | "duplicate_transaction"
+  | "prelocked_card";
 type FixtureScreen = "results" | "notice" | "permission-denied" | "not-found";
 
 type Account = {
@@ -46,6 +63,18 @@ type Layout = {
   noticeButton?: Rect;
 };
 
+type FieldName = "transactionMerchant" | "transactionDate" | "transactionAmount" | "payoffDate" | "cardLast4";
+type FormField = { name: FieldName; label: string; rect: Rect; value: string };
+type ActionButton = { id: string; label: string; rect: Rect };
+type Transaction = {
+  reference: string;
+  merchant: string;
+  postedDate: string;
+  amount: string;
+  currency: "USD";
+  status: "Posted" | "Pending";
+};
+
 type MemberFixture = { name: FixtureName; screen: FixtureScreen; delayMs: number };
 
 const memberFixtures: Record<string, MemberFixture> = {
@@ -57,7 +86,15 @@ const memberFixtures: Record<string, MemberFixture> = {
   "33333": { name: "duplicate_search", screen: "results", delayMs: 180 },
   "44444": { name: "changed_icon", screen: "results", delayMs: 180 },
   "55555": { name: "duplicate_field", screen: "results", delayMs: 180 },
+  "77777": { name: "duplicate_transaction", screen: "results", delayMs: 180 },
+  "88888": { name: "prelocked_card", screen: "results", delayMs: 180 },
 };
+
+const transactions: Transaction[] = [
+  { reference: "TXN-80419", merchant: "Northwind Market", postedDate: "2026-09-08", amount: "84.27", currency: "USD", status: "Posted" },
+  { reference: "TXN-80420", merchant: "Northwind Market", postedDate: "2026-09-09", amount: "31.62", currency: "USD", status: "Posted" },
+  { reference: "TXN-80421", merchant: "Contoso Fuel", postedDate: "2026-09-08", amount: "52.10", currency: "USD", status: "Pending" },
+];
 
 const accounts: Record<AccountKind, Account> = {
   checking: { kind: "checking", label: "Checking", maskedNumber: "•••• 0110", balance: "$842.11" },
@@ -207,6 +244,65 @@ function layoutFor(
   };
 }
 
+function workflowArea(metrics: CanvasMetrics, tenant: Tenant) {
+  const compact = metrics.width < 1100;
+  const margin = compact ? Math.max(16, metrics.width * 0.04) : Math.max(32, metrics.width * 0.06);
+  const panel = rect(margin, Math.max(72, metrics.height * 0.13), metrics.width - margin * 2, metrics.height * 0.78);
+  const left = panel.x + (compact ? 18 : 34) + (tenant === "summit" ? (compact ? 6 : 18) : 0);
+  const width = panel.width - (compact ? 36 : 68);
+  const top = panel.y + (compact ? 94 : 112);
+  return { compact, panel, left, width, top };
+}
+
+function actionButtons(metrics: CanvasMetrics, tenant: Tenant, labels: Array<readonly [string, string]>): ActionButton[] {
+  const area = workflowArea(metrics, tenant);
+  const gap = area.compact ? 14 : 18;
+  const height = area.compact ? 54 : 60;
+  return labels.map(([id, label], index) => ({
+    id,
+    label,
+    rect: rect(area.left, area.top + index * (height + gap), area.width, height),
+  }));
+}
+
+function workflowFields(
+  metrics: CanvasMetrics,
+  tenant: Tenant,
+  screen: Screen,
+  values: Record<FieldName, string>,
+): FormField[] {
+  const area = workflowArea(metrics, tenant);
+  const definitions: Array<readonly [FieldName, string]> =
+    screen === "payoff-form"
+      ? [["payoffDate", "Payoff date"]]
+      : screen === "card-filter"
+        ? [["cardLast4", "Card last 4"]]
+        : [
+          ["transactionMerchant", "Merchant"],
+          ["transactionDate", "Transaction date"],
+          ["transactionAmount", "Amount"],
+        ];
+  const block = area.compact ? 82 : 74;
+  return definitions.map(([name, label], index) => ({
+    name,
+    label,
+    value: values[name],
+    rect: rect(area.left, area.top + index * block + 26, area.width, area.compact ? 46 : 44),
+  }));
+}
+
+function transactionMatches(memberId: string, merchant: string, date: string, amount: string) {
+  const matches = transactions.filter(
+    (item) =>
+      item.merchant.toLocaleLowerCase() === merchant.trim().toLocaleLowerCase() &&
+      item.postedDate === date.trim() &&
+      item.amount === amount.trim().replace(/^\$/, ""),
+  );
+  return memberId === "77777" && matches.length === 1
+    ? [matches[0]!, { ...matches[0]!, reference: "TXN-80422" }]
+    : matches;
+}
+
 export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<number | null>(null);
@@ -215,7 +311,23 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
   const [memberId, setMemberId] = useState("");
   const [inputActive, setInputActive] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<AccountKind>("savings");
+  const [activeField, setActiveField] = useState<FieldName | null>(null);
+  const [transactionMerchant, setTransactionMerchant] = useState("");
+  const [transactionDate, setTransactionDate] = useState("");
+  const [transactionAmount, setTransactionAmount] = useState("");
+  const [payoffDate, setPayoffDate] = useState("");
+  const [cardLast4, setCardLast4] = useState("");
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [lockedCards, setLockedCards] = useState<Set<string>>(new Set());
   const palette = palettes[tenant];
+
+  const fieldValues: Record<FieldName, string> = {
+    transactionMerchant,
+    transactionDate,
+    transactionAmount,
+    payoffDate,
+    cardLast4,
+  };
 
   const clearPendingTransition = useCallback(() => {
     if (timerRef.current !== null) {
@@ -259,6 +371,46 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
     }, delay);
   }, [clearPendingTransition, memberId]);
 
+  const submitTransactionFilter = useCallback(() => {
+    setActiveField(null);
+    const matches = transactionMatches(
+      memberId,
+      transactionMerchant,
+      transactionDate,
+      transactionAmount,
+    );
+    setSelectedTransaction(matches.length === 1 ? matches[0]! : null);
+    setScreen(
+      matches.length === 0
+        ? "transaction-empty"
+        : matches.length > 1
+          ? "transaction-ambiguous"
+          : "transaction-results",
+    );
+  }, [memberId, transactionAmount, transactionDate, transactionMerchant]);
+
+  const submitPayoff = useCallback(() => {
+    setActiveField(null);
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(payoffDate) ? Date.parse(`${payoffDate}T00:00:00Z`) : NaN;
+    const earliest = Date.parse("2026-09-11T00:00:00Z");
+    const latest = Date.parse("2026-10-10T00:00:00Z");
+    setScreen(Number.isFinite(parsed) && parsed >= earliest && parsed <= latest ? "payoff-result" : "payoff-invalid");
+  }, [payoffDate]);
+
+  const lockCard = useCallback(() => {
+    if (memberId === "88888" || lockedCards.has("0110")) {
+      setScreen("card-already-locked");
+      return;
+    }
+    setLockedCards((current) => new Set(current).add("0110"));
+    setScreen("card-result");
+  }, [lockedCards, memberId]);
+
+  const submitCardFilter = useCallback(() => {
+    setActiveField(null);
+    setScreen(cardLast4 === "0110" ? "card-list" : "card-not-found");
+  }, [cardLast4]);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
@@ -284,12 +436,28 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
     context.strokeStyle = palette.border;
     fillStroke(context, layout.panel);
 
-    const heading =
-      screen === "details"
-        ? `${accounts[selectedAccount].label} Account Details`
-        : screen === "results" || screen === "not-found" || screen === "permission-denied"
-          ? "Member Results"
-          : "Member Search";
+    const headings: Partial<Record<Screen, string>> = {
+      results: "Member Results",
+      "not-found": "Member Results",
+      "permission-denied": "Member Results",
+      details: `${accounts[selectedAccount].label} Account Details`,
+      "account-menu": `${accounts[selectedAccount].label} Servicing`,
+      "transaction-filter": "Transaction Investigation",
+      "transaction-results": "Transaction Results",
+      "transaction-detail": "Transaction Details",
+      "transaction-empty": "Transaction Results",
+      "transaction-ambiguous": "Transaction Results",
+      "payoff-form": "Loan Payoff Quote",
+      "payoff-result": "Payoff Quote",
+      "payoff-invalid": "Loan Payoff Quote",
+      "card-filter": "Find Card",
+      "card-list": "Card Controls",
+      "card-not-found": "Card Controls",
+      "card-confirm": "Confirm Temporary Lock",
+      "card-result": "Card Lock Confirmation",
+      "card-already-locked": "Card Controls",
+    };
+    const heading = headings[screen] ?? "Member Search";
     text(
       context,
       heading,
@@ -331,6 +499,106 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
       button(context, "Continue", layout.noticeButton, palette.accent, palette.font);
       return;
     }
+    const area = workflowArea(metrics, tenant);
+    if (screen === "account-menu") {
+      const actions = actionButtons(
+        metrics,
+        tenant,
+        selectedAccount === "checking"
+          ? [["transactions", "Investigate transactions"], ["cards", "Card controls"]]
+          : [["payoff", "Create payoff quote"]],
+      );
+      text(context, `Member ID: ${memberId}`, area.left, area.top - 28, palette.muted, palette.font, false, 16);
+      actions.forEach((action) => button(context, action.label, action.rect, palette.accent, palette.font));
+      return;
+    }
+    if (screen === "transaction-filter" || screen === "payoff-form" || screen === "card-filter") {
+      const fields = workflowFields(metrics, tenant, screen, fieldValues);
+      fields.forEach((field) => {
+        text(context, field.label, field.rect.x, field.rect.y - 8, palette.muted, palette.font, false, 16);
+        context.fillStyle = palette.panel;
+        fillStroke(context, field.rect, activeField === field.name ? palette.accent : palette.border, 3);
+        text(context, field.value || "Enter value", field.rect.x + 14, field.rect.y + 29, field.value ? palette.ink : palette.muted, palette.font, Boolean(field.value), 17);
+      });
+      const last = fields[fields.length - 1]!.rect;
+      const submit = rect(last.x, last.y + last.height + 18, last.width, area.compact ? 52 : 56);
+      const submitLabel = screen === "payoff-form" ? "Calculate quote" : screen === "card-filter" ? "Find card" : "Find transaction";
+      button(context, submitLabel, submit, palette.accent, palette.font);
+      if (screen === "payoff-form") text(context, "Allowed dates: 2026-09-11 through 2026-10-10", submit.x, submit.y + submit.height + 30, palette.muted, palette.font, false, 15);
+      return;
+    }
+    if (screen === "transaction-results") {
+      text(context, "1 matching transaction", area.left, area.top - 24, palette.muted, palette.font, false, 16);
+      const result = selectedTransaction;
+      if (result) {
+        drawKeyValues(context, area, [["Merchant", result.merchant], ["Posted", result.postedDate], ["Amount", `$${result.amount}`]], palette);
+        const open = actionButtons(metrics, tenant, [["open-transaction", "Open matching transaction"]])[0]!;
+        open.rect.y = area.top + (area.compact ? 188 : 150);
+        button(context, open.label, open.rect, palette.accent, palette.font);
+      }
+      return;
+    }
+    if (screen === "transaction-detail" && selectedTransaction) {
+      drawKeyValues(context, area, [
+        ["Transaction reference", selectedTransaction.reference],
+        ["Merchant", selectedTransaction.merchant],
+        ["Posted date", selectedTransaction.postedDate],
+        ["Amount", selectedTransaction.amount],
+        ["Currency", selectedTransaction.currency],
+        ["Status", selectedTransaction.status],
+      ], palette);
+      return;
+    }
+    if (screen === "transaction-empty" || screen === "transaction-ambiguous") {
+      const message = screen === "transaction-empty" ? "No matching transaction" : "Multiple matching transactions";
+      text(context, message, area.left, area.top + 40, "#9b2c2c", palette.font, true, 22);
+      text(context, screen === "transaction-empty" ? "The supplied fields matched no posted transaction." : "Refine the merchant, date, or amount before continuing.", area.left, area.top + 82, palette.ink, palette.font, false, 16);
+      return;
+    }
+    if (screen === "payoff-result") {
+      const days = Math.round((Date.parse(`${payoffDate}T00:00:00Z`) - Date.parse("2026-09-10T00:00:00Z")) / 86400000);
+      const interest = (days * 2.14).toFixed(2);
+      const total = (7800 + Number(interest)).toFixed(2);
+      drawKeyValues(context, area, [["Principal balance", "7800.00"], ["Accrued interest", interest], ["Payoff amount", total], ["Currency", "USD"], ["Good through", payoffDate]], palette);
+      return;
+    }
+    if (screen === "payoff-invalid") {
+      text(context, "Invalid payoff date", area.left, area.top + 40, "#9b2c2c", palette.font, true, 22);
+      text(context, "Choose a date within the displayed quote window.", area.left, area.top + 82, palette.ink, palette.font, false, 16);
+      return;
+    }
+    if (screen === "card-list") {
+      drawKeyValues(context, area, [["Debit card", "•••• 0110"], ["Status", memberId === "88888" || lockedCards.has("0110") ? "Temporarily locked" : "Active"]], palette);
+      const review = actionButtons(metrics, tenant, [["review-lock", "Review temporary lock"]])[0]!;
+      review.rect.y = area.top + (area.compact ? 142 : 112);
+      button(context, review.label, review.rect, palette.accent, palette.font);
+      return;
+    }
+    if (screen === "card-not-found") {
+      text(context, "No matching card", area.left, area.top + 40, "#9b2c2c", palette.font, true, 22);
+      text(context, "No card matched the supplied last four digits.", area.left, area.top + 82, palette.ink, palette.font, false, 16);
+      return;
+    }
+    if (screen === "card-confirm") {
+      text(context, "Card •••• 0110 will be unavailable for new purchases.", area.left, area.top, palette.ink, palette.font, false, 17);
+      text(context, "The lock can be reversed from this same control surface.", area.left, area.top + 38, palette.muted, palette.font, false, 16);
+      const confirm = actionButtons(metrics, tenant, [["confirm-lock", "Confirm temporary lock"]])[0]!;
+      confirm.rect.y = area.top + 76;
+      button(context, confirm.label, confirm.rect, "#9b2c2c", palette.font);
+      return;
+    }
+    if (screen === "card-result") {
+      drawKeyValues(context, area, [["Card last 4", "0110"], ["Lock status", "Temporarily locked"], ["Effective at", "2026-09-13T14:00:00Z"], ["Confirmation reference", "LOCK-0110-0913"], ["Reversal", "Unlock available"]], palette);
+      const unlock = actionButtons(metrics, tenant, [["unlock", "Unlock card"]])[0]!;
+      unlock.rect.y = area.top + (area.compact ? 290 : 224);
+      button(context, unlock.label, unlock.rect, palette.accent, palette.font);
+      return;
+    }
+    if (screen === "card-already-locked") {
+      text(context, "Card already temporarily locked", area.left, area.top + 40, palette.ink, palette.font, true, 22);
+      text(context, "No additional state change was made.", area.left, area.top + 82, palette.muted, palette.font, false, 16);
+      return;
+    }
     if (screen === "results" && layout.results) {
       const first = layout.results.rows[0]?.row;
       if (first) text(context, `Member ID: ${memberId}`, first.x, first.y - (layout.compact ? 20 : 28), palette.ink, palette.font, false, Math.max(14, Math.min(19, metrics.width / 65)));
@@ -367,7 +635,22 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
         text(context, value, field.value.x, field.value.y + (layout.compact ? 19 : 22), palette.ink, palette.font, true, Math.max(15, Math.min(20, metrics.width / 60)));
       });
     }
-  }, [memberId, metrics, palette, screen, selectedAccount, tenant]);
+  }, [
+    activeField,
+    cardLast4,
+    lockedCards,
+    memberId,
+    metrics,
+    palette,
+    payoffDate,
+    screen,
+    selectedAccount,
+    selectedTransaction,
+    tenant,
+    transactionAmount,
+    transactionDate,
+    transactionMerchant,
+  ]);
 
   useEffect(() => draw(), [draw]);
 
@@ -396,16 +679,91 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
       const row = currentLayout.results.rows.find((candidate) => inside(candidate.icon, x, y));
       if (row) {
         setSelectedAccount(row.account.kind);
-        setScreen("details");
+        setScreen(row.account.kind === "savings" ? "details" : "account-menu");
+      }
+    } else if (screen === "account-menu") {
+      const actions = actionButtons(
+        currentMetrics,
+        tenant,
+        selectedAccount === "checking"
+          ? [["transactions", "Investigate transactions"], ["cards", "Card controls"]]
+          : [["payoff", "Create payoff quote"]],
+      );
+      const selected = actions.find((action) => inside(action.rect, x, y));
+      if (selected?.id === "transactions") setScreen("transaction-filter");
+      if (selected?.id === "cards") setScreen("card-filter");
+      if (selected?.id === "payoff") setScreen("payoff-form");
+    } else if (screen === "transaction-filter" || screen === "payoff-form" || screen === "card-filter") {
+      const fields = workflowFields(currentMetrics, tenant, screen, fieldValues);
+      const selected = fields.find((field) => inside(field.rect, x, y));
+      if (selected) {
+        setActiveField(selected.name);
+        event.currentTarget.focus();
+        return;
+      }
+      const last = fields[fields.length - 1]!.rect;
+      const submit = rect(last.x, last.y + last.height + 18, last.width, currentMetrics.width < 1100 ? 52 : 56);
+      if (inside(submit, x, y)) {
+        if (screen === "payoff-form") submitPayoff();
+        else if (screen === "card-filter") submitCardFilter();
+        else submitTransactionFilter();
+      }
+    } else if (screen === "transaction-results") {
+      const area = workflowArea(currentMetrics, tenant);
+      const open = actionButtons(currentMetrics, tenant, [["open-transaction", "Open matching transaction"]])[0]!;
+      open.rect.y = area.top + (area.compact ? 188 : 150);
+      if (inside(open.rect, x, y)) setScreen("transaction-detail");
+    } else if (screen === "card-list") {
+      const area = workflowArea(currentMetrics, tenant);
+      const review = actionButtons(currentMetrics, tenant, [["review-lock", "Review temporary lock"]])[0]!;
+      review.rect.y = area.top + (area.compact ? 142 : 112);
+      if (inside(review.rect, x, y)) {
+        setScreen(memberId === "88888" || lockedCards.has("0110") ? "card-already-locked" : "card-confirm");
+      }
+    } else if (screen === "card-confirm") {
+      const area = workflowArea(currentMetrics, tenant);
+      const confirm = actionButtons(currentMetrics, tenant, [["confirm-lock", "Confirm temporary lock"]])[0]!;
+      confirm.rect.y = area.top + 76;
+      if (inside(confirm.rect, x, y)) lockCard();
+    } else if (screen === "card-result") {
+      const area = workflowArea(currentMetrics, tenant);
+      const unlock = actionButtons(currentMetrics, tenant, [["unlock", "Unlock card"]])[0]!;
+      unlock.rect.y = area.top + (area.compact ? 290 : 224);
+      if (inside(unlock.rect, x, y)) {
+        setLockedCards((current) => {
+          const next = new Set(current);
+          next.delete("0110");
+          return next;
+        });
+        setScreen("card-list");
       }
     }
   };
 
   const onKey = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
-    if (!inputActive) return;
-    if (/^[0-9]$/.test(event.key) && memberId.length < 10) setMemberId((value) => value + event.key);
-    if (event.key === "Backspace") setMemberId((value) => value.slice(0, -1));
-    if (event.key === "Enter") submitSearch();
+    if (!inputActive && !activeField) return;
+    if (inputActive) {
+      if (/^[0-9]$/.test(event.key) && memberId.length < 10) setMemberId((value) => value + event.key);
+      if (event.key === "Backspace") setMemberId((value) => value.slice(0, -1));
+      if (event.key === "Enter") submitSearch();
+    } else if (activeField) {
+      const setters: Record<FieldName, React.Dispatch<React.SetStateAction<string>>> = {
+        transactionMerchant: setTransactionMerchant,
+        transactionDate: setTransactionDate,
+        transactionAmount: setTransactionAmount,
+        payoffDate: setPayoffDate,
+        cardLast4: setCardLast4,
+      };
+      if (event.key.length === 1 && /^[A-Za-z0-9 .&$-]$/.test(event.key)) {
+        setters[activeField]((value) => value + event.key);
+      }
+      if (event.key === "Backspace") setters[activeField]((value) => value.slice(0, -1));
+      if (event.key === "Enter") {
+        if (screen === "payoff-form") submitPayoff();
+        if (screen === "transaction-filter") submitTransactionFilter();
+        if (screen === "card-filter") submitCardFilter();
+      }
+    }
     event.preventDefault();
   };
 
@@ -446,6 +804,25 @@ function button(context: CanvasRenderingContext2D, value: string, target: Rect, 
   context.textAlign = "center";
   context.fillText(value, target.x + target.width / 2, target.y + target.height * 0.64);
   context.textAlign = "left";
+}
+
+function drawKeyValues(
+  context: CanvasRenderingContext2D,
+  area: ReturnType<typeof workflowArea>,
+  fields: Array<readonly [string, string]>,
+  palette: (typeof palettes)[Tenant],
+) {
+  const gap = area.compact ? 48 : 40;
+  fields.forEach(([label, value], index) => {
+    const y = area.top + index * gap;
+    if (area.compact) {
+      text(context, label, area.left, y, palette.muted, palette.font, false, 15);
+      text(context, value, area.left, y + 22, palette.ink, palette.font, true, 17);
+    } else {
+      text(context, label, area.left, y + 18, palette.muted, palette.font, false, 16);
+      text(context, value, area.left + Math.min(300, area.width * 0.36), y + 18, palette.ink, palette.font, true, 17);
+    }
+  });
 }
 
 function iconButton(context: CanvasRenderingContext2D, target: Rect, color: string) {
