@@ -27,6 +27,7 @@ class RuntimeSettings(BaseSettings):
     browser_headless: bool = True
     browser_viewport_width: int = 1280
     browser_viewport_height: int = 800
+    browser_device_scale_factor: float = 1.0
     langfuse_base_url: str = "http://127.0.0.1:3100"
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
@@ -50,6 +51,8 @@ class RuntimeSettings(BaseSettings):
             raise ValueError("browser viewport width must be between 800 and 2560")
         if not 500 <= self.browser_viewport_height <= 1600:
             raise ValueError("browser viewport height must be between 500 and 1600")
+        if not 1.0 <= self.browser_device_scale_factor <= 3.0:
+            raise ValueError("browser device scale factor must be between 1 and 3")
         parsed = urlsplit(self.demo_base_url)
         if (
             parsed.scheme not in {"http", "https"}

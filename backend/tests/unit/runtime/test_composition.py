@@ -44,15 +44,25 @@ def test_settings_validate_origin_and_artifact_directory() -> None:
 
 
 @pytest.mark.parametrize(
-    ("width", "height"),
-    [(799, 800), (2561, 800), (1280, 499), (1280, 1601)],
+    ("width", "height", "scale"),
+    [
+        (799, 800, 1.0),
+        (2561, 800, 1.0),
+        (1280, 499, 1.0),
+        (1280, 1601, 1.0),
+        (1280, 800, 0.99),
+        (1280, 800, 3.01),
+    ],
 )
-def test_settings_reject_out_of_bounds_browser_viewport(width: int, height: int) -> None:
-    with pytest.raises(ValidationError, match="browser viewport"):
+def test_settings_reject_out_of_bounds_browser_viewport(
+    width: int, height: int, scale: float
+) -> None:
+    with pytest.raises(ValidationError, match="browser viewport|device scale"):
         RuntimeSettings(
             artifact_directory=artifact_directory(),
             browser_viewport_width=width,
             browser_viewport_height=height,
+            browser_device_scale_factor=scale,
         )
 
 

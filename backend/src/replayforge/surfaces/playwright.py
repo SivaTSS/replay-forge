@@ -53,6 +53,7 @@ from replayforge.capabilities.models import (
     NotCondition,
     OutputValidCondition,
     PressKeysAction,
+    RenderedTextCondition,
     RouteCondition,
     ScrollAction,
     SelectAction,
@@ -133,7 +134,8 @@ class PlaywrightSurfaceDriver:
             self.browser = self.playwright.chromium.launch(headless=self.headless)
         assert self.browser is not None
         context = self.browser.new_context(
-            viewport={"width": self.viewport.width, "height": self.viewport.height}
+            viewport={"width": self.viewport.width, "height": self.viewport.height},
+            device_scale_factor=self.viewport.device_scale,
         )
         page = context.new_page()
         tenant_root = f"{self.base_url.rstrip('/')}/{quote(tenant, safe='')}"
@@ -169,6 +171,7 @@ class PlaywrightSurfaceDriver:
             vision=self.vision,
             allow_transient_coordinates=self.allow_transient_coordinates,
             rendered_surface=entry_point in {"visual_member_search", "visual_member_workbench"},
+            viewport=self.viewport,
         )
         self.active_session = session
         return session
@@ -203,6 +206,7 @@ class PlaywrightSurfaceSession:
     vision: VisionGrounder | None = None
     allow_transient_coordinates: bool = False
     rendered_surface: bool = False
+    viewport: Viewport = field(default_factory=lambda: Viewport(1280, 800))
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
     _handles: dict[str, Locator] = field(default_factory=dict, init=False)
     _bundles: dict[str, LocatorBundle] = field(default_factory=dict, init=False)
@@ -352,7 +356,7 @@ class PlaywrightSurfaceSession:
 
     def capture_provider_frame(self) -> bytes:
         try:
-            return self.page.screenshot(type="png", full_page=False)
+            return self.page.screenshot(type="png", full_page=False, scale="css")
         except Exception as exc:
             raise SurfaceError(
                 "screenshot_failed", "The current UI frame could not be captured."
@@ -376,6 +380,7 @@ class PlaywrightSurfaceSession:
             content = self.page.screenshot(
                 type="png",
                 full_page=False,
+                scale="css",
                 mask=masks,
                 mask_color="#111827",
                 animations="disabled",
@@ -647,6 +652,12 @@ class PlaywrightSurfaceSession:
                 condition.search_region,
                 self._viewport(),
             )
+        if isinstance(condition, RenderedTextCondition):
+            if self.vision is None:
+                return False
+            return self.vision.contains_rendered_text(
+                self._capture_grounding_frame(), condition.value, condition.match
+            )
         if isinstance(condition, ElementCondition):
             try:
                 resolved = self.resolve(condition.target, 1_000)
@@ -696,7 +707,7 @@ class PlaywrightSurfaceSession:
 
     def screenshot(self, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        self.page.screenshot(path=str(destination), full_page=True)
+        self.page.screenshot(path=str(destination), full_page=True, scale="css")
 
     def close(self) -> None:
         self.context.close()
@@ -823,7 +834,7 @@ class PlaywrightSurfaceSession:
     def _capture_grounding_frame(self) -> bytes:
         try:
             return self.page.screenshot(
-                type="png", full_page=False, animations="disabled", caret="hide"
+                type="png", full_page=False, scale="css", animations="disabled", caret="hide"
             )
         except Exception as error:
             raise SurfaceError(
@@ -832,7 +843,7 @@ class PlaywrightSurfaceSession:
 
     def _viewport(self) -> Viewport:
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}
-        return Viewport(viewport["width"], viewport["height"])
+        return Viewport(viewport["width"], viewport["height"], self.viewport.device_scale)
 
     @staticmethod
     def _classify_target(locator: Locator) -> Risk | None:

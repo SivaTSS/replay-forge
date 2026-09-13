@@ -541,7 +541,11 @@ def build_runtime(settings: object) -> LocalRuntime:
             settings.demo_base_url,
             settings.browser_headless,
             VisionGrounder(text_recognizer, capability_assets, settings.vision_policy),
-            viewport=Viewport(settings.browser_viewport_width, settings.browser_viewport_height),
+            viewport=Viewport(
+                settings.browser_viewport_width,
+                settings.browser_viewport_height,
+                settings.browser_device_scale_factor,
+            ),
         )
         worker = SerialSessionWorker(run_id)
         engine: ReplayEngine
@@ -619,7 +623,11 @@ def build_runtime(settings: object) -> LocalRuntime:
             settings.browser_headless,
             VisionGrounder(text_recognizer, capability_assets, settings.vision_policy),
             allow_transient_coordinates=True,
-            viewport=Viewport(settings.browser_viewport_width, settings.browser_viewport_height),
+            viewport=Viewport(
+                settings.browser_viewport_width,
+                settings.browser_viewport_height,
+                settings.browser_device_scale_factor,
+            ),
         )
         worker = SerialSessionWorker(run_id)
         engine = DiscoveryEngine(
