@@ -103,6 +103,7 @@ function layoutFor(
   screen: Screen,
   memberId: string,
   duplicateSearch: boolean,
+  duplicateField: boolean,
 ): Layout {
   const compact = metrics.width < 1100;
   const margin = compact ? Math.max(16, metrics.width * 0.04) : Math.max(32, metrics.width * 0.06);
@@ -157,16 +158,19 @@ function layoutFor(
   if (screen === "details") {
     const detailTop = top + (compact ? 48 : 54);
     const fieldGap = compact ? 16 : 26;
-    const fieldHeight = compact ? 54 : 30;
+    // Keep the deliberately duplicated fixture readable even at the smallest
+    // supported viewport; it is a data ambiguity fault, not a clipping fault.
+    const fieldHeight = compact ? (duplicateField ? 30 : 54) : 30;
     const labelWidth = compact ? contentWidth : Math.min(300, contentWidth * 0.36);
     const valueWidth = contentWidth - labelWidth - (compact ? 0 : 26);
-    const fields = [
+    const fields: Array<readonly [string, string]> = [
       ["Member ID", memberId],
       ["Account type", accounts.savings.label],
       ["Currency", "USD"],
       ["Available balance", accounts.savings.balance],
+      ...(duplicateField ? [["Available balance", accounts.savings.balance] as const] : []),
       ["As of", "2026-09-10T12:30:00Z"],
-    ] as const;
+    ];
     return {
       compact,
       margin,
@@ -271,6 +275,7 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
       screen,
       memberId,
       memberFixtures[memberId]?.name === "duplicate_search",
+      memberFixtures[memberId]?.name === "duplicate_field",
     );
     context.fillStyle = palette.ink;
     context.font = `700 ${Math.max(17, Math.min(25, metrics.width / 50))}px ${palette.font}`;
@@ -377,6 +382,7 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
       screen,
       memberId,
       memberFixtures[memberId]?.name === "duplicate_search",
+      memberFixtures[memberId]?.name === "duplicate_field",
     );
     const search = currentLayout.search;
     if (screen === "search" && search && inside(search.input, x, y)) {

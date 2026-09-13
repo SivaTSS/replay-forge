@@ -543,7 +543,7 @@ class VisionGrounder:
             )
         edge = self._edge_map(image)
         dilated = cv2.dilate(edge, np.ones((3, 3), dtype=np.uint8), iterations=1)
-        contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(dilated, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         image_area = max(1, image.shape[0] * image.shape[1])
         min_area = image_area * policy.segmentation.minimum_component_area_ratio
         max_area = image_area * policy.segmentation.maximum_component_area_ratio

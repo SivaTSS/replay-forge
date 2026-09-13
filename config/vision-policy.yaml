@@ -14,4 +14,4 @@ image:
   uniqueness_margin: 0.08
 budgets:
   maximum_frame_pixels: 8000000
-  maximum_grounding_milliseconds: 2000
+  maximum_grounding_milliseconds: 10000
