@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import os
 import re
 import shutil
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -24,9 +27,14 @@ from replayforge.evidence.integrity import (
     TerminalResultEvidence,
     verify_run_manifest,
 )
-from replayforge.evidence.models import EventEvidence, RunEvidenceManifest
+from replayforge.evidence.models import (
+    MAX_EVENT_BYTES,
+    MAX_MANIFEST_BYTES,
+    EventEvidence,
+    RunEvidenceManifest,
+)
 from replayforge.evidence.ports import EvidenceStore
-from replayforge.evidence.redaction import StructuredRedactor
+from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 
 _SCENARIO_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,63}$")
 _COMMIT_PATTERN = re.compile(r"^[0-9a-f]{7,40}$")
@@ -223,28 +231,42 @@ def export_evidence_bundle(
     sanitized_manifest = redactor.sanitize_json(bundle_manifest, {}, run_salt=source.run_id)
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
-    try:
-        _durable_write(temporary / "artifact.yaml", artifact_content)
-        _durable_write(temporary / "events.jsonl", events_content)
-        _durable_write(temporary / "result.json", result_content)
-        for relative_path, content in attachment_content.items():
-            attachment_path = temporary / relative_path
-            attachment_path.parent.mkdir(parents=True, exist_ok=True)
-            _durable_write(attachment_path, content)
-        _durable_write(temporary / "manifest.json", sanitized_manifest.content + b"\n")
-        temporary.replace(destination)
-    except BaseException:
-        shutil.rmtree(temporary, ignore_errors=True)
-        raise
+    with _directory_lock(destination.parent):
+        if destination.exists():
+            raise FileExistsError("evidence export destination already exists")
+        temporary = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
+        try:
+            _durable_write(temporary / "artifact.yaml", artifact_content)
+            _durable_write(temporary / "events.jsonl", events_content)
+            _durable_write(temporary / "result.json", result_content)
+            for relative_path, content in attachment_content.items():
+                attachment_path = temporary / relative_path
+                attachment_path.parent.mkdir(parents=True, exist_ok=True)
+                _durable_write(attachment_path, content)
+            _durable_write(temporary / "manifest.json", sanitized_manifest.content + b"\n")
+            screenshots = temporary / "screenshots"
+            if screenshots.is_dir():
+                _sync_directory(screenshots)
+            _sync_directory(temporary)
+            temporary.rename(destination)
+            _sync_directory(destination.parent)
+        except BaseException:
+            shutil.rmtree(temporary, ignore_errors=True)
+            raise
     return EvidenceExport(destination, source.run_id, verification.manifest_hash)
 
 
-def verify_evidence_bundle(directory: Path) -> EvidenceExport:
+def verify_evidence_bundle(
+    directory: Path, *, configured_secrets: tuple[str, ...] = ()
+) -> EvidenceExport:
     """Verify a stable bundle without requiring its transient source store."""
 
+    if directory.is_symlink() or any(path.is_symlink() for path in directory.rglob("*")):
+        raise EvidenceBundleIntegrityError("evidence bundle cannot contain symbolic links")
     try:
         manifest_content = (directory / "manifest.json").read_bytes()
+        if len(manifest_content) > MAX_MANIFEST_BYTES:
+            raise EvidenceBundleIntegrityError("evidence bundle manifest exceeds the size limit")
         manifest = EvidenceBundleManifest.model_validate_json(manifest_content)
     except (OSError, ValidationError) as error:
         raise EvidenceBundleIntegrityError("evidence bundle manifest is invalid") from error
@@ -293,12 +315,16 @@ def verify_evidence_bundle(directory: Path) -> EvidenceExport:
     if not events:
         raise EvidenceBundleIntegrityError("evidence bundle has no events")
     for sequence, content in enumerate(events, start=1):
+        if len(content) > MAX_EVENT_BYTES:
+            raise EvidenceBundleIntegrityError("evidence bundle event exceeds the size limit")
         try:
             event = EventEvidence.model_validate_json(content)
         except ValidationError as error:
             raise EvidenceBundleIntegrityError("evidence bundle event is invalid") from error
         if event.run_id != manifest.run_id or event.sequence != sequence:
             raise EvidenceBundleIntegrityError("evidence bundle events are not ordered for the run")
+    if len(content_by_name["result.json"]) > MAX_EVENT_BYTES:
+        raise EvidenceBundleIntegrityError("evidence bundle result exceeds the size limit")
     try:
         result = TerminalResultEvidence.model_validate_json(content_by_name["result.json"])
     except ValidationError as error:
@@ -306,9 +332,24 @@ def verify_evidence_bundle(directory: Path) -> EvidenceExport:
     if result.run_id != manifest.run_id:
         raise EvidenceBundleIntegrityError("evidence bundle result belongs to a different run")
 
-    StructuredRedactor().sanitize_json(
-        manifest.model_dump(mode="json"), {}, run_salt=manifest.run_id
-    )
+    expected_files = {
+        "manifest.json",
+        *manifest.files.keys(),
+        *manifest.attachments.keys(),
+    }
+    actual_files = {
+        path.relative_to(directory).as_posix() for path in directory.rglob("*") if path.is_file()
+    }
+    if actual_files != expected_files:
+        raise EvidenceBundleIntegrityError("evidence bundle contains undeclared files")
+
+    redactor = StructuredRedactor(configured_secrets=configured_secrets)
+    try:
+        redactor.validate_text(manifest_content.decode("utf-8"))
+        for content in content_by_name.values():
+            redactor.validate_text(content.decode("utf-8"))
+    except (UnicodeDecodeError, EvidenceRejectedError) as error:
+        raise EvidenceBundleIntegrityError("evidence bundle contains unsafe text") from error
     return EvidenceExport(
         directory,
         manifest.run_id,
@@ -328,3 +369,22 @@ def _durable_write(destination: Path, content: bytes) -> None:
         stream.write(content)
         stream.flush()
         os.fsync(stream.fileno())
+
+
+@contextmanager
+def _directory_lock(directory: Path) -> Iterator[None]:
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def _sync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)

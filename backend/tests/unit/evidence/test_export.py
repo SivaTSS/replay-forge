@@ -134,6 +134,26 @@ def test_bundle_verifier_rejects_missing_file(tmp_path: Path) -> None:
         verify_evidence_bundle(destination)
 
 
+def test_bundle_verifier_rejects_undeclared_file(tmp_path: Path) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    (destination / "unreviewed.txt").write_text("extra")
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="undeclared"):
+        verify_evidence_bundle(destination)
+
+
+def test_bundle_verifier_rejects_symbolic_links(tmp_path: Path) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    (destination / "link").symlink_to(destination / "result.json")
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="symbolic"):
+        verify_evidence_bundle(destination)
+
+
 def test_bundle_verifier_rejects_artifact_metadata_mismatch(tmp_path: Path) -> None:
     store, journal = _retained_run(tmp_path)
     destination = tmp_path / "replay-success"
@@ -305,6 +325,32 @@ def test_export_rejects_secret_in_embedded_artifact(tmp_path: Path) -> None:
         )
 
     assert not (tmp_path / "replay-success").exists()
+
+
+def test_bundle_verifier_rejects_secret_even_when_manifest_hash_is_rewritten(
+    tmp_path: Path,
+) -> None:
+    store, journal = _retained_run(tmp_path)
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    events_path = destination / "events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    events[0]["details"]["note"] = "sk-abcdefghijklmnopqrst"
+    content = b"".join(
+        json.dumps(event, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        for event in events
+    )
+    events_path.write_bytes(content)
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"]["events.jsonl"] = {
+        "content_hash": f"sha256:{hashlib.sha256(content).hexdigest()}",
+        "size_bytes": len(content),
+    }
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(EvidenceBundleIntegrityError, match="unsafe text"):
+        verify_evidence_bundle(destination)
 
 
 def test_export_request_rejects_invalid_metadata(tmp_path: Path) -> None:
