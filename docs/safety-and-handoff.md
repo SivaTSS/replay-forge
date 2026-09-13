@@ -37,7 +37,7 @@ The model and artifact therefore cannot lower an independently detected risk.
 | Risk | Runtime response |
 |---|---|
 | Read-only or reversible within policy | Allow |
-| Sensitive within policy | Require human approval |
+| Sensitive replay step within policy | Pause the live session for human intervention |
 | Above policy ceiling | Deny |
 | Irreversible | Always deny in this submission |
 
@@ -147,7 +147,7 @@ The operator viewport is live and therefore unmasked for the authorized lease ho
 | Stage | Alternatives | Chosen | Why |
 |---|---|---|---|
 | Policy | Single boolean guard, adapter-specific checks, layered policy | Layer intersection | Every authority can only narrow permission; decisions stay auditable |
-| Risky action | Allow with logging, deny all, human approval | Sensitive → human; irreversible → deny | Demonstrates safe progress without pretending irreversible recovery is solved |
+| Risky replay action | Allow with logging, deny all, human intervention | Sensitive → human; irreversible → deny | Demonstrates safe progress without pretending irreversible recovery is solved |
 | Evidence redaction | Redact at display, redact after storage, redact before write | Before write | Sensitive bytes never enter durable evidence |
 | Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, form state, and the assignment's required seam |
 | Ownership | UI convention, mutex only, versioned lease | Versioned lease + CAS | Makes stale and concurrent commands explicit conflicts |

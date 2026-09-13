@@ -10,6 +10,7 @@ from replayforge.capabilities.models import (
     LocatorCandidate,
     LocatorStrategy,
     ObjectContract,
+    RenderedFieldValueCandidate,
     RouteCondition,
     TypeAction,
     ValueSchema,
@@ -146,3 +147,130 @@ def test_generic_compiler_rejects_missing_output() -> None:
             model_name="test",
             evidence_manifest="evidence://generic",
         )
+
+
+def test_compiler_derives_completion_from_verified_rendered_extractions() -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, 30, tzinfo=UTC))
+    observation = NormalizedObservation(
+        id=new_id(EntityKind.EVENT),
+        session_id=new_id(EntityKind.SESSION),
+        captured_at=clock.now(),
+        route="/workbench",
+        viewport=Viewport(1280, 800),
+        fingerprint="rendered-details",
+        landmarks=("Reference",),
+    )
+    draft = CapabilityDraftSpec(
+        operation_slug="read_reference",
+        name="Read reference",
+        description="Read a rendered reference.",
+        inputs=ObjectContract(required=(), properties={}),
+        outputs=ObjectContract(
+            required=("reference",),
+            properties={
+                "reference": ValueSchema(
+                    type=JsonValueType.STRING,
+                    description="Displayed reference.",
+                    data_classification=DataClassification.PERSONAL,
+                )
+            },
+        ),
+        risk=Risk.READ_ONLY,
+    )
+    target = LocatorBundle(
+        description="Reference value",
+        visual_candidates=(
+            RenderedFieldValueCandidate(strategy="rendered_field_value", label="Reference"),
+        ),
+    )
+    step = RecordedDiscoveryStep(
+        ExtractAction(kind="extract", output="reference"),
+        target,
+        observation,
+        observation,
+        "The reference is captured.",
+        "The displayed reference is visible.",
+        Risk.READ_ONLY,
+    )
+
+    artifact = TraceArtifactCompiler(clock).compile(
+        draft=draft,
+        run_id="run_rendered",
+        goal="Read a rendered reference",
+        application_family="app",
+        tenant="tenant",
+        entry_point="workbench",
+        steps=(step,),
+        final_observation=observation,
+        provider_name="test",
+        model_name="test",
+        evidence_manifest="evidence://rendered",
+        rendered_surface=True,
+    )
+
+    checkpoint = artifact.checkpoint.condition
+    assert checkpoint.kind == "all"
+    assert any(
+        condition.kind == "rendered_text" and condition.value == "Reference"
+        for condition in checkpoint.conditions
+    )
+
+
+def test_compiler_uses_observed_action_risk_not_planner_guess() -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, 30, tzinfo=UTC))
+    observation = NormalizedObservation(
+        id=new_id(EntityKind.EVENT),
+        session_id=new_id(EntityKind.SESSION),
+        captured_at=clock.now(),
+        route="/details",
+        viewport=Viewport(1280, 800),
+        fingerprint="details",
+        landmarks=("Reference",),
+    )
+    draft = CapabilityDraftSpec(
+        operation_slug="read_reference",
+        name="Read reference",
+        description="Read a reference.",
+        inputs=ObjectContract(required=(), properties={}),
+        outputs=ObjectContract(
+            required=("reference",),
+            properties={
+                "reference": ValueSchema(
+                    type=JsonValueType.STRING,
+                    description="Displayed reference.",
+                    data_classification=DataClassification.PERSONAL,
+                )
+            },
+        ),
+        risk=Risk.SENSITIVE,
+    )
+    target = LocatorBundle(
+        description="Reference value",
+        candidates=(LocatorCandidate(strategy=LocatorStrategy.LABEL, value="Reference"),),
+    )
+    step = RecordedDiscoveryStep(
+        ExtractAction(kind="extract", output="reference"),
+        target,
+        observation,
+        observation,
+        "The reference is captured.",
+        "The displayed reference is visible.",
+        Risk.READ_ONLY,
+        (RouteCondition(kind="route", pattern="/details"),),
+    )
+
+    artifact = TraceArtifactCompiler(clock).compile(
+        draft=draft,
+        run_id="run_risk",
+        goal="Read a reference",
+        application_family="app",
+        tenant="tenant",
+        entry_point="details",
+        steps=(step,),
+        final_observation=observation,
+        provider_name="test",
+        model_name="test",
+        evidence_manifest="evidence://risk",
+    )
+
+    assert artifact.capability.risk is Risk.READ_ONLY

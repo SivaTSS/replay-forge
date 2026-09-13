@@ -146,9 +146,7 @@ def effective_replay_policy(
     if capability_routes:
         allowed_routes = frozenset(capability_routes).intersection(allowed_routes)
     application_actions = (
-        application.policy.allowed_action_types
-        if application is not None
-        else _PLATFORM_ACTIONS
+        application.policy.allowed_action_types if application is not None else _PLATFORM_ACTIONS
     )
     application_risk = (
         application.policy.maximum_risk if application is not None else Risk.SENSITIVE
@@ -725,6 +723,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             application_registry=application_registry,
         )
         worker = SerialSessionWorker(run_id)
+
         def discovery_policy(request: DiscoveryRequest) -> EffectivePolicy:
             application = application_registry.get(request.application_family)
             return EffectivePolicy.intersect(

@@ -19,10 +19,14 @@ from replayforge.policy.types import Risk
 from replayforge.providers.openai import (
     OpenAIModelProvider,
     ProposalEnvelope,
+    ProviderClickAction,
+    ProviderClickLocatorBundle,
+    ProviderClickProposal,
     ProviderFrameLocator,
     ProviderFrameTitleCandidate,
     ProviderInputCandidate,
     ProviderLocatorScope,
+    ProviderOcrRelativeCandidate,
     ProviderOutputField,
     ProviderTypeAction,
     ProviderTypeLocatorBundle,
@@ -141,7 +145,7 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
     assert responses.request["tools"] == []
     assert responses.request["model"] == "gpt-5.6-luna"
     assert responses.request["reasoning"] == {"effort": "low"}
-    assert responses.request["max_output_tokens"] == 600
+    assert responses.request["max_output_tokens"] == 1200
     content = responses.request["input"][0]["content"]
     sent = json.loads(content[0]["text"])
     assert sent["input_fields"] == ["member_id"]
@@ -230,11 +234,11 @@ def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> Non
     }.issubset(schema["$defs"])
 
 
-def test_provider_plan_rejects_non_primitive_output_fields() -> None:
-    with pytest.raises(ValidationError, match="primitive values"):
+def test_provider_plan_requires_text_output_fields() -> None:
+    with pytest.raises(ValidationError, match="string"):
         ProviderOutputField(
             name="nested_result",
-            type=JsonValueType.OBJECT,
+            type=JsonValueType.OBJECT,  # type: ignore[arg-type]
             description="Nested result",
         )
 
@@ -275,6 +279,41 @@ def test_provider_converts_constrained_wire_locator_to_domain_proposal() -> None
     assert proposal.target is not None
     assert proposal.target.candidates[0].strategy.value == "label"
     assert proposal.target.scope.frame_path[0].locator.value == "Member operations"
+
+
+def test_provider_relative_target_is_semantic_and_geometry_free() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(
+            proposal=ProviderClickProposal(
+                kind="act",
+                action=ProviderClickAction(kind="click"),
+                target=ProviderClickLocatorBundle(
+                    description="Checking row action",
+                    visual_candidates=(
+                        ProviderOcrRelativeCandidate(
+                            strategy="ocr_relative",
+                            anchor="Checking",
+                            target_text="Open",
+                            relation="same_row",
+                        ),
+                    ),
+                ),
+                rationale="The account row is visible.",
+                expected_effect="The checking account opens.",
+                declared_risk=Risk.READ_ONLY,
+                confidence=1,
+            )
+        )
+    )
+
+    proposal = OpenAIModelProvider(FakeClient(responses), model_policy()).decide(context())
+
+    assert isinstance(proposal, ActProposal)
+    assert proposal.target is not None
+    candidate = proposal.target.visual_candidates[0]
+    assert candidate.strategy == "ocr_relative"
+    assert candidate.target_text == "Open"
+    assert candidate.relative_region is None
 
 
 def test_provider_rejects_clicking_a_static_following_value() -> None:

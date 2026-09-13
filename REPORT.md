@@ -53,7 +53,7 @@ Target bundles contain a human-readable description, reviewed target risk, optio
 | Record coordinates only | Rejected | Viewport and layout changes make deterministic replay brittle |
 | Persist relative regions | Rejected | Responsive reflow changes the relationship being recorded |
 | Semantic OCR + frame-local graph + visual signature | **Chosen** | Keeps identity durable while deriving current CSS-pixel geometry |
-| Model writes an arbitrary artifact | Rejected | The specialized compiler accepts only the verified savings-balance trace shape |
+| Model writes an arbitrary artifact | Rejected | The generic compiler accepts only the contract and actions proven by the executed trace |
 
 ## 3. Determinism & error handling
 
@@ -117,7 +117,7 @@ HTTP polling was chosen over a WebSocket/CDP stream. It is less fluid, but it pr
 
 Each action crosses three independent controls: current lease ownership, effective allowlists, and effective risk. Replay intersects platform, application, tenant, capability, and invocation policy layers; discovery intersects platform and application layers. Sets narrow by intersection, forbidden classifications accumulate, and the lowest risk ceiling wins.
 
-Risk is independently inferred from action type, target language, and observed target facts, then combined with the declared risk. Irreversible actions are always denied. Sensitive actions require human approval. Origins, normalized routes, and action types must be explicitly allowed.
+Risk is independently inferred from action type, target language, and observed target facts, then combined with the declared risk. Irreversible actions are always denied. Sensitive replay steps pause for same-session human intervention. Discovery publishes only deterministically validated read-only or reversible capabilities; sensitive and irreversible drafts are blocked. Origins, normalized routes, and action types must be explicitly allowed.
 
 Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted DOM screenshots mask inputs and value cells; both canvas-only visual routes mask the entire canvas because their sensitive pixels have no element boundary. Atomic writes, SHA-256 metadata, and manifests make incomplete or changed evidence detectable. API errors expose stable codes and safe messages without submitted values or raw provider errors.
 
@@ -125,7 +125,10 @@ The trade-off is conservative capability: the system may stop where a broader au
 
 ## 7. Cuts
 
-Depth was concentrated on one complete workflow and its exceptional states.
+Depth is concentrated in one canvas-only banking application with three substantial workflows:
+transaction investigation, loan payoff quoting, and reversible temporary card locking. Each uses a
+separate real discovery trace and immutable artifact while sharing the same application registration,
+compiler, policy engine, and replay interpreter.
 
 | Cut | What exists instead | Next production step |
 |---|---|---|
@@ -134,10 +137,15 @@ Depth was concentrated on one complete workflow and its exceptional states.
 | Full operations UI | Focused intervention console | Run list, capability catalog, evidence viewer, authentication |
 | WebSocket/video co-browsing | PNG polling and bounded HTTP input | Backpressured stream with durable control events |
 | Native desktop execution | Reusable PNG vision layer and surface ports | OS capture/input transport and window identity |
-| Generic discovery compiler | Fail-closed savings-balance compiler | Reviewed workflow templates or constrained compiler families |
+| Generic discovery compiler | Implemented from typed, verified traces | Broader scenario-merging coverage remains future work |
 | Discovery continuation after handoff | Safe reopen with retained session | Serializable discovery continuation and fresh-goal validation |
 | Distributed workers/queues | One process and one browser-owner thread per run | Durable scheduling only when workload requires it |
 | Open-ended model replay recovery | Declared finite recovery only | Optional single-step, policy-checked assisted fallback |
 | Automatic tenant drift/overlays | Supported variants, route normalization, recorded fingerprints | Narrow overlay schema and compatibility gate |
 
-The repository provides seven hash-verified evidence bundles: genuine discovery, replay success, member-not-found, bounded recovery, hard failure with masked screenshot, same-session handoff, and second-tenant reuse. The visual workbench adds a reproducible 15-case Chromium matrix without persisting raw canvas frames. `bash scripts/verify.sh` runs formatting, lint, strict typing, a 90% branch gate, evidence integrity, both frontend builds, and real Chromium integration tests.
+The repository provides ten hash-verified evidence bundles: four genuine discoveries, replay
+success, member-not-found, bounded recovery, hard failure with a masked screenshot, same-session
+handoff, and second-tenant reuse. The visual workbench adds a reproducible 21-case Chromium matrix
+without persisting raw canvas frames. `bash scripts/verify.sh` runs formatting, lint, strict typing,
+a 90% domain branch gate, evidence integrity, both frontend builds, and real Chromium integration
+tests.

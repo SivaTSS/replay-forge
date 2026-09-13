@@ -24,13 +24,16 @@ flowchart TB
 
 ```
 
-The Playwright adapter is excluded from the Python coverage percentage and tested separately through real Chromium integration tests.
+The 90% branch gate covers deterministic domain code. Thin HTTP, provider, launch-registry,
+suite-orchestration, composition, and Playwright adapters are excluded from that percentage and
+covered by contract tests, real Chromium integration, and genuine discovery evidence. Unit and
+integration tests run in one coverage process so browser-executed domain paths count.
 
 ## What is proved where
 
 | Property | Test mechanism | Committed evidence |
 |---|---|---|
-| Genuine model-guided discovery | Provider, engine, compiler tests; recorded run | `evidence/discovery-success` |
+| Genuine model-guided discovery | Provider, engine, compiler tests; recorded runs | Three task-specific discovery bundles plus the original fixture |
 | Replay cannot import a model provider | Structural dependency test | `evidence/replay-success` |
 | Typed success and five outputs | Engine + composed integration | `evidence/replay-success` |
 | Legitimate negative answer | Outcome precedence tests | `evidence/replay-member-not-found` |
@@ -72,6 +75,9 @@ The runtime first writes mutable evidence under ignored `evidence/runtime/`. Exp
 | Directory | Version | Tenant | Terminal state | Specific proof |
 |---|---:|---|---|---|
 | `discovery-success` | compiled | Harbor | success | A real OpenAI/Luna loop produced an eight-step artifact |
+| `discovery-transaction-investigation` | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a 15-step, six-output artifact |
+| `discovery-loan-payoff` | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced an 11-step, five-output artifact |
+| `discovery-temporary-card-lock` | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a reversible 12-step, four-output artifact |
 | `replay-success` | `1.0.0` | Harbor | success | Model-free outputs and final checkpoint |
 | `replay-member-not-found` | `1.0.0` | Harbor | business outcome | “No member” is not reported as a crash |
 | `replay-recovery` | `1.0.1` | Harbor | success | Known notice dismissed once, then resumed |
@@ -81,7 +87,11 @@ The runtime first writes mutable evidence under ignored `evidence/runtime/`. Exp
 
 ### Visual workbench matrix
 
-`backend/tests/integration/test_visual_portability.py` runs the latest artifact against a canvas-only workbench. Six positive cells cover compact cards and wide tables across Harbor and Summit at CSS viewports from `800×600` to `1920×1080`, with DPR values `1`, `1.25`, `1.5`, and `2`. Two recovery cells and five declared/fail-closed outcomes complete a 15-case browser suite; two additional tests assert the canvas-only surface and artifact shape. The suite must pass without a model call or DOM target.
+`backend/tests/integration/test_visual_portability.py` runs immutable artifacts against the
+canvas-only workbench. The original portability matrix contains six viewport/DPR cells, two
+recoveries, and five declared/fail-closed outcomes. Six more cells replay the transaction, payoff,
+and card-lock artifacts on both Harbor and Summit. Artifact-shape tests reject DOM targets,
+coordinates, and relative regions. Every case runs without a model call.
 
 | Fixture | Expected terminal behavior |
 |---|---|
@@ -102,7 +112,7 @@ No Playwright trace archive is committed. This is an explicit optional evidence 
 |---|---|---|
 | Mock-only browser tests | Rejected | Would not prove iframe, locator, navigation, or screenshot behavior |
 | Live-model tests on every CI run | Rejected | Non-deterministic, credentialed, and paid |
-| Unit fakes + real Chromium + committed live evidence | **Chosen** | Deterministic gates plus auditable proof of the one genuine model run |
+| Unit fakes + real Chromium + committed live evidence | **Chosen** | Deterministic gates plus auditable proof of four genuine model runs, including three distinct tasks |
 | Trust exported evidence files | Rejected | Hash and structure verification makes tampering or omission visible |
 | Store raw screenshots | Rejected | Evidence is masked before persistence |
 

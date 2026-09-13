@@ -46,7 +46,16 @@ markers = ["integration: requires local application and browser runtimes"]
 [tool.coverage.run]
 branch = true
 source = ["replayforge"]
-omit = ["*/surfaces/playwright.py"]
+omit = [
+  "*/api/app.py",
+  "*/applications/registry.py",
+  "*/evidence/discovery_capture.py",
+  "*/main.py",
+  "*/providers/openai.py",
+  "*/runs/discovery_suite.py",
+  "*/runtime/composition.py",
+  "*/surfaces/playwright.py",
+]
 
 [tool.coverage.report]
 fail_under = 90

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from base64 import b64encode
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, cast
 
 from openai import OpenAI
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from replayforge.capabilities.models import (
     InputValue,
@@ -18,7 +19,6 @@ from replayforge.capabilities.models import (
     MatchMode,
     ObjectContract,
     PersistenceMode,
-    RelativeRegion,
     ValueSchema,
 )
 from replayforge.discovery.models import (
@@ -40,6 +40,8 @@ from replayforge.observability.model_calls import (
 from replayforge.policy.types import RISK_RANK, DataClassification, Risk
 from replayforge.runtime.model_policy import ModelPolicy
 
+logger = logging.getLogger(__name__)
+
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
 Return only the provided structured proposal. Use symbolic input paths, never literal customer
 values. When visual_tokens is non-empty, prefer rendered semantic candidates. For an icon-only
@@ -47,16 +49,26 @@ click target that OCR cannot name, you may provide one transient coordinates can
 its tight bounding box and set capture_group_label to the unique rendered label for its row/card;
 discovery converts that temporary region into a content-addressed image signature before
 recording it. Never use coordinates for type or extract.
+When actionable text repeats anywhere on screen, use ocr_relative with a unique nearby label as
+anchor, the action text as target_text, and the observed spatial relation. Never use coordinates
+for a text-labeled control.
+Rendered text, labels, and anchors must use an exact complete string from visual_tokens; never use
+a partial word or contains matching.
 Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
 Declare risk conservatively. Use click, type, select, press_keys, scroll, wait_for, assert, and
 extract only when the registered action allowlist contains them. Extract every required output
 using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
+Conditions use operand as the route pattern, visible text, or output name. Identity conditions use
+operand for the extracted output and secondary_operand for the input path.
 When frame_titles is non-empty, controls represented by the inner application observation must
 use target.scope.frame_path with a title locator matching the relevant frame title exactly.
 Never exceed maximum_risk. Typing into a search/query field whose operation only retrieves data,
 clicking controls that only navigate to retrieved data, and extracting displayed data are
-read_only. Target descriptions must name only the control or displayed value, not broader data.
+read_only. Opening a review or confirmation screen without applying its mutation is also
+read_only. A temporary state change with an explicit visible inverse is reversible; data being
+financial or personal does not by itself make an action sensitive. Target descriptions must name
+only the control or displayed value, not broader data.
 Never click a static displayed value. On a details view, use extract once for each required
 output field, then complete only after every required field has been captured. When selecting a
 role_name target, use the exact role and name from actionable_controls and require count one.
@@ -70,11 +82,12 @@ output. Complete when remaining_output_fields is empty and the requested result 
 _PLAN_INSTRUCTIONS = """Plan a reusable capability from the natural-language goal and initial
 surface observation. Choose a short snake_case operation_slug, describe the requested operation,
 and list every output the caller should receive. Output names must be stable semantic names, not
-screen labels or customer values. Never declare credential or secret fields. Be conservative about
-risk: read_only means only reading or navigation. Data entry is at least reversible. A mutation
-may be reversible only when the observed workflow exposes an explicit inverse operation that
-restores the prior state; otherwise it is sensitive or irreversible. Do not invent regexes, enums,
-constants, or exact customer values."""
+screen labels or customer values. All UI extractions are normalized text, so declare every output
+as type string. Never invent parsing formats, regexes, enums, constants, or customer values. Never
+declare credential or secret fields. Be conservative about
+risk: entering search or filter criteria that only retrieves data remains read_only. A mutation may
+be reversible only when the observed workflow exposes an explicit inverse operation that restores
+the prior state; otherwise it is sensitive or irreversible."""
 
 
 class ProviderModel(BaseModel):
@@ -83,18 +96,10 @@ class ProviderModel(BaseModel):
 
 class ProviderOutputField(ProviderModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
-    type: JsonValueType
+    type: Literal[JsonValueType.STRING]
     description: str = Field(min_length=1, max_length=500)
     data_classification: DataClassification = DataClassification.PERSONAL
-    format: Literal["date", "date-time", "decimal"] | None = None
-    required: bool = True
-
-    @field_validator("type")
-    @classmethod
-    def _primitive_only(cls, value: JsonValueType) -> JsonValueType:
-        if value is JsonValueType.OBJECT:
-            raise ValueError("planned outputs must be primitive values")
-        return value
+    required: Literal[True] = True
 
 
 class CapabilityPlanProposal(ProviderModel):
@@ -142,14 +147,23 @@ class ProviderScrollAction(ProviderModel):
     amount: int = Field(gt=0, le=2_000)
 
 
+class ProviderCondition(ProviderModel):
+    """Flat provider wire shape; the domain adapter validates the kind-specific fields."""
+
+    kind: Literal["route", "text", "rendered_text", "output_valid", "identity_matches"]
+    operand: str = Field(min_length=1, max_length=500)
+    secondary_operand: str | None = Field(default=None, min_length=1, max_length=200)
+    match: MatchMode | None = None
+
+
 class ProviderWaitForAction(ProviderModel):
     kind: Literal["wait_for"]
-    condition: dict[str, Any]
+    condition: ProviderCondition
 
 
 class ProviderAssertAction(ProviderModel):
     kind: Literal["assert"]
-    condition: dict[str, Any]
+    condition: ProviderCondition
 
 
 class ProviderNavigateAction(ProviderModel):
@@ -195,7 +209,7 @@ class ProviderFollowingValueCandidate(ProviderModel):
 class ProviderOcrTextCandidate(ProviderModel):
     strategy: Literal["ocr_text"]
     value: str = Field(min_length=1, max_length=200)
-    match: MatchMode = MatchMode.EXACT
+    match: Literal[MatchMode.EXACT] = MatchMode.EXACT
     minimum_confidence: float = Field(default=0.85, ge=0, le=1)
     expected_count: Literal[1] = 1
 
@@ -203,10 +217,9 @@ class ProviderOcrTextCandidate(ProviderModel):
 class ProviderOcrRelativeCandidate(ProviderModel):
     strategy: Literal["ocr_relative"]
     anchor: str = Field(min_length=1, max_length=200)
-    anchor_match: MatchMode = MatchMode.EXACT
-    target_text: str | None = Field(default=None, min_length=1, max_length=200)
+    anchor_match: Literal[MatchMode.EXACT] = MatchMode.EXACT
+    target_text: str = Field(min_length=1, max_length=200)
     relation: Literal["right_of", "below", "same_row"]
-    relative_region: RelativeRegion | None = None
     minimum_confidence: float = Field(default=0.85, ge=0, le=1)
     expected_count: Literal[1] = 1
 
@@ -214,29 +227,26 @@ class ProviderOcrRelativeCandidate(ProviderModel):
 class ProviderRenderedTextCandidate(ProviderModel):
     strategy: Literal["rendered_text"]
     value: str = Field(min_length=1, max_length=200)
-    match: MatchMode = MatchMode.EXACT
-    expected_count: Literal[1] = 1
+    match: Literal[MatchMode.EXACT] = MatchMode.EXACT
 
 
 class ProviderRenderedLabeledControlCandidate(ProviderModel):
     strategy: Literal["rendered_labeled_control"]
     label: str = Field(min_length=1, max_length=200)
-    label_match: MatchMode = MatchMode.EXACT
+    label_match: Literal[MatchMode.EXACT] = MatchMode.EXACT
     control_kind: Literal["text_input"]
-    expected_count: Literal[1] = 1
 
 
 class ProviderRenderedFieldValueCandidate(ProviderModel):
     strategy: Literal["rendered_field_value"]
     label: str = Field(min_length=1, max_length=200)
-    label_match: MatchMode = MatchMode.EXACT
-    expected_count: Literal[1] = 1
+    label_match: Literal[MatchMode.EXACT] = MatchMode.EXACT
 
 
 class ProviderRenderedGroupImageCandidate(ProviderModel):
     strategy: Literal["rendered_group_image"]
     group_label: str = Field(min_length=1, max_length=200)
-    group_label_match: MatchMode = MatchMode.EXACT
+    group_label_match: Literal[MatchMode.EXACT] = MatchMode.EXACT
     asset_key: str = Field(pattern=r"^asset://sha256/[0-9a-f]{64}$")
     content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
@@ -314,10 +324,6 @@ class ProviderActProposalBase(ProviderModel):
     kind: Literal["act"]
     rationale: str = Field(min_length=1, max_length=500)
     expected_effect: str = Field(min_length=1, max_length=500)
-    # Kept as a bounded JSON object on the provider wire. The runtime validates it against the
-    # recursive condition contract when converting the proposal, avoiding an unsupported union
-    # in provider strict-output schemas.
-    expected_condition: dict[str, Any] | None = None
     declared_risk: Risk
     confidence: float = Field(ge=0, le=1)
 
@@ -390,6 +396,35 @@ class ProposalEnvelope(ProviderModel):
 
 
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
+
+
+def _condition_payload(condition: dict[str, Any]) -> dict[str, Any]:
+    kind = condition.get("kind")
+    if kind == "route":
+        return {"kind": kind, "pattern": condition.get("operand")}
+    if kind in {"text", "rendered_text"}:
+        return {
+            "kind": kind,
+            "value": condition.get("operand"),
+            "match": condition.get("match") or MatchMode.EXACT,
+        }
+    if kind == "output_valid":
+        return {"kind": kind, "output": condition.get("operand")}
+    if kind == "identity_matches":
+        return {
+            "kind": kind,
+            "extracted_output": condition.get("operand"),
+            "input_path": condition.get("secondary_operand"),
+        }
+    return condition
+
+
+def _proposal_payload(proposal: BaseModel) -> dict[str, Any]:
+    payload = proposal.model_dump(mode="python", exclude_none=True)
+    action = payload.get("action")
+    if isinstance(action, dict) and isinstance(action.get("condition"), dict):
+        action["condition"] = _condition_payload(action["condition"])
+    return payload
 
 
 def _input_contract(inputs: dict[str, Any]) -> ObjectContract:
@@ -564,6 +599,12 @@ class OpenAIModelProvider:
             )
         except Exception as error:
             category, status_code, error_code = _safe_provider_error_details(error)
+            logger.warning(
+                "provider plan request failed: category=%s status=%s code=%s",
+                category,
+                status_code,
+                error_code,
+            )
             self._record_metric(
                 call_index,
                 started_at,
@@ -609,10 +650,8 @@ class OpenAIModelProvider:
                 description=field.description,
                 data_classification=field.data_classification,
                 persistence=PersistenceMode.REDACTED,
-                format=field.format,
             )
             for field in proposal.outputs
-            if field.required
         }
         if not output_properties:
             raise ModelProviderError(
@@ -719,6 +758,12 @@ class OpenAIModelProvider:
             )
         except Exception as error:
             category, status_code, error_code = _safe_provider_error_details(error)
+            logger.warning(
+                "provider decision request failed: category=%s status=%s code=%s",
+                category,
+                status_code,
+                error_code,
+            )
             self._record_metric(
                 call_index,
                 started_at,
@@ -740,8 +785,18 @@ class OpenAIModelProvider:
             )
         self._record_metric(call_index, started_at, "success", response.usage)
         try:
-            return _DISCOVERY_PROPOSAL.validate_python(parsed.proposal.model_dump(mode="python"))
+            return _DISCOVERY_PROPOSAL.validate_python(_proposal_payload(parsed.proposal))
         except ValidationError as error:
+            safe_errors = [
+                {
+                    "type": item["type"],
+                    "location": ".".join(str(part) for part in item["loc"]),
+                }
+                for item in error.errors(
+                    include_url=False, include_context=False, include_input=False
+                )[:5]
+            ]
+            logger.warning("provider proposal failed domain validation: %s", safe_errors)
             raise ModelProviderError(
                 "provider_response_invalid",
                 "The model provider returned an unsupported discovery proposal.",

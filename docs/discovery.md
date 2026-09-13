@@ -85,9 +85,9 @@ Raw chain-of-thought is not requested or persisted. Provider errors are reduced 
 | Repeated state | Intervene after the configured repeated fingerprint limit |
 | Repeated action | Intervene after the configured equivalent-proposal limit |
 | Confidence | Intervene below `0.6` |
-| Model calls | Maximum `12` per run |
+| Model calls | Maximum `20` per run |
 | Provider timeout | `30s` per call |
-| Output tokens | Maximum `600` per call |
+| Output tokens | Maximum `1,200` per call |
 | Screenshot | Maximum `1.5 MiB` |
 
 The model policy is loaded from `config/model-policy.yaml`. API requests and environment variables cannot select a different model or enlarge these budgets.
@@ -121,17 +121,17 @@ primary goal
 typed draft ──► successful trace ──► optional observed scenarios
                                       │
                                       ▼
-                         deterministic finalization
-                         ├── read-only: publish
-                         └── other risk: operator approval
+                         deterministic validation
+                         ├── read-only or reversible: publish
+                         └── sensitive or irreversible: block
 ```
 
-The suite endpoints are `/api/v1/discovery-suites`, `/scenarios`, `/validations`, `/finalize`, and `/approve`. Compatibility variants are only added after a deterministic replay proof. The model may describe an observed branch; it cannot publish an unseen branch from speculation.
+The suite endpoints are `/api/v1/discovery-suites`, `/scenarios`, `/validations`, and `/finalize`. Compatibility variants are only added after a deterministic replay proof. The model may describe an observed branch; it cannot publish an unseen branch from speculation.
 
-Suite states are `collecting → validated → published` for read-only work, or
-`collecting → validated → pending_approval → published` for sensitive/reversible work.
-Irreversible drafts stop at finalization. A failed tenant replay is retained as sanitized drift
-metadata and never changes `supported_variants`.
+Suite states are `collecting → validated → published`, with `failed` terminal. Read-only and
+explicitly reversible work may publish after deterministic validation. Sensitive and irreversible
+drafts fail closed; there is no reviewer or approval stage after discovery. A failed tenant replay
+is retained as sanitized drift metadata and never changes `supported_variants`.
 
 ## Perception decision
 
@@ -143,7 +143,12 @@ metadata and never changes `supported_variants`.
 | Screenshot + local OCR + typed visual targets | **Chosen primary** | Pixel-grounded while remaining structured and replayable |
 | Compact semantic facts | Chosen fallback | Useful when the target exposes trustworthy roles and labels |
 
-On the canvas route, normalized DOM control lists are empty. The model receives the screenshot and OCR tokens, then proposes semantic candidates or one transient icon region. `capture_locator` compiles that region into a hashed signature before the successful step enters the trace. Replay later uses only rendered candidates and never calls the model.
+On the canvas route, application controls and values do not exist as DOM nodes. The model receives
+the screenshot and OCR tokens, then proposes semantic candidates. Named repeated actions use a
+unique OCR anchor plus target text; label/control and label/value relationships use a frame-local
+layout graph. A transient icon region is permitted only to create a content-addressed signature.
+Published schema `1.4` targets retain semantic identity, not coordinates or relative regions.
+Replay re-resolves every action from a fresh frame and never calls the model.
 
 ## Provider decision
 

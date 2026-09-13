@@ -9,7 +9,15 @@ raw model exchange       recorded successful trace       published capability
      discarded        ───────── compiler ─────────►   typed, hashed, reviewable
 ```
 
-An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click coordinate. The primary example is [`3.2.0.yaml`](../capabilities/member.lookup_savings_balance/3.2.0.yaml); its Pydantic definition is [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py). `3.0.0.yaml` and `3.1.0.yaml` remain immutable regression fixtures.
+An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click
+coordinate. The task-independent discovery examples are
+[`member.transaction_investigation`](../capabilities/member.transaction_investigation/1.0.0.yaml),
+[`member.loan_payoff_quote`](../capabilities/member.loan_payoff_quote/1.0.0.yaml), and
+[`member.temporary_card_lock`](../capabilities/member.temporary_card_lock/1.0.0.yaml). The last,
+including its verified inverse state, demonstrates reversible compilation. The earlier
+[`member.lookup_savings_balance/3.2.0`](../capabilities/member.lookup_savings_balance/3.2.0.yaml)
+remains the visual portability and failure fixture. All use the same Pydantic definition in
+[`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py).
 
 ## Shape
 
@@ -43,6 +51,14 @@ result success | business_outcome | failure | intervention_required
 ```
 
 Every required output must be bound by a main-flow extraction and checked by the final checkpoint. Artifact validation rejects a missing binding or check before a browser opens.
+
+The generic compiler has also produced these unrelated shapes without task-specific code:
+
+| Capability | Inputs | Outputs | Steps | Risk |
+|---|---|---|---:|---|
+| `member.transaction_investigation` | member, merchant, date, amount | reference, merchant, posted date, amount, currency, status | 15 | read-only |
+| `member.loan_payoff_quote` | member, payoff date | principal, interest, payoff amount, currency, good-through date | 11 | read-only |
+| `member.temporary_card_lock` | member, card suffix | card suffix, lock status, effective time, confirmation reference | 12 | reversible |
 
 ## Targeting
 

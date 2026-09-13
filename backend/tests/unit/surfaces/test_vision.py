@@ -144,6 +144,79 @@ def test_rendered_labeled_control_uses_detected_control_rectangle(tmp_path: Path
     assert resolved.region.y <= 80 <= resolved.region.y + resolved.region.height
 
 
+def test_rendered_text_prefers_unique_match_inside_a_control(tmp_path: Path) -> None:
+    image = np.full((240, 400, 3), 245, dtype=np.uint8)
+    cv2.rectangle(image, (130, 150), (300, 205), (20, 80, 140), 3)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    button = ScreenRegion(165, 165, 100, 22)
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Find Card", 0.99, ScreenRegion(20, 30, 120, 24)),
+            VisualToken("Find card", 0.99, button),
+        ),
+    )
+
+    resolved = vision.resolve(
+        RenderedTextCandidate(strategy="rendered_text", value="Find card"),
+        encoded.tobytes(),
+        Viewport(400, 240),
+    )
+
+    assert resolved.region == button
+
+
+def test_rendered_labeled_control_tolerates_ocr_box_touching_control(
+    tmp_path: Path,
+) -> None:
+    image = np.full((240, 400, 3), 245, dtype=np.uint8)
+    cv2.rectangle(image, (20, 108), (380, 158), (20, 80, 140), 3)
+    cv2.rectangle(image, (20, 180), (380, 230), (20, 80, 140), 3)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    vision = semantic_vision(
+        tmp_path, (VisualToken("Merchant", 0.99, ScreenRegion(20, 88, 90, 22)),)
+    )
+
+    resolved = vision.resolve(
+        RenderedLabeledControlCandidate(
+            strategy="rendered_labeled_control", label="Merchant", control_kind="text_input"
+        ),
+        encoded.tobytes(),
+        Viewport(400, 240),
+    )
+
+    assert resolved.region.y <= 108 <= resolved.region.y + resolved.region.height
+
+
+def test_rendered_labeled_control_accepts_input_shaped_container(tmp_path: Path) -> None:
+    image = np.full((240, 400, 3), 245, dtype=np.uint8)
+    cv2.rectangle(image, (20, 88), (380, 148), (20, 80, 140), 3)
+    cv2.rectangle(image, (20, 165), (380, 220), (20, 80, 140), 3)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Payoff date", 0.99, ScreenRegion(20, 78, 100, 22)),
+            VisualToken("Enter value", 0.99, ScreenRegion(35, 110, 90, 20)),
+        ),
+    )
+
+    resolved = vision.resolve(
+        RenderedLabeledControlCandidate(
+            strategy="rendered_labeled_control",
+            label="Payoff date",
+            control_kind="text_input",
+        ),
+        encoded.tobytes(),
+        Viewport(400, 240),
+    )
+
+    assert resolved.region.y <= 88 <= resolved.region.y + resolved.region.height
+
+
 def test_rendered_field_value_associates_horizontal_value(tmp_path: Path) -> None:
     vision = semantic_vision(
         tmp_path,
@@ -314,6 +387,55 @@ def test_ocr_relative_text_and_region_extraction(tmp_path: Path) -> None:
     with pytest.raises(SurfaceError) as error:
         vision.extract(b"frame", ScreenRegion(300, 200, 20, 20))
     assert error.value.code == "visual_text_absent"
+
+
+def test_ocr_relative_reconstructs_split_anchor_and_target_phrases(tmp_path: Path) -> None:
+    tokens = (
+        VisualToken("Primary", 0.99, ScreenRegion(20, 50, 55, 20)),
+        VisualToken("Checking", 0.98, ScreenRegion(82, 50, 70, 20)),
+        VisualToken("Open", 0.97, ScreenRegion(260, 50, 45, 20)),
+        VisualToken("card", 0.96, ScreenRegion(312, 50, 38, 20)),
+    )
+    vision = semantic_vision(tmp_path, tokens)
+
+    resolved = vision.resolve(
+        OcrRelativeCandidate(
+            strategy="ocr_relative",
+            anchor="Primary Checking",
+            target_text="Open card",
+            relation="same_row",
+        ),
+        blank_png(),
+        Viewport(400, 240),
+    )
+
+    assert resolved.region == ScreenRegion(260, 50, 90, 20)
+
+
+def test_ocr_relative_semantic_fallback_remains_fail_closed(tmp_path: Path) -> None:
+    tokens = (
+        VisualToken("Primary", 0.99, ScreenRegion(20, 50, 55, 20)),
+        VisualToken("Checking", 0.98, ScreenRegion(82, 50, 70, 20)),
+        VisualToken("Open", 0.97, ScreenRegion(240, 50, 45, 20)),
+        VisualToken("card", 0.96, ScreenRegion(292, 50, 38, 20)),
+        VisualToken("Open", 0.97, ScreenRegion(340, 50, 45, 20)),
+        VisualToken("card", 0.96, ScreenRegion(392, 50, 38, 20)),
+    )
+    vision = semantic_vision(tmp_path, tokens)
+
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            OcrRelativeCandidate(
+                strategy="ocr_relative",
+                anchor="Primary Checking",
+                target_text="Open card",
+                relation="same_row",
+            ),
+            blank_png(width=500),
+            Viewport(500, 240),
+        )
+
+    assert error.value.code == "target_ambiguous"
 
 
 def test_rapidocr_adapter_normalizes_polygons() -> None:

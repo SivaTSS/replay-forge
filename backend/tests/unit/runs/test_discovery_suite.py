@@ -1,10 +1,16 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from replayforge.capabilities.models import AllCondition, CapabilityArtifact, TextCondition
+from replayforge.capabilities.models import (
+    AllCondition,
+    CapabilityArtifact,
+    MatchMode,
+    TextCondition,
+)
 from replayforge.capabilities.registry import InMemoryCapabilityRegistry
 from replayforge.capabilities.serialization import load_artifact_yaml
-from replayforge.discovery.models import DiscoverySuccess
+from replayforge.discovery.engine import DiscoveryRequest
+from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
 from replayforge.runs.discovery_suite import DiscoverySuite, DiscoverySuiteService
@@ -13,10 +19,10 @@ from replayforge.shared.clock import FrozenClock
 
 
 class Executor:
-    def __init__(self, artifact):
+    def __init__(self, artifact: CapabilityArtifact) -> None:
         self.artifact = artifact
 
-    def execute(self, request):
+    def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
         return DiscoverySuccess(
             status="success",
             run_id=request.run_id,
@@ -58,7 +64,9 @@ def test_read_only_suite_publishes_only_at_finalize() -> None:
     assert suite.status == "collecting"
     snapshot = suite.snapshot()
     assert "12345" not in str(snapshot)
-    assert snapshot["artifact"]["output_fields"] == [
+    artifact_snapshot = snapshot["artifact"]
+    assert isinstance(artifact_snapshot, dict)
+    assert artifact_snapshot["output_fields"] == [
         "member_id",
         "account_type",
         "currency",
@@ -176,7 +184,7 @@ def test_finalize_preserves_validated_tenant_variant() -> None:
 def test_scenario_is_bound_to_a_verified_primary_prefix() -> None:
     path = "capabilities/member.lookup_savings_balance/1.0.0.yaml"
     primary_artifact = load_artifact_yaml(Path(path).read_text())
-    branch_condition = TextCondition(kind="text", value="No matching member", match="exact")
+    branch_condition = TextCondition(kind="text", value="No matching member", match=MatchMode.EXACT)
     branch_step = primary_artifact.steps[-1].model_copy(
         update={
             "postconditions": (

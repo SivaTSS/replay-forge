@@ -80,36 +80,56 @@ def _request_json(
         with urlopen(request, timeout=timeout_seconds + 30) as response:
             parsed = json.loads(response.read())
     except HTTPError as exc:
-        raise RuntimeError(f"discovery API returned HTTP {exc.code} for {path}") from exc
+        try:
+            error_payload = json.loads(exc.read())
+        except (json.JSONDecodeError, OSError):
+            error_payload = None
+        error_code = error_payload.get("code") if isinstance(error_payload, dict) else None
+        suffix = f" ({error_code})" if isinstance(error_code, str) else ""
+        raise RuntimeError(f"discovery API returned HTTP {exc.code}{suffix} for {path}") from exc
     if not isinstance(parsed, dict):
         raise RuntimeError("ReplayForge returned a non-object discovery result")
     return parsed
 
 
 def invoke_suite(
-    base_url: str, timeout_seconds: int, request: SuiteCaptureRequest
+    base_url: str,
+    timeout_seconds: int,
+    request: SuiteCaptureRequest,
+    suite_id: str | None = None,
 ) -> dict[str, Any]:
-    suite = _request_json(
-        base_url,
-        "/api/v1/discovery-suites",
-        timeout_seconds,
-        method="POST",
-        payload={
-            "goal": request.goal,
-            "application_family": request.application_family,
-            "tenant": request.tenant,
-            "entry_point": request.entry_point,
-            "inputs": request.inputs,
-            "max_steps": request.max_steps,
-            "timeout_seconds": timeout_seconds,
-        },
+    suite = (
+        _request_json(
+            base_url,
+            f"/api/v1/discovery-suites/{suite_id}",
+            timeout_seconds,
+        )
+        if suite_id is not None
+        else _request_json(
+            base_url,
+            "/api/v1/discovery-suites",
+            timeout_seconds,
+            method="POST",
+            payload={
+                "goal": request.goal,
+                "application_family": request.application_family,
+                "tenant": request.tenant,
+                "entry_point": request.entry_point,
+                "inputs": request.inputs,
+                "existing_capability_id": request.expected_capability_id,
+                "max_steps": request.max_steps,
+                "timeout_seconds": timeout_seconds,
+            },
+        )
     )
     suite_id = suite.get("suite_id")
     primary = suite.get("primary")
     if not isinstance(suite_id, str) or not isinstance(primary, dict):
         raise RuntimeError("discovery suite response is incomplete")
     if primary.get("status") != "success":
-        raise RuntimeError("model-driven discovery suite did not return success")
+        code = primary.get("code")
+        suffix = f" ({code})" if isinstance(code, str) else ""
+        raise RuntimeError(f"model-driven discovery suite did not return success{suffix}")
 
     for tenant in request.validation_tenants:
         suite = _request_json(
@@ -206,8 +226,9 @@ def capture_suite(
     timeout_seconds: int,
     artifact_output: Path,
     request: SuiteCaptureRequest,
+    suite_id: str | None = None,
 ) -> dict[str, str]:
-    response = invoke_suite(base_url, timeout_seconds, request)
+    response = invoke_suite(base_url, timeout_seconds, request, suite_id)
     primary = response["primary"]
     result = {
         "status": primary.get("status"),
@@ -217,13 +238,21 @@ def capture_suite(
     }
     artifact = validate_result(result)
     if artifact.capability.id != request.expected_capability_id:
-        raise RuntimeError("discovered capability ID does not match the reviewed demo contract")
+        raise RuntimeError(
+            "discovered capability ID does not match the configured capture contract"
+        )
     if artifact.capability.risk.value != request.expected_risk:
-        raise RuntimeError("discovered capability risk does not match the reviewed demo contract")
+        raise RuntimeError(
+            "discovered capability risk does not match the configured capture contract"
+        )
     if tuple(artifact.inputs.required) != request.expected_inputs:
-        raise RuntimeError("discovered input contract does not match the reviewed demo contract")
+        raise RuntimeError(
+            "discovered input contract does not match the configured capture contract"
+        )
     if tuple(artifact.outputs.required) != request.expected_outputs:
-        raise RuntimeError("discovered output contract does not match the reviewed demo contract")
+        raise RuntimeError(
+            "discovered output contract does not match the configured capture contract"
+        )
     supported = set(artifact.compatibility.supported_variants)
     required_tenants = {request.tenant, *request.validation_tenants}
     if not required_tenants.issubset(supported):

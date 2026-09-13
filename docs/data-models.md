@@ -195,7 +195,7 @@ flowchart LR
     E --> D[PolicyDecision]
     D --> A([allow])
     D --> N([deny])
-    D --> H([require human approval])
+    D --> H([require human intervention])
 
 ```
 

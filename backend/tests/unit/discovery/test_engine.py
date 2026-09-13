@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from replayforge.capabilities.models import CapabilityArtifact, ExtractAction, ObjectContract
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
@@ -15,7 +15,7 @@ from replayforge.discovery.models import (
     ProviderContext,
     RecordedDiscoveryStep,
 )
-from replayforge.discovery.ports import ModelProviderError
+from replayforge.discovery.ports import ModelProvider, ModelProviderError
 from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
@@ -27,6 +27,7 @@ from replayforge.runs.results import FailureResult, InterventionRequiredResult
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, SurfaceError
+from replayforge.surfaces.ports import SurfaceDriver
 from tests.unit.replay.test_engine import (
     FakeSurfaceDriver,
     FakeSurfaceSession,
@@ -102,8 +103,8 @@ def build_discovery(
     )
     return (
         DiscoveryEngine(
-            surface_driver=FakeSurfaceDriver(session),
-            model_provider=provider,
+            surface_driver=cast(SurfaceDriver, FakeSurfaceDriver(session)),
+            model_provider=cast(ModelProvider, provider),
             artifact_compiler=compiler,
             policy_evaluator=PolicyEvaluator(clock),
             effective_policy=policy,

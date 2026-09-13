@@ -160,7 +160,14 @@ The production path is rendered-surface first. Playwright is still the browser t
 
 `VisionGrounder` runs RapidOCR locally and resolves four geometry-free strategies: rendered text, a rendered label-to-control relation, a rendered label-to-value relation, and a rendered group label plus content-addressed visual signature. OCR phrases are rebuilt from the current frame; edge components are segmented from that same frame; relations use measured text height rather than saved offsets. Each result must be unique and satisfy the centrally loaded OCR, segmentation, similarity, pixel, and time budgets. Failure returns `target_absent` or `target_ambiguous`; replay never guesses.
 
-The `visual-terminal` demo route exposes the original workflow as one canvas with no usable control or value nodes. The `visual-workbench` route keeps that contract while switching between responsive cards and a wide table, rendering three account-row actions, and injecting delayed, notice, permission, ambiguity, changed-icon, and duplicate-label fixtures. Harbor and Summit change palette, font metrics, horizontal placement, and row order. Version `3.2.0` resolves the current rendered `Savings` label, ranks same-group visual components against a content-addressed signature, and dispatches the resulting CSS-pixel point only for that frame. No artifact target stores coordinates or target-specific geometry; new schema `1.4` artifacts reject them recursively while legacy `1.3` fixtures remain loadable.
+The `visual-workbench` route is one canvas-only servicing application, not three showcase apps. It
+supports transaction investigation, a dated loan payoff quote, and a reversible temporary card
+lock. Harbor and Summit vary palette, typography, placement, row order, and layout. The same
+task-independent engine plans each contract, records only actions that actually execute and verify,
+then compiles a distinct artifact. Geometry-free OCR relationships disambiguate repeated `Open`
+actions by the current account-row text; label/control and label/value relationships survive stacked
+and horizontal layouts. No artifact target stores coordinates or target-specific geometry; schema
+`1.4` rejects them recursively while legacy fixtures remain loadable.
 
 ## Decisions
 

@@ -12,7 +12,12 @@ flowchart LR
     R -. sensitive or stuck .-> H([Same-session human handoff])
 ```
 
-The implemented vertical slice searches a synthetic member-servicing application and returns a savings balance. Its primary `3.2.0` path operates a canvas-only workbench through local OCR, frame-local label relationships, and a content-addressed visual signature. It stores semantic identity—not target coordinates—and recomputes the current action region after every reflow. `3.0.0` and `3.1.0` remain immutable regression fixtures. DOM/accessibility targeting remains an optional web strategy for the earlier failure and handoff scenarios, never the primary path here.
+The canvas-only member workbench supports three non-trivial servicing tasks: investigate an exact
+transaction, calculate a dated loan payoff quote, and temporarily lock a selected card. Discovery
+creates a separate typed capability for each goal; the runtime and compiler contain no task names,
+route constants, output names, or required action order. Durable targets store semantic identity,
+never coordinates or relative regions, and are resolved again from each current frame. The earlier
+savings-balance versions remain immutable regression and handoff fixtures.
 
 ## What is real
 
@@ -77,7 +82,7 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 | Hard failure | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_hard_failure_run.py` | `failure/permission_denied` + masked frame |
 | Human handoff | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_handoff_run.py` | Claim, same-session input, resume, `success` |
 
-Omitting `version` selects the latest artifact, currently visual workbench `3.2.0`. Request `2.0.0` explicitly for the approval/handoff demonstration, `3.0.0` for the original visual-terminal regression path, or `3.1.0` for its prior repeated-row fixture.
+Omitting `version` selects the latest artifact, currently visual workbench `3.2.0`. Request `2.0.0` explicitly for the intervention/handoff demonstration, `3.0.0` for the original visual-terminal regression path, or `3.1.0` for its prior repeated-row fixture.
 
 ## Operator console
 
@@ -106,11 +111,11 @@ UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/bootstrap_langfuse_
 scripts/start_local_langfuse.sh
 ```
 
-Restart the runtime so it loads the credentials, keep the demo bank running, then capture discovery:
+Restart the runtime so it loads the credentials, keep the demo bank running, then discover,
+cross-tenant validate, finalize, and write all configured workflow artifacts:
 
 ```bash
-UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_discovery_run.py \
-  --artifact-output /tmp/replayforge-genuine-discovery.yaml
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_demo_workflows.py
 ```
 
 The reviewed [model policy](config/model-policy.yaml) fixes provider, model, reasoning effort, token/call limits, timeout, frame size, and cost ceiling. Requests cannot override it. Provider calls use strict structured output, no tools, and `store=false`.

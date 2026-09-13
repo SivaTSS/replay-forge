@@ -21,8 +21,7 @@ uv run mypy \
   scripts/capture_handoff_run.py \
   scripts/capture_hard_failure_run.py \
   scripts/capture_recovery_run.py
-uv run pytest --ignore=backend/tests/integration --cov=replayforge --cov-report=term-missing -q
 uv run python scripts/verify_evidence_bundles.py evidence
 npx --yes pnpm@10.15.1 typecheck
 npx --yes pnpm@10.15.1 build
-uv run pytest backend/tests/integration -q
+uv run pytest --cov=replayforge --cov-report=term-missing -q

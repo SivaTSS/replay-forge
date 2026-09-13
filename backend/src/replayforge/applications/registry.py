@@ -48,9 +48,7 @@ def _construct_unique_mapping(
     return mapping
 
 
-_UniqueKeySafeLoader.add_constructor(
-    BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
-)
+_UniqueKeySafeLoader.add_constructor(BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
 
 
 class ApplicationRegistry(Protocol):

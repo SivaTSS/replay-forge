@@ -623,8 +623,13 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
           text(context, account.maskedNumber, row.x + row.width * 0.28, row.y + row.height * 0.62, palette.ink, palette.font, false, 17);
           text(context, account.balance, row.x + row.width * 0.52, row.y + row.height * 0.62, palette.ink, palette.font, false, 17);
         }
-        if (account.kind === "savings" && memberFixtures[memberId]?.name === "changed_icon") changedIcon(context, icon, palette.accent);
-        else iconButton(context, icon, palette.accent);
+        if (account.kind === "savings" && memberFixtures[memberId]?.name === "changed_icon") {
+          changedIcon(context, icon, palette.accent);
+        } else if (account.kind === "savings") {
+          iconButton(context, icon, palette.accent);
+        } else {
+          button(context, "Open", icon, palette.accent, palette.font);
+        }
       });
       return;
     }
@@ -743,7 +748,11 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
   const onKey = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (!inputActive && !activeField) return;
     if (inputActive) {
-      if (/^[0-9]$/.test(event.key) && memberId.length < 10) setMemberId((value) => value + event.key);
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "a") {
+        setMemberId("");
+      } else if (/^[0-9]$/.test(event.key) && memberId.length < 10) {
+        setMemberId((value) => value + event.key);
+      }
       if (event.key === "Backspace") setMemberId((value) => value.slice(0, -1));
       if (event.key === "Enter") submitSearch();
     } else if (activeField) {
@@ -754,7 +763,9 @@ export function VisualWorkbench({ tenant }: { tenant: Tenant }) {
         payoffDate: setPayoffDate,
         cardLast4: setCardLast4,
       };
-      if (event.key.length === 1 && /^[A-Za-z0-9 .&$-]$/.test(event.key)) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "a") {
+        setters[activeField]("");
+      } else if (event.key.length === 1 && /^[A-Za-z0-9 .&$-]$/.test(event.key)) {
         setters[activeField]((value) => value + event.key);
       }
       if (event.key === "Backspace") setters[activeField]((value) => value.slice(0, -1));

@@ -33,8 +33,8 @@ class ModelPolicy(BaseModel):
     provider: Literal["openai"]
     model: Literal["gpt-5.6-luna"]
     reasoning_effort: Literal["low"]
-    max_output_tokens: int = Field(ge=256, le=1_000)
-    max_model_calls_per_run: int = Field(ge=1, le=12)
+    max_output_tokens: int = Field(ge=256, le=1_200)
+    max_model_calls_per_run: int = Field(ge=1, le=20)
     timeout_seconds: float = Field(ge=1, le=60)
     max_frame_bytes: int = Field(ge=64 * 1024, le=2 * 1024 * 1024)
     pricing: ModelPricing
@@ -49,8 +49,8 @@ class ModelPolicy(BaseModel):
             * self.pricing.output_per_unit
             / Decimal(self.pricing.unit_tokens)
         )
-        if maximum_output_cost > Decimal("0.01"):
-            raise ValueError("model policy exceeds the one-cent maximum output budget")
+        if maximum_output_cost > Decimal("0.03"):
+            raise ValueError("model policy exceeds the three-cent maximum output budget")
         return self
 
 

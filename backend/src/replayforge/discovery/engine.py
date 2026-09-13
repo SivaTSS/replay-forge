@@ -12,6 +12,7 @@ from replayforge.capabilities.models import (
     AssertAction,
     CapabilityArtifact,
     ExtractAction,
+    InputValue,
     Landmark,
     LiteralValue,
     ObjectContract,
@@ -125,7 +126,7 @@ class DiscoveryEngine:
             for _step_number in range(1, request.max_steps + 1):
                 if self.clock.now() - started_at >= request.timeout:
                     return self._failure(request, "discovery_timeout", "Time budget exhausted.")
-                self.lease_service.assert_can_act(
+                lease = self.lease_service.heartbeat(
                     session.session_id, lease.version, AUTOMATION_OWNER
                 )
                 observation = session.observe()
@@ -160,9 +161,7 @@ class DiscoveryEngine:
                         allowed_action_types=effective_policy.allowed_action_types,
                         output_contract=output_contract,
                         captured_output_names=tuple(
-                            name
-                            for name in output_contract.required
-                            if name in outputs
+                            name for name in output_contract.required if name in outputs
                         ),
                         maximum_risk=effective_policy.maximum_risk,
                     )
@@ -273,10 +272,26 @@ class DiscoveryEngine:
                         request.run_id,
                         details={"code": error.code, "effect_absent": True},
                     )
-                    history.append(
-                        f"Previous proposal was not executed ({error.code}); "
-                        "choose a different safe target."
-                    )
+                    # A safely rejected proposal made no UI progress and should not consume
+                    # the repeated-observation allowance for the next replanning attempt.
+                    previous_fingerprint = None
+                    repeated_state = 0
+                    if error.code == "target_ambiguous":
+                        history.append(
+                            "Previous proposal was not executed (target_ambiguous); use "
+                            "ocr_relative with a unique nearby anchor, the complete target_text, "
+                            "and its observed relation."
+                        )
+                    elif error.code == "risk_classification_unresolved":
+                        history.append(
+                            "Previous proposal was not executed: if the screen visibly proves an "
+                            "explicit inverse, retry with reversible risk; otherwise escalate."
+                        )
+                    else:
+                        history.append(
+                            f"Previous proposal was not executed ({error.code}); "
+                            "choose a different safe target."
+                        )
                     continue
                 if isinstance(act_result, InterventionRequiredResult):
                     preserve_session = True
@@ -321,13 +336,20 @@ class DiscoveryEngine:
             if not isinstance(draft, CapabilityDraftSpec):
                 raise ValueError("provider returned an invalid capability draft")
             if self.capability_id_resolver is not None:
-                expected_id = self.capability_id_resolver(
-                    request.application_family, draft.operation_slug
-                )
                 requested_id = request.existing_capability_id or draft.capability_id
-                if requested_id is not None and requested_id != expected_id:
-                    raise ValueError("capability id must belong to the registered namespace")
-                draft = draft.model_copy(update={"capability_id": expected_id})
+                if requested_id is None:
+                    capability_id = self.capability_id_resolver(
+                        request.application_family, draft.operation_slug
+                    )
+                else:
+                    requested_operation = requested_id.rsplit(".", 1)[-1]
+                    if (
+                        self.capability_id_resolver(request.application_family, requested_operation)
+                        != requested_id
+                    ):
+                        raise ValueError("capability id must belong to the registered namespace")
+                    capability_id = requested_id
+                draft = draft.model_copy(update={"capability_id": capability_id})
             elif request.existing_capability_id is not None:
                 if draft.capability_id not in {None, request.existing_capability_id}:
                     raise ValueError("provider capability id conflicts with the requested id")
@@ -461,6 +483,13 @@ class DiscoveryEngine:
         if decision.decision is Decision.DENY:
             return self._failure(request, "policy_blocked", decision.explanation)
         if decision.decision is Decision.REQUIRE_HUMAN_APPROVAL:
+            if decision.reason_code == "sensitive_action_requires_approval":
+                raise SurfaceError(
+                    "risk_classification_unresolved",
+                    "The proposal must identify a verified inverse or escalate before mutation.",
+                    recoverable=True,
+                    effect_absent=True,
+                )
             return self._intervene(
                 request,
                 session,
@@ -488,9 +517,7 @@ class DiscoveryEngine:
                 )
         verified_postconditions = []
         if isinstance(proposal.action, WaitForAction | AssertAction):
-            if not session.wait_until(
-                proposal.action.condition, outputs, request.inputs, 10_000
-            ):
+            if not session.wait_until(proposal.action.condition, outputs, request.inputs, 10_000):
                 return self._failure(
                     request,
                     "action_condition_not_verified",
@@ -498,9 +525,7 @@ class DiscoveryEngine:
                 )
             verified_postconditions.append(proposal.action.condition)
         if proposal.expected_condition is not None:
-            if not session.wait_until(
-                proposal.expected_condition, outputs, request.inputs, 10_000
-            ):
+            if not session.wait_until(proposal.expected_condition, outputs, request.inputs, 10_000):
                 return self._failure(
                     request,
                     "expected_condition_not_verified",
@@ -517,6 +542,11 @@ class DiscoveryEngine:
                     {output: outputs[output]},
                 )
             except (ContractValidationError, KeyError):
+                self.recorder.record(
+                    "output_validation_failed",
+                    request.run_id,
+                    details={"output": output},
+                )
                 return self._failure(request, "output_invalid", "The extracted output is invalid.")
             verified_postconditions.append(OutputValidCondition(kind="output_valid", output=output))
         after = session.observe()
@@ -532,7 +562,6 @@ class DiscoveryEngine:
             verified_postconditions=tuple(verified_postconditions),
         )
         return recorded, self._proposal_fingerprint(proposal)
-
 
     def _intervene(
         self,
@@ -587,7 +616,7 @@ class DiscoveryEngine:
         if not isinstance(proposal, ActProposal):
             return {"proposal_kind": proposal.kind}
         target = proposal.target
-        return {
+        summary: dict[str, object] = {
             "proposal_kind": proposal.kind,
             "action_type": proposal.action.kind,
             "declared_risk": proposal.declared_risk.value,
@@ -600,6 +629,14 @@ class DiscoveryEngine:
                 else []
             ),
         }
+        if isinstance(proposal.action, TypeAction) and isinstance(
+            proposal.action.value, InputValue
+        ):
+            summary["input_binding"] = proposal.action.value.path
+        if isinstance(proposal.action, ExtractAction):
+            summary["output_binding"] = proposal.action.output
+            summary["transform"] = proposal.action.transform
+        return summary
 
     @staticmethod
     def _transform(value: str, transform: str) -> str:

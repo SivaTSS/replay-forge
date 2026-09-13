@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from fastapi.testclient import TestClient
 
 from replayforge.api.app import create_app
-from replayforge.api.services import ApiServices
+from replayforge.api.services import ApiServices, DiscoverySuiteInvoker
 from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.capabilities.serialization import dump_artifact_yaml
@@ -334,7 +334,9 @@ def test_published_discovery_suite_artifact_is_downloadable(
     app = create_app(
         ApiServices(
             FakeReplayInvoker(),
-            discovery_suite_invoker=FakeDiscoverySuiteInvoker(artifact),
+            discovery_suite_invoker=cast(
+                DiscoverySuiteInvoker, FakeDiscoverySuiteInvoker(artifact)
+            ),
         )
     )
 

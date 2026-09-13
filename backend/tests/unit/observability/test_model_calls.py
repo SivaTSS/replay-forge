@@ -61,7 +61,7 @@ def test_local_telemetry_exports_only_safe_usage_cost_and_operational_metadata()
             "as_type": "generation",
             "name": "replayforge.discovery.decision",
             "model": "gpt-5.6-luna",
-            "model_parameters": {"max_output_tokens": 600, "reasoning_effort": "low"},
+            "model_parameters": {"max_output_tokens": 1200, "reasoning_effort": "low"},
             "metadata": {
                 "call_index": 2,
                 "latency_ms": 145,

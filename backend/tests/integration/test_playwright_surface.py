@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
+from typing import cast
 
 import pytest
 
@@ -38,6 +39,7 @@ from replayforge.discovery.models import (
     DiscoverySuccess,
     ProviderContext,
 )
+from replayforge.discovery.ports import ModelProvider
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.interventions.leases import (
@@ -135,7 +137,7 @@ def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> No
     run_id = str(new_id(EntityKind.RUN))
     engine = DiscoveryEngine(
         surface_driver=driver,
-        model_provider=provider,
+        model_provider=cast(ModelProvider, provider),
         artifact_compiler=SavingsBalanceCompiler(clock),
         policy_evaluator=PolicyEvaluator(clock),
         effective_policy=EffectivePolicy.intersect(

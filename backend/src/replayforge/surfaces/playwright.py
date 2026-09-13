@@ -191,9 +191,7 @@ class PlaywrightSurfaceDriver:
     def _verify_registered_landmarks(root: QueryRoot, launch: SurfaceLaunch) -> None:
         for landmark in launch.required_landmarks:
             if landmark.kind == "heading":
-                locator = cast(Any, root).get_by_role(
-                    "heading", name=landmark.value, exact=True
-                )
+                locator = cast(Any, root).get_by_role("heading", name=landmark.value, exact=True)
             elif landmark.kind in {"field", "label", "text"}:
                 locator = root.get_by_text(landmark.value, exact=True)
             else:
@@ -212,9 +210,7 @@ class PlaywrightSurfaceDriver:
                 ) from exc
         for landmark in launch.forbidden_landmarks:
             if landmark.kind == "heading":
-                locator = cast(Any, root).get_by_role(
-                    "heading", name=landmark.value, exact=True
-                )
+                locator = cast(Any, root).get_by_role("heading", name=landmark.value, exact=True)
             elif landmark.kind in {"field", "label", "text"}:
                 locator = root.get_by_text(landmark.value, exact=True)
             else:
@@ -237,10 +233,12 @@ class PlaywrightSurfaceDriver:
 
     def close(self) -> None:
         if self.browser is not None:
-            self.browser.close()
+            with suppress(PlaywrightError):
+                self.browser.close()
             self.browser = None
         if self.playwright is not None:
-            self.playwright.stop()
+            with suppress(PlaywrightError):
+                self.playwright.stop()
             self.playwright = None
         self.active_session = None
 
@@ -483,30 +481,39 @@ class PlaywrightSurfaceSession:
         if target.visual_candidates and self.vision is None:
             failures.append({"candidate": 0, "reason": "visual_grounder_unavailable"})
         elif self.vision is not None:
-            frame = self._capture_grounding_frame()
-            viewport = self._viewport()
-            for index, visual_candidate in enumerate(target.visual_candidates):
-                try:
-                    visual = self.vision.resolve(visual_candidate, frame, viewport)
-                except SurfaceError as error:
-                    failures.append(
-                        {
-                            "candidate": index,
-                            "strategy": visual_candidate.strategy,
-                            "reason": error.code,
-                        }
+            deadline = time.monotonic() + timeout_ms / 1_000
+            while True:
+                frame = self._capture_grounding_frame()
+                viewport = self._viewport()
+                visual_failures: list[dict[str, object]] = []
+                for index, visual_candidate in enumerate(target.visual_candidates):
+                    try:
+                        visual = self.vision.resolve(visual_candidate, frame, viewport)
+                    except SurfaceError as error:
+                        visual_failures.append(
+                            {
+                                "candidate": index,
+                                "strategy": visual_candidate.strategy,
+                                "reason": error.code,
+                            }
+                        )
+                        continue
+                    handle = f"target_{uuid4().hex}"
+                    self._visual_candidates[handle] = visual_candidate
+                    self._bundles[handle] = target
+                    return ResolvedTarget(
+                        handle=handle,
+                        description=target.description,
+                        candidate_index=index,
+                        observed_count=1,
+                        registered_risk=target.registered_risk,
+                        visual=visual,
                     )
-                    continue
-                handle = f"target_{uuid4().hex}"
-                self._visual_candidates[handle] = visual_candidate
-                self._bundles[handle] = target
-                return ResolvedTarget(
-                    handle=handle,
-                    description=target.description,
-                    candidate_index=index,
-                    observed_count=1,
-                    registered_risk=target.registered_risk,
-                    visual=visual,
+                failures = visual_failures
+                if not self.rendered_surface or time.monotonic() >= deadline:
+                    break
+                self.page.wait_for_timeout(
+                    min(100, max(1, round((deadline - time.monotonic()) * 1_000)))
                 )
 
         root = self._scoped_root(target)
@@ -564,7 +571,7 @@ class PlaywrightSurfaceSession:
         raise SurfaceError(
             "target_ambiguous" if ambiguous else "target_absent",
             "No locator candidate resolved exactly one actionable control.",
-            recoverable=not ambiguous,
+            recoverable=True,
             effect_absent=True,
             expected={"count": 1},
             observed={"candidates": failures},
@@ -579,6 +586,11 @@ class PlaywrightSurfaceSession:
             ) from exc
         candidate = self._coordinate_candidates.get(target.handle)
         if candidate is None:
+            if self.rendered_surface and target.visual is not None:
+                selected = bundle.visual_candidates[target.candidate_index]
+                return bundle.model_copy(
+                    update={"visual_candidates": (selected,), "candidates": ()}
+                )
             return bundle
         assert target.visual is not None
         if self.vision is None:
@@ -790,7 +802,8 @@ class PlaywrightSurfaceSession:
         self.page.screenshot(path=str(destination), full_page=True, scale="css")
 
     def close(self) -> None:
-        self.context.close()
+        with suppress(PlaywrightError):
+            self.context.close()
 
     def _application_frame(self) -> Frame | None:
         return next(

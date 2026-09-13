@@ -23,7 +23,6 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | `POST` | `/api/v1/discovery-suites/{id}/scenarios` | Adds observed outcome, failure, or recovery evidence |
 | `POST` | `/api/v1/discovery-suites/{id}/validations` | Runs deterministic compatibility validation |
 | `POST` | `/api/v1/discovery-suites/{id}/finalize` | Compiles and applies the publication risk gate |
-| `POST` | `/api/v1/discovery-suites/{id}/approve` | Publishes a hash-bound non-read-only draft |
 | `GET` | `/api/v1/capabilities/schema` | Returns the artifact JSON Schema |
 | `POST` | `/api/v1/capabilities/validate` | Parses, validates, and hashes supplied YAML |
 | `POST` | `/api/v1/capabilities/{id}/replays` | Runs replay synchronously; `202` only if paused |
@@ -96,7 +95,11 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 | Local evidence path in API | Rejected | Callers receive opaque `evidence://` keys rather than filesystem paths |
 | Public target | Rejected | Cannot guarantee availability, fault injection, or acceptable automation terms |
 
-The latest visual workbench is available at the registered `visual_member_workbench` entry point. It remains canvas-only and normalizes to the logical `/members/search` route for policy checks. Its acceptance matrix covers six CSS viewports, both tenants, and DPR values from `1` through `2`; each action is re-grounded from a fresh frame.
+The `visual_member_workbench` entry point is one canvas-only application with three substantial
+tasks: transaction investigation, loan payoff calculation, and temporary card locking. The first
+two are read-only; card locking is reversible because the same session exposes and verifies its
+inverse, `Unlock card`. The suite runner discovers each task independently, validates it on Harbor
+and Summit, and writes its own immutable artifact. No post-discovery reviewer exists.
 
 ## Failure behavior
 

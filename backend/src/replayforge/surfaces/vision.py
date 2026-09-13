@@ -131,6 +131,15 @@ class VisionGrounder:
                 candidate.search_region,
                 viewport,
             )
+            if len(anchors) != 1 and self.policy is not None:
+                anchors = self._semantic_matches_in_region(
+                    png,
+                    candidate.anchor,
+                    candidate.anchor_match,
+                    candidate.search_region,
+                    viewport,
+                    started,
+                )
             if len(anchors) != 1:
                 raise self._cardinality_error(len(anchors), "OCR anchor")
             anchor = anchors[0]
@@ -148,6 +157,20 @@ class VisionGrounder:
                     for token in targets
                     if self._has_relation(anchor, token, candidate.relation)
                 )
+                if len(related) != 1 and self.policy is not None:
+                    semantic_targets = self._semantic_matches_in_region(
+                        png,
+                        candidate.target_text,
+                        MatchMode.EXACT,
+                        candidate.search_region,
+                        viewport,
+                        started,
+                    )
+                    related = tuple(
+                        token
+                        for token in semantic_targets
+                        if self._has_relation(anchor, token, candidate.relation)
+                    )
                 return self._unique_text_target(related, "ocr_relative_text", frame_hash)
             assert candidate.relative_region is not None
             region = self._relative_region(anchor.region, candidate.relative_region, viewport)
@@ -156,6 +179,18 @@ class VisionGrounder:
             return self._match_template(candidate, png, viewport, frame_hash)
         if isinstance(candidate, RenderedTextCandidate):
             matches = self._semantic_matching_tokens(png, candidate.value, candidate.match, started)
+            if len(matches) > 1:
+                graph = self._layout_graph(png, viewport, started)
+                control_matches = tuple(
+                    match
+                    for match in matches
+                    if any(
+                        self._center_in(match.region, control.region)
+                        for control in graph.of_kind("control")
+                    )
+                )
+                if len(control_matches) == 1:
+                    matches = control_matches
             result = self._unique_text_target(matches, "rendered_text", frame_hash)
             self._check_deadline(started)
             return result
@@ -376,7 +411,7 @@ class VisionGrounder:
         return SurfaceError(
             "target_ambiguous" if count > 1 else "target_absent",
             f"{target} did not resolve exactly once.",
-            recoverable=count == 0,
+            recoverable=True,
             effect_absent=True,
             expected={"count": 1},
             observed={"count": count},
@@ -397,7 +432,22 @@ class VisionGrounder:
             raise self._cardinality_error(len(labels), "rendered control label")
         label = labels[0]
         graph = self._layout_graph(png, viewport, started)
-        controls = self._nodes_in_anchor_container(graph, label.region, "control")
+        policy = self._required_policy()
+        controls = (
+            *graph.of_kind("control"),
+            *(
+                node
+                for node in graph.of_kind("container")
+                if node.region.height
+                >= policy.segmentation.minimum_control_height_in_text_heights
+                * graph.median_text_height
+                and node.region.height
+                <= policy.association.maximum_following_gap_in_text_heights
+                * graph.median_text_height
+                and node.region.width / max(1, node.region.height)
+                >= policy.segmentation.minimum_control_aspect_ratio
+            ),
+        )
         best = self._select_structural_row(label.region, controls, graph.median_text_height)
         if len(best) != 1:
             raise self._cardinality_error(len(best), "rendered labeled control")
@@ -545,6 +595,21 @@ class VisionGrounder:
         for token in matches:
             unique[(self._normalize(token.text), token.region)] = token
         return tuple(unique.values())
+
+    def _semantic_matches_in_region(
+        self,
+        png: bytes,
+        value: str,
+        match: MatchMode,
+        search_region: NormalizedRegion | None,
+        viewport: Viewport,
+        started: float,
+    ) -> tuple[VisualToken, ...]:
+        matches = self._semantic_matching_tokens(png, value, match, started)
+        if search_region is None:
+            return matches
+        region = self._normalized_region(search_region, viewport)
+        return tuple(token for token in matches if self._center_in(token.region, region))
 
     def _semantic_phrases(
         self, png: bytes, policy: VisionGroundingPolicy, started: float
@@ -775,8 +840,16 @@ class VisionGrounder:
         policy = self._required_policy().association
         same_row: list[VisualNode] = []
         following: list[VisualNode] = []
+        tolerance = policy.row_tolerance_in_text_heights * median_height
+        border_overlap_tolerance = median_height
         for candidate in candidates:
-            if self._region_iou(anchor, candidate.region) > 0:
+            # OCR boxes can extend a few pixels into a control's border.  Treat
+            # that scale-relative overlap as "following" while still rejecting
+            # a control that actually contains the label (for example a button).
+            if (
+                self._center_in(anchor, candidate.region)
+                and anchor.center[1] - candidate.region.y > border_overlap_tolerance
+            ):
                 continue
             vertical_overlap = self._overlap_length(
                 anchor.y,
@@ -807,7 +880,7 @@ class VisionGrounder:
             gap = candidate.region.y - (anchor.y + anchor.height)
             if (
                 horizontal_overlap > 0
-                and gap >= 0
+                and gap >= -border_overlap_tolerance
                 and gap <= policy.maximum_following_gap_in_text_heights * median_height
             ):
                 following.append(candidate)
@@ -816,7 +889,6 @@ class VisionGrounder:
         if not following:
             return ()
         nearest_y = min(node.region.y for node in following)
-        tolerance = policy.row_tolerance_in_text_heights * median_height
         return tuple(node for node in following if abs(node.region.y - nearest_y) <= tolerance)
 
     def _associated_value_tokens(

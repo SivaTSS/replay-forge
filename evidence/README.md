@@ -14,6 +14,9 @@ runtime action
 | Bundle | Terminal result | What it proves |
 |---|---|---|
 | [`discovery-success`](discovery-success/) | `success` | Genuine OpenAI-guided discovery compiled a typed eight-step artifact |
+| [`discovery-transaction-investigation`](discovery-transaction-investigation/) | `success` | Genuine OpenAI discovery compiled the 15-step transaction capability |
+| [`discovery-loan-payoff`](discovery-loan-payoff/) | `success` | Genuine OpenAI discovery compiled the 11-step payoff capability |
+| [`discovery-temporary-card-lock`](discovery-temporary-card-lock/) | `success` | Genuine OpenAI discovery compiled and validated the reversible 12-step card-lock capability |
 | [`replay-success`](replay-success/) | `success` | Version `1.0.0` replayed without model decisions and verified five outputs |
 | [`replay-member-not-found`](replay-member-not-found/) | `business_outcome` | A legitimate “no member” state is not reported as a crash |
 | [`replay-recovery`](replay-recovery/) | `success` | Version `1.0.1` used one declared interstitial recovery |

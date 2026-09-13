@@ -29,6 +29,7 @@ from replayforge.capabilities.models import (
     OutputValidCondition,
     PersistenceMode,
     Provenance,
+    RenderedFieldValueCandidate,
     RenderedTextCondition,
     RetryPolicy,
     RouteCondition,
@@ -463,19 +464,24 @@ class TraceArtifactCompiler:
                     "rendered_field_value",
                     "rendered_group_image",
                 }
+                or (
+                    candidate.strategy == "ocr_relative"
+                    and candidate.target_text is not None
+                    and candidate.relative_region is None
+                    and candidate.search_region is None
+                )
                 for candidate in step.target.visual_candidates
             )
             for step in steps
             if step.target is not None and step.target.visual_candidates
         )
         compiled_steps = tuple(
-            self._compile_step(index, recording)
-            for index, recording in enumerate(steps, start=1)
+            self._compile_step(index, recording) for index, recording in enumerate(steps, start=1)
         )
-        risk = max(
-            (draft.risk, *(recording.risk for recording in steps)),
-            key=lambda value: RISK_RANK[value],
-        )
+        # Capability risk describes effects that were actually executed and policy-evaluated.
+        # The planning model's conservative task guess must not upgrade an observed read-only
+        # trace into a sensitive capability.
+        risk = max((recording.risk for recording in steps), key=lambda value: RISK_RANK[value])
         if maximum_risk is not None and RISK_RANK[risk] > RISK_RANK[maximum_risk]:
             raise CompilationError("trace risk exceeds the registered policy ceiling")
         if allowed_action_types is not None and any(
@@ -559,9 +565,7 @@ class TraceArtifactCompiler:
             ),
             inputs=draft.inputs,
             outputs=draft.outputs,
-            preconditions=(
-                RouteCondition(kind="route", pattern=starting_route),
-            ),
+            preconditions=(RouteCondition(kind="route", pattern=starting_route),),
             steps=compiled_steps,
             checkpoint=Checkpoint(
                 id=f"{draft.operation_slug}_verified",
@@ -628,12 +632,9 @@ class TraceArtifactCompiler:
             action = recording.action
             if recording.target is None and action.kind in {"click", "type", "select", "extract"}:
                 raise CompilationError("every target action requires a stable target")
-            if (
-                isinstance(action, TypeAction | SelectAction)
-                and isinstance(
-                    action.value if isinstance(action, TypeAction) else action.option,
-                    InputValue,
-                )
+            if isinstance(action, TypeAction | SelectAction) and isinstance(
+                action.value if isinstance(action, TypeAction) else action.option,
+                InputValue,
             ):
                 source = action.value if isinstance(action, TypeAction) else action.option
                 assert isinstance(source, InputValue)
@@ -646,7 +647,9 @@ class TraceArtifactCompiler:
                     raise CompilationError("trace extracts an output more than once")
                 extracted.add(action.output)
             literal_source = (
-                action.value if isinstance(action, TypeAction) else action.option
+                action.value
+                if isinstance(action, TypeAction)
+                else action.option
                 if isinstance(action, SelectAction)
                 else None
             )
@@ -706,8 +709,7 @@ def _route_matches(route: str, pattern: str) -> bool:
     if len(route_parts) != len(pattern_parts):
         return False
     return all(
-        pattern_part in {"*"} or pattern_part.startswith(":")
-        or pattern_part == route_part
+        pattern_part in {"*"} or pattern_part.startswith(":") or pattern_part == route_part
         for route_part, pattern_part in zip(route_parts, pattern_parts, strict=True)
     )
 
@@ -723,9 +725,7 @@ def _surface_conditions(condition: Condition) -> tuple[Condition, ...]:
         return (condition,)
     if isinstance(condition, AllCondition | AnyCondition):
         return tuple(
-            nested
-            for item in condition.conditions
-            for nested in _surface_conditions(item)
+            nested for item in condition.conditions for nested in _surface_conditions(item)
         )
     if isinstance(condition, NotCondition):
         nested = _surface_conditions(condition.condition)
@@ -743,6 +743,27 @@ def _latest_surface_condition(
             surface_conditions = _surface_conditions(condition)
             if surface_conditions:
                 return condition
+    # Resolving and extracting a rendered labeled value verifies that its structural
+    # label exists exactly once. Use the full set of those verified labels as the
+    # completion signature when the provider did not propose a separate assertion.
+    labels: list[str] = []
+    for recording in steps:
+        if not isinstance(recording.action, ExtractAction) or recording.target is None:
+            continue
+        for candidate in recording.target.visual_candidates:
+            if isinstance(candidate, RenderedFieldValueCandidate) and candidate.label not in labels:
+                labels.append(candidate.label)
+                break
+    if labels:
+        conditions = tuple(
+            RenderedTextCondition(kind="rendered_text", value=label, match=MatchMode.EXACT)
+            for label in labels
+        )
+        return (
+            conditions[0]
+            if len(conditions) == 1
+            else AllCondition(kind="all", conditions=conditions)
+        )
     return None
 
 

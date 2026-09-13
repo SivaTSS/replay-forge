@@ -8,9 +8,9 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Live LLM loop | Evidenced | `DiscoveryEngine` + `OpenAIModelProvider` | `evidence/discovery-success` |
 | Real UI actions | Evidenced | Chromium mouse/keyboard on iframe and canvas surfaces | Local synthetic target |
 | Bias beyond clean DOM | Implemented, tested | Local OCR, frame-local layout graph, canonical visual signatures | Canonical flow has no DOM targets |
-| Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Six committed immutable versions |
+| Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Legacy fixtures plus independently discovered task artifacts |
 | Robust control identity | Implemented | Rendered text, label relations, frame-local components, canonical signature, uniqueness gate | Fails closed on absent or ambiguous matches |
-| Typed inputs/outputs | Implemented | Closed object contracts and runtime validation | Five outputs on success |
+| Typed inputs/outputs | Implemented | Closed object contracts and runtime validation | Distinct contracts for balance, transaction, payoff, and card tasks |
 | Success checkpoint | Evidenced | Route, visible text, output validity, input/output identity | `replay-success` |
 | Model-free replay | Evidenced | `ReplayEngine` has no provider import | Structural test + bundle |
 | Business outcome | Evidenced | `member_not_found` detector | Dedicated bundle |
@@ -25,7 +25,7 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Explicit ownership | Evidenced | TTL lease, owner, version, CAS | Conflict/race tests |
 | Safe resume | Evidenced for replay | Fresh location, postcondition, and changed-fingerprint checks | Discovery continuation is cut |
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
-| Canvas visual control | Implemented, tested | Two canvas-only routes; latest workbench uses geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
+| Canvas visual control | Implemented, tested | One canvas-only workbench exposes three substantial tasks using geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
 | Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
 | Multi-tenant reuse | Evidenced | `3.2.0` uses one artifact across Harbor and Summit with reordered rows | 15-case visual/DPR matrix |
 | Per-tenant drift/overlays | Designed only | Compatibility landmarks and surface fingerprint fields | No overlay repository or automatic drift gate |
@@ -60,6 +60,9 @@ goal
 ## Important non-claims
 
 - The canonical demo surface is one canvas; Playwright still provides browser transport and input dispatch.
+- A new task in the registered bank needs a goal and discovery run, not a task-specific compiler,
+  entry-point edit, or runtime code change. A new application still needs one policy-reviewed
+  registration; a new surface contract still needs an adapter.
 - Rendered OCR, label relations, and visual signatures execute today; legacy image anchors remain supported; accessibility-path and native desktop adapters do not.
 - Compatibility fingerprints are recorded; startup/runtime drift enforcement is not implemented.
 - Operational metadata is not durable across process restart.

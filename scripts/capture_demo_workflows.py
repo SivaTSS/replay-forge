@@ -34,6 +34,7 @@ def main() -> None:
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--spec", type=Path, default=Path("config/demo-discovery.yaml"))
     parser.add_argument("--workflow", action="append", help="Workflow key; omit to capture all")
+    parser.add_argument("--resume-suite", help="Resume validation for one existing suite ID")
     arguments = parser.parse_args()
     if not 10 <= arguments.timeout_seconds <= 600:
         parser.error("timeout must be between 10 and 600 seconds")
@@ -45,6 +46,8 @@ def main() -> None:
     unknown = sorted(set(selected) - set(workflows))
     if unknown:
         parser.error(f"unknown workflow: {', '.join(unknown)}")
+    if arguments.resume_suite and len(selected) != 1:
+        parser.error("--resume-suite requires exactly one --workflow")
 
     summaries: dict[str, dict[str, str]] = {}
     for name in selected:
@@ -58,6 +61,7 @@ def main() -> None:
             arguments.timeout_seconds,
             output,
             _workflow_request(item),
+            arguments.resume_suite,
         )
     print(json.dumps(summaries, sort_keys=True))
 

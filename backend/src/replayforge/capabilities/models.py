@@ -672,15 +672,21 @@ _GEOMETRY_FREE_CANDIDATE_TYPES = (
 )
 
 
+def _is_geometry_free_candidate(candidate: VisualLocatorCandidate) -> bool:
+    return isinstance(candidate, _GEOMETRY_FREE_CANDIDATE_TYPES) or (
+        isinstance(candidate, OcrRelativeCandidate)
+        and candidate.target_text is not None
+        and candidate.relative_region is None
+        and candidate.search_region is None
+    )
+
+
 def _validate_geometry_free_target(target: LocatorBundle) -> None:
     if target.candidates:
         raise ValueError("schema 1.3 visual targets cannot contain DOM or coordinate locators")
     if not target.visual_candidates:
         raise ValueError("schema 1.3 visual targets require rendered candidates")
-    if not all(
-        isinstance(candidate, _GEOMETRY_FREE_CANDIDATE_TYPES)
-        for candidate in target.visual_candidates
-    ):
+    if not all(_is_geometry_free_candidate(candidate) for candidate in target.visual_candidates):
         raise ValueError("schema 1.3 visual targets require geometry-free rendered candidates")
 
 

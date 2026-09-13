@@ -22,8 +22,8 @@ def test_loads_reviewed_cost_sensitive_policy() -> None:
 
     assert policy.model == "gpt-5.6-luna"
     assert policy.reasoning_effort == "low"
-    assert policy.max_model_calls_per_run == 12
-    assert policy.max_output_tokens == 600
+    assert policy.max_model_calls_per_run == 20
+    assert policy.max_output_tokens == 1200
     assert str(policy.pricing.input_per_unit) == "0.20"
     assert str(policy.pricing.output_per_unit) == "1.20"
 
@@ -33,8 +33,8 @@ def test_loads_reviewed_cost_sensitive_policy() -> None:
     [
         ({"model": "gpt-6-astra"}, "gpt-5.6-luna"),
         ({"reasoning_effort": "max"}, "low"),
-        ({"max_model_calls_per_run": 13}, "less than or equal to 12"),
-        ({"max_output_tokens": 1_001}, "less than or equal to 1000"),
+        ({"max_model_calls_per_run": 21}, "less than or equal to 20"),
+        ({"max_output_tokens": 1_201}, "less than or equal to 1200"),
     ],
 )
 def test_rejects_unreviewed_or_excessive_policy(

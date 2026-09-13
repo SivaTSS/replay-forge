@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -46,6 +46,7 @@ from replayforge.surfaces.models import (
     SurfaceError,
     Viewport,
 )
+from replayforge.surfaces.ports import SurfaceDriver, SurfaceSession
 
 
 @dataclass
@@ -252,7 +253,7 @@ def build_engine(
     recorder = MemoryRecorder()
     router = MemoryInterventionRouter()
     engine = ReplayEngine(
-        surface_driver=FakeSurfaceDriver(session),
+        surface_driver=cast(SurfaceDriver, FakeSurfaceDriver(session)),
         policy_evaluator=PolicyEvaluator(clock),
         effective_policy=policy,
         lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
@@ -676,7 +677,7 @@ def test_replay_continuation_validates_index(valid_artifact_data: dict[str, Any]
     invalid = ReplayContinuation(
         intervention_id=str(new_id(EntityKind.INTERVENTION)),
         request=request_for(valid_artifact_data),
-        session=session,
+        session=cast(SurfaceSession, session),
         inputs={"member_id": "12345"},
         outputs={},
         recovery_uses={},

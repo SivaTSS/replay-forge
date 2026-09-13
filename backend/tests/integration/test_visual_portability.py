@@ -52,6 +52,76 @@ def invoke_visual_workbench(
     return runtime, result
 
 
+@pytest.mark.parametrize("tenant", ["harbor", "summit"])
+@pytest.mark.parametrize(
+    ("capability_id", "inputs", "expected_outputs"),
+    [
+        (
+            "member.transaction_investigation",
+            {
+                "member_id": "12345",
+                "merchant": "Northwind Market",
+                "transaction_date": "2026-09-08",
+                "amount": "84.27",
+            },
+            {
+                "transaction_reference": "TXN-80419",
+                "merchant": "Northwind Market",
+                "posted_date": "2026-09-08",
+                "amount": "84.27",
+                "currency": "USD",
+                "status": "Posted",
+            },
+        ),
+        (
+            "member.loan_payoff_quote",
+            {"member_id": "12345", "payoff_date": "2026-09-20"},
+            {
+                "principal_balance": "7800.00",
+                "accrued_interest": "21.40",
+                "payoff_amount": "7821.40",
+                "currency": "USD",
+                "good_through_date": "2026-09-20",
+            },
+        ),
+        (
+            "member.temporary_card_lock",
+            {"member_id": "12345", "card_last4": "0110"},
+            {
+                "card_last4": "0110",
+                "lock_status": "Temporarily locked",
+                "effective_at": "2026-09-13T14:00:00Z",
+                "confirmation_reference": "LOCK-0110-0913",
+            },
+        ),
+    ],
+)
+def test_discovered_workflows_replay_across_registered_tenants(
+    demo_bank: str,
+    tmp_path: Path,
+    tenant: str,
+    capability_id: str,
+    inputs: dict[str, str],
+    expected_outputs: dict[str, str],
+) -> None:
+    viewport = Viewport(1280, 800, 1.0)
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=REPOSITORY / "capabilities",
+            capability_asset_directory=REPOSITORY / "capabilities/_assets",
+            evidence_directory=evidence_path(tmp_path, tenant, viewport),
+            demo_base_url=demo_bank,
+        )
+    )
+    try:
+        result = runtime.service.invoke(capability_id, "1.0.0", tenant, inputs)
+        assert isinstance(result, SuccessResult)
+        assert result.outputs == expected_outputs
+        assert result.checkpoint.verified
+    finally:
+        runtime.close()
+
+
 @pytest.mark.parametrize(
     ("tenant", "viewport"),
     [
@@ -200,9 +270,19 @@ def test_visual_workbench_exposes_only_a_canvas(demo_bank: str) -> None:
         driver.close()
 
 
-def test_visual_workbench_artifact_has_no_semantic_or_coordinate_targets() -> None:
-    artifact = load_artifact_yaml(ARTIFACT_PATH.read_text())
-    assert artifact.capability.version == "3.2.0"
+@pytest.mark.parametrize(
+    "artifact_path",
+    [
+        ARTIFACT_PATH,
+        REPOSITORY / "capabilities/member.transaction_investigation/1.0.0.yaml",
+        REPOSITORY / "capabilities/member.loan_payoff_quote/1.0.0.yaml",
+        REPOSITORY / "capabilities/member.temporary_card_lock/1.0.0.yaml",
+    ],
+)
+def test_visual_workbench_artifacts_have_only_geometry_free_targets(
+    artifact_path: Path,
+) -> None:
+    artifact = load_artifact_yaml(artifact_path.read_text())
     assert all(
         step.target is not None and step.target.visual_candidates and not step.target.candidates
         for step in (*artifact.steps, *(s for r in artifact.recoveries for s in r.steps))
@@ -215,8 +295,11 @@ def test_visual_workbench_artifact_has_no_semantic_or_coordinate_targets() -> No
             "rendered_labeled_control",
             "rendered_field_value",
             "rendered_group_image",
+            "ocr_relative",
         }
         for step in (*artifact.steps, *(s for r in artifact.recoveries for s in r.steps))
         if step.target is not None
         for candidate in step.target.visual_candidates
     )
+    assert "coordinates" not in artifact.model_dump_json()
+    assert "relative_region" not in artifact.model_dump_json(exclude_none=True)
