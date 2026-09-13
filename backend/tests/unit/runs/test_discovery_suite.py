@@ -1,5 +1,8 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from replayforge.capabilities.models import (
     AllCondition,
@@ -13,7 +16,11 @@ from replayforge.discovery.engine import DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
-from replayforge.runs.discovery_suite import DiscoverySuite, DiscoverySuiteService
+from replayforge.runs.discovery_suite import (
+    DiscoverySuite,
+    DiscoverySuiteService,
+    DiscoverySuiteStatus,
+)
 from replayforge.runs.results import FailureResult
 from replayforge.shared.clock import FrozenClock
 
@@ -62,6 +69,7 @@ def test_read_only_suite_publishes_only_at_finalize() -> None:
     )
 
     assert suite.status == "collecting"
+    assert suite.suite_id.startswith("sui_")
     snapshot = suite.snapshot()
     assert "12345" not in str(snapshot)
     artifact_snapshot = snapshot["artifact"]
@@ -76,6 +84,24 @@ def test_read_only_suite_publishes_only_at_finalize() -> None:
     assert service.finalize(suite.suite_id).status == "published"
 
 
+def test_suite_rejects_contradictory_lifecycle_state() -> None:
+    service = service_for("capabilities/member.lookup_savings_balance/1.0.0.yaml")
+    suite = service.create(
+        goal="Look up a member balance",
+        application_family="northstar_member_service",
+        tenant="harbor",
+        entry_point="member_search",
+        inputs={"member_id": "12345"},
+        max_steps=20,
+        timeout_seconds=60,
+    )
+
+    with pytest.raises(ValueError, match="require an artifact"):
+        replace(suite, status=DiscoverySuiteStatus.VALIDATED)
+    with pytest.raises(ValueError, match="only a published suite"):
+        replace(suite, published_version="1.0.0")
+
+
 def test_suite_snapshot_omits_failure_values_and_free_text() -> None:
     failure = FailureResult(
         status="failure",
@@ -88,14 +114,14 @@ def test_suite_snapshot_omits_failure_values_and_free_text() -> None:
         observed={"screen": "Customer 12345"},
     )
     suite = DiscoverySuite(
-        suite_id="run_suite",
+        suite_id="sui_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         goal="Find member 12345",
         application_family="northstar_member_service",
         tenant="harbor",
         entry_point="member_search",
         primary_inputs={"member_id": "12345"},
         primary=failure,
-        status="failed",
+        status=DiscoverySuiteStatus.FAILED,
     )
 
     snapshot = suite.snapshot()

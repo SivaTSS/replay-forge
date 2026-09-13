@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from threading import Lock
 from typing import Any, Literal, Protocol
 
@@ -24,10 +26,28 @@ from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import RISK_RANK, Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
 from replayforge.runs.results import FailureResult, InterventionRequiredResult
-from replayforge.shared.ids import EntityKind, new_id
+from replayforge.shared.ids import EntityKind, new_id, parse_id
 
 ScenarioKind = Literal["business_outcome", "application_failure", "recovery"]
-SuiteStatus = Literal["collecting", "validated", "published", "failed"]
+
+
+class DiscoverySuiteStatus(StrEnum):
+    COLLECTING = "collecting"
+    VALIDATED = "validated"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class CompatibilityValidationFailure:
+    tenant: str
+    reason_code: str
+
+    def __post_init__(self) -> None:
+        if re.fullmatch(r"[a-z][a-z0-9_-]{1,63}", self.tenant) is None:
+            raise ValueError("validation failure tenant is invalid")
+        if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.reason_code) is None:
+            raise ValueError("validation failure reason code is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +57,12 @@ class DiscoveryScenario:
     code: str
     description: str
     result: DiscoveryResult
+
+    def __post_init__(self) -> None:
+        if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.code) is None:
+            raise ValueError("discovery scenario code is invalid")
+        if not self.goal.strip() or not self.description.strip():
+            raise ValueError("discovery scenario requires a goal and description")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,9 +76,60 @@ class DiscoverySuite:
     primary: DiscoveryResult
     scenarios: tuple[DiscoveryScenario, ...] = ()
     artifact: CapabilityArtifact | None = None
-    status: SuiteStatus = "collecting"
+    status: DiscoverySuiteStatus = DiscoverySuiteStatus.COLLECTING
     published_version: str | None = None
-    validation_failures: tuple[dict[str, str], ...] = ()
+    validation_failures: tuple[CompatibilityValidationFailure, ...] = ()
+
+    def __post_init__(self) -> None:
+        parse_id(self.suite_id, EntityKind.SUITE)
+        if not isinstance(self.status, DiscoverySuiteStatus):
+            raise ValueError("discovery suite status must use the domain enum")
+        if not self.goal.strip():
+            raise ValueError("discovery suite goal cannot be empty")
+        identifiers = (
+            (self.application_family, r"[a-z][a-z0-9_]{1,63}"),
+            (self.tenant, r"[a-z][a-z0-9_-]{1,63}"),
+            (self.entry_point, r"[a-z][a-z0-9_]{1,63}"),
+        )
+        if any(re.fullmatch(pattern, value) is None for value, pattern in identifiers):
+            raise ValueError("discovery suite routing identity is invalid")
+        if len({scenario.code for scenario in self.scenarios}) != len(self.scenarios):
+            raise ValueError("discovery scenario codes must be unique")
+        primary_succeeded = isinstance(self.primary, DiscoverySuccess)
+        if self.scenarios and not primary_succeeded:
+            raise ValueError("discovery scenarios require a successful primary run")
+        if (
+            self.status
+            in {
+                DiscoverySuiteStatus.COLLECTING,
+                DiscoverySuiteStatus.VALIDATED,
+                DiscoverySuiteStatus.PUBLISHED,
+            }
+            and not primary_succeeded
+        ):
+            raise ValueError("active discovery suite requires a successful primary run")
+        if (
+            self.status
+            in {
+                DiscoverySuiteStatus.VALIDATED,
+                DiscoverySuiteStatus.PUBLISHED,
+            }
+            and self.artifact is None
+        ):
+            raise ValueError("validated and published suites require an artifact")
+        if self.status is DiscoverySuiteStatus.PUBLISHED:
+            assert self.artifact is not None
+            if self.published_version != self.artifact.capability.version:
+                raise ValueError("published suite version must match its artifact")
+        elif self.published_version is not None:
+            raise ValueError("only a published suite may declare a published version")
+        draft = self.primary.artifact if isinstance(self.primary, DiscoverySuccess) else None
+        candidate = self.artifact or draft
+        if (
+            candidate is not None
+            and candidate.capability.application_family != self.application_family
+        ):
+            raise ValueError("suite artifact belongs to a different application family")
 
     def snapshot(self) -> dict[str, object]:
         primary = self.primary
@@ -63,7 +140,7 @@ class DiscoverySuite:
         )
         return {
             "suite_id": self.suite_id,
-            "status": self.status,
+            "status": self.status.value,
             "application_family": self.application_family,
             "tenant": self.tenant,
             "entry_point": self.entry_point,
@@ -79,7 +156,10 @@ class DiscoverySuite:
             ],
             "artifact": artifact_snapshot,
             "published_version": self.published_version,
-            "validation_failures": list(self.validation_failures),
+            "validation_failures": [
+                {"tenant": failure.tenant, "reason": failure.reason_code}
+                for failure in self.validation_failures
+            ],
         }
 
 
@@ -158,14 +238,18 @@ class DiscoverySuiteService:
             existing_capability_id=existing_capability_id,
         )
         suite = DiscoverySuite(
-            suite_id=str(new_id(EntityKind.RUN)),
+            suite_id=str(new_id(EntityKind.SUITE)),
             goal=goal,
             application_family=application_family,
             tenant=tenant,
             entry_point=entry_point,
             primary_inputs=dict(inputs),
             primary=result,
-            status="collecting" if isinstance(result, DiscoverySuccess) else "failed",
+            status=(
+                DiscoverySuiteStatus.COLLECTING
+                if isinstance(result, DiscoverySuccess)
+                else DiscoverySuiteStatus.FAILED
+            ),
         )
         self._store.save(suite)
         return suite
@@ -190,7 +274,10 @@ class DiscoverySuiteService:
             raise DiscoverySuiteError("scenario kind is not supported")
         if not isinstance(suite.primary, DiscoverySuccess):
             raise DiscoverySuiteError("a scenario requires a successful primary discovery")
-        if suite.status not in {"collecting", "validated"}:
+        if suite.status not in {
+            DiscoverySuiteStatus.COLLECTING,
+            DiscoverySuiteStatus.VALIDATED,
+        }:
             raise DiscoverySuiteError("suite is no longer collecting scenarios")
         result = self.discovery.discover(
             goal=goal,
@@ -214,14 +301,17 @@ class DiscoverySuiteService:
             suite,
             scenarios=(*suite.scenarios, scenario),
             artifact=None,
-            status="collecting",
+            status=DiscoverySuiteStatus.COLLECTING,
         )
         self._store.save(updated)
         return updated
 
     def finalize(self, suite_id: str) -> DiscoverySuite:
         suite = self.get(suite_id)
-        if suite.status not in {"collecting", "validated"}:
+        if suite.status not in {
+            DiscoverySuiteStatus.COLLECTING,
+            DiscoverySuiteStatus.VALIDATED,
+        }:
             raise DiscoverySuiteError("suite is not ready for finalization")
         if not isinstance(suite.primary, DiscoverySuccess):
             raise DiscoverySuiteError("cannot finalize an unsuccessful primary discovery")
@@ -230,7 +320,7 @@ class DiscoverySuiteService:
         except ValueError as error:
             raise DiscoverySuiteError("scenario evidence could not be merged safely") from error
         if artifact.capability.risk in {Risk.SENSITIVE, Risk.IRREVERSIBLE}:
-            updated = replace(suite, artifact=artifact, status="failed")
+            updated = replace(suite, artifact=artifact, status=DiscoverySuiteStatus.FAILED)
             self._store.save(updated)
             raise DiscoverySuiteError(
                 "sensitive and irreversible capability drafts cannot be published"
@@ -238,14 +328,14 @@ class DiscoverySuiteService:
         if self.validator is None:
             raise DiscoverySuiteError("final deterministic replay validation is unavailable")
         if not self.validator(artifact, suite.tenant, suite.primary_inputs):
-            self._record_validation_failure(suite, suite.tenant, "primary replay failed")
+            self._record_validation_failure(suite, suite.tenant, "primary_replay_failed")
             raise DiscoverySuiteError("final deterministic replay did not pass")
         published = self.registry.publish_next(artifact)
         artifact = published.artifact
         updated = replace(
             suite,
             artifact=artifact,
-            status="published",
+            status=DiscoverySuiteStatus.PUBLISHED,
             published_version=artifact.capability.version,
         )
         self._store.save(updated)
@@ -253,7 +343,10 @@ class DiscoverySuiteService:
 
     def validate(self, suite_id: str, *, tenant: str, inputs: dict[str, Any]) -> DiscoverySuite:
         suite = self.get(suite_id)
-        if suite.status not in {"collecting", "validated"}:
+        if suite.status not in {
+            DiscoverySuiteStatus.COLLECTING,
+            DiscoverySuiteStatus.VALIDATED,
+        }:
             raise DiscoverySuiteError("suite is not accepting compatibility validations")
         if not isinstance(suite.primary, DiscoverySuccess):
             raise DiscoverySuiteError("a scenario requires a successful primary discovery")
@@ -265,7 +358,7 @@ class DiscoverySuiteService:
         if self.validator is None:
             raise DiscoverySuiteError("deterministic compatibility validation is unavailable")
         if not self.validator(artifact, tenant, inputs):
-            self._record_validation_failure(suite, tenant, "compatibility replay failed")
+            self._record_validation_failure(suite, tenant, "compatibility_replay_failed")
             raise DiscoverySuiteError("compatibility replay did not pass")
         if tenant not in artifact.compatibility.supported_variants:
             compatibility = artifact.compatibility.model_copy(
@@ -285,7 +378,7 @@ class DiscoverySuiteService:
                 }
             )
             artifact = CapabilityArtifact.model_validate(artifact.model_dump(mode="python"))
-        updated = replace(suite, artifact=artifact, status="validated")
+        updated = replace(suite, artifact=artifact, status=DiscoverySuiteStatus.VALIDATED)
         self._store.save(updated)
         return updated
 
@@ -299,16 +392,21 @@ class DiscoverySuiteService:
         except ValueError as error:
             raise DiscoverySuiteError("application target is not registered") from error
 
-    def _record_validation_failure(self, suite: DiscoverySuite, tenant: str, reason: str) -> None:
+    def _record_validation_failure(
+        self, suite: DiscoverySuite, tenant: str, reason_code: str
+    ) -> None:
         updated = replace(
             suite,
-            validation_failures=(*suite.validation_failures, {"tenant": tenant, "reason": reason}),
+            validation_failures=(
+                *suite.validation_failures,
+                CompatibilityValidationFailure(tenant, reason_code),
+            ),
         )
         self._store.save(updated)
 
     def published_artifact(self, suite_id: str) -> CapabilityArtifact:
         suite = self.get(suite_id)
-        if suite.status != "published" or suite.artifact is None:
+        if suite.status is not DiscoverySuiteStatus.PUBLISHED or suite.artifact is None:
             raise DiscoverySuiteError("suite artifact is not published")
         return suite.artifact
 

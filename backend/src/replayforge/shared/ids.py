@@ -12,6 +12,7 @@ EntityId = NewType("EntityId", str)
 
 class EntityKind(StrEnum):
     RUN = "run"
+    SUITE = "sui"
     SESSION = "ses"
     INTERVENTION = "int"
     EVIDENCE = "evd"
