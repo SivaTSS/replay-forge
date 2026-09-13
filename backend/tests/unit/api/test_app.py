@@ -194,6 +194,7 @@ def test_machine_schema_endpoint_returns_versioned_contract() -> None:
         "1.1",
         "1.2",
         "1.3",
+        "1.4",
     ]
 
 

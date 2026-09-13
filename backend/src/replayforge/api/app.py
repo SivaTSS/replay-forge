@@ -14,6 +14,9 @@ from replayforge.api.contracts import (
     ArtifactValidationRequest,
     ArtifactValidationResponse,
     DiscoveryInvocation,
+    DiscoverySuiteApproval,
+    DiscoverySuiteScenario,
+    DiscoverySuiteValidation,
     ErrorBody,
     HealthResponse,
     HumanInputRequest,
@@ -49,6 +52,7 @@ from replayforge.interventions.service import (
     InterventionAuthorizationError,
     InterventionTransition,
 )
+from replayforge.runs.discovery_suite import DiscoverySuiteError
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import (
     HumanInput,
@@ -112,6 +116,7 @@ def create_app(services: ApiServices) -> FastAPI:
     for not_found_error in (InterventionNotFoundError, LeaseNotFoundError):
         app.add_exception_handler(not_found_error, _intervention_not_found)
     app.add_exception_handler(HumanInputConflictError, _human_input_conflict)
+    app.add_exception_handler(DiscoverySuiteError, _discovery_suite_conflict)
     for conflict_error in (
         LeaseConflictError,
         InterventionConflictError,
@@ -157,6 +162,70 @@ def create_app(services: ApiServices) -> FastAPI:
             return JSONResponse(payload, status_code=200)
         status_code = 202 if result.status == "intervention_required" else 200
         return JSONResponse(result.model_dump(mode="json"), status_code=status_code)
+
+    @app.post("/api/v1/discovery-suites")
+    def create_discovery_suite(request: Request, body: DiscoveryInvocation) -> JSONResponse:
+        invoker = services.discovery_suite_invoker
+        if invoker is None or not invoker.ready():
+            return _error_response(
+                request,
+                status_code=503,
+                code="discovery_not_ready",
+                message="The configured discovery service is unavailable.",
+                retryable=True,
+            )
+        suite = invoker.create(**body.model_dump())
+        return JSONResponse(suite.snapshot(), status_code=200)
+
+    @app.get("/api/v1/discovery-suites/{suite_id}")
+    def get_discovery_suite(request: Request, suite_id: str) -> JSONResponse:
+        invoker = _discovery_suite_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return JSONResponse(invoker.get(suite_id).snapshot(), status_code=200)
+
+    @app.post("/api/v1/discovery-suites/{suite_id}/scenarios")
+    def add_discovery_scenario(
+        request: Request, suite_id: str, body: DiscoverySuiteScenario
+    ) -> JSONResponse:
+        invoker = _discovery_suite_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        suite = invoker.add_scenario(suite_id, **body.model_dump())
+        return JSONResponse(suite.snapshot(), status_code=200)
+
+    @app.post("/api/v1/discovery-suites/{suite_id}/finalize")
+    def finalize_discovery_suite(request: Request, suite_id: str) -> JSONResponse:
+        invoker = _discovery_suite_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return JSONResponse(invoker.finalize(suite_id).snapshot(), status_code=200)
+
+    @app.post("/api/v1/discovery-suites/{suite_id}/validations")
+    def validate_discovery_suite(
+        request: Request, suite_id: str, body: DiscoverySuiteValidation
+    ) -> JSONResponse:
+        invoker = _discovery_suite_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return JSONResponse(
+            invoker.validate(suite_id, tenant=body.tenant, inputs=body.inputs).snapshot(),
+            status_code=200,
+        )
+
+    @app.post("/api/v1/discovery-suites/{suite_id}/approve")
+    def approve_discovery_suite(
+        request: Request, suite_id: str, body: DiscoverySuiteApproval
+    ) -> JSONResponse:
+        invoker = _discovery_suite_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        suite = invoker.approve(
+            suite_id,
+            operator_id=body.operator_id,
+            expected_hash=body.expected_hash,
+        )
+        return JSONResponse(suite.snapshot(), status_code=200)
 
     @app.get("/api/v1/capabilities/schema")
     def capability_schema() -> dict[str, Any]:
@@ -401,6 +470,16 @@ async def _human_input_conflict(request: Request, error: Exception) -> JSONRespo
     )
 
 
+async def _discovery_suite_conflict(request: Request, error: Exception) -> JSONResponse:
+    del error
+    return _error_response(
+        request,
+        status_code=409,
+        code="discovery_suite_conflict",
+        message="The discovery suite cannot perform that transition.",
+    )
+
+
 def _intervention_invoker(request: Request, services: ApiServices) -> Any:
     if services.intervention_invoker is not None:
         return services.intervention_invoker
@@ -409,6 +488,18 @@ def _intervention_invoker(request: Request, services: ApiServices) -> Any:
         status_code=503,
         code="intervention_runtime_unavailable",
         message="The intervention runtime is unavailable.",
+        retryable=True,
+    )
+
+
+def _discovery_suite_invoker(request: Request, services: ApiServices) -> Any:
+    if services.discovery_suite_invoker is not None:
+        return services.discovery_suite_invoker
+    return _error_response(
+        request,
+        status_code=503,
+        code="discovery_suite_unavailable",
+        message="The discovery suite service is unavailable.",
         retryable=True,
     )
 

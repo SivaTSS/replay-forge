@@ -27,8 +27,32 @@ class DiscoveryInvocation(ApiModel):
     tenant: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
     entry_point: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
     inputs: dict[str, Any]
+    existing_capability_id: str | None = Field(
+        default=None,
+        pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$",
+    )
     max_steps: int = Field(default=20, ge=1, le=50)
     timeout_seconds: int = Field(default=120, ge=10, le=600)
+
+
+class DiscoverySuiteScenario(ApiModel):
+    kind: Literal["business_outcome", "application_failure", "recovery"]
+    goal: str = Field(min_length=10, max_length=1_000)
+    inputs: dict[str, Any]
+    code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    description: str | None = Field(default=None, min_length=1, max_length=500)
+    max_steps: int = Field(default=20, ge=1, le=50)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
+
+
+class DiscoverySuiteApproval(ApiModel):
+    operator_id: str = Field(pattern=r"^[A-Za-z0-9_.@-]{2,100}$")
+    expected_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class DiscoverySuiteValidation(ApiModel):
+    tenant: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
+    inputs: dict[str, Any]
 
 
 class ArtifactValidationRequest(ApiModel):

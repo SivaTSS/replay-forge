@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+import pytest
+
 from replayforge.capabilities.models import CapabilityArtifact
-from replayforge.capabilities.registry import InMemoryCapabilityRegistry
+from replayforge.capabilities.registry import CapabilityNotFoundError, InMemoryCapabilityRegistry
+from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.engine import DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.runs.discovery_service import DiscoveryApplicationService
@@ -76,6 +80,31 @@ def test_failed_discovery_is_not_published(valid_artifact_data: dict[str, Any]) 
 
     assert isinstance(result, FailureResult)
     assert not service.ready()
+
+
+def test_one_shot_discovery_cannot_bypass_sensitive_approval() -> None:
+    artifact = load_artifact_yaml(
+        Path("capabilities/member.lookup_savings_balance/2.0.0.yaml").read_text()
+    )
+    registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
+    service = DiscoveryApplicationService(
+        registry, lambda run_id: Executor(artifact, True), lambda: True
+    )
+
+    result = service.invoke(
+        goal="Discover a sensitive operation safely",
+        application_family="northstar_member_service",
+        tenant="harbor_credit_union",
+        entry_point="member_search",
+        inputs={"member_id": "12345"},
+        max_steps=20,
+        timeout_seconds=120,
+    )
+
+    assert isinstance(result, FailureResult)
+    assert result.code == "discovery_suite_required"
+    with pytest.raises(CapabilityNotFoundError):
+        registry.versions(artifact.capability.id)
 
 
 def test_success_is_finalized_after_publishing_next_version(

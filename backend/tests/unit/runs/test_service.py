@@ -123,3 +123,18 @@ def test_terminal_result_is_finalized_after_execution(valid_artifact_data: dict[
     assert isinstance(result, FailureResult)
     assert finalized == [result.run_id]
     assert result.evidence_manifest == "evidence://final/manifest"
+
+
+def test_unpublished_artifact_validation_uses_an_ephemeral_tenant_allowance(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    service, executors = _service(valid_artifact_data)
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    original_variants = artifact.compatibility.supported_variants
+
+    service.validate_artifact(artifact, "new_tenant", {"member_id": "12345"})
+
+    request = executors[0].request
+    assert request is not None
+    assert "new_tenant" in request.artifact.compatibility.supported_variants
+    assert artifact.compatibility.supported_variants == original_variants
