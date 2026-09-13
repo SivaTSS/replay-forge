@@ -318,6 +318,16 @@ class VisionGrounder:
         label = labels[0]
         components = self._visual_components(png, viewport)
         median_height = self._median_text_height(self._tokens(png))
+        # Ignore text glyph contours and the enclosing card. The group image
+        # signature describes a visual component with dimensions comparable to
+        # the label height, not the entire responsive row.
+        components = tuple(
+            component
+            for component in components
+            if component.region.height >= median_height * 1.8
+            and component.region.width >= median_height * 1.8
+            and self._region_iou(component.region, label.region) == 0
+        )
         # Edge maps also contain the glyphs that formed the label and any
         # placeholder text inside the control. A text input is the larger
         # frame-local component, so reject text-sized contours before applying
@@ -620,10 +630,12 @@ class VisionGrounder:
     def _image_relation(
         label: ScreenRegion, component: ScreenRegion, median_height: float
     ) -> tuple[int, float] | None:
-        vertical_overlap = VisionGrounder._overlap_length(
-            label.y, label.y + label.height, component.y, component.y + component.height
-        )
-        if vertical_overlap >= min(label.height, component.height) * 0.5 and component.x >= label.x:
+        label_center_y = label.y + label.height / 2
+        component_center_y = component.y + component.height / 2
+        if (
+            component.x >= label.x + label.width
+            and abs(component_center_y - label_center_y) <= 2.5 * median_height
+        ):
             return 0, max(0.0, component.x - (label.x + label.width)) / max(1.0, median_height)
         horizontal_overlap = VisionGrounder._overlap_length(
             label.x, label.x + label.width, component.x, component.x + component.width

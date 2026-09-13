@@ -397,7 +397,7 @@ class PlaywrightSurfaceSession:
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}
         return SurfaceFrame(
             content=self.capture_provider_frame(),
-            viewport=Viewport(viewport["width"], viewport["height"]),
+            viewport=Viewport(viewport["width"], viewport["height"], self.viewport.device_scale),
         )
 
     def execute_human_input(self, action: HumanInput) -> None:
