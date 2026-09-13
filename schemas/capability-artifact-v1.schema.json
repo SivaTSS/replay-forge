@@ -391,10 +391,13 @@
       "additionalProperties": false,
       "properties": {
         "application_family": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
           "title": "Application Family",
           "type": "string"
         },
         "description": {
+          "maxLength": 1000,
+          "minLength": 1,
           "title": "Description",
           "type": "string"
         },
@@ -404,6 +407,8 @@
           "type": "string"
         },
         "name": {
+          "maxLength": 200,
+          "minLength": 1,
           "title": "Name",
           "type": "string"
         },
@@ -604,14 +609,17 @@
       "additionalProperties": false,
       "properties": {
         "application_family": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
           "title": "Application Family",
           "type": "string"
         },
         "base_variant": {
+          "pattern": "^[a-z][a-z0-9_-]{1,63}$",
           "title": "Base Variant",
           "type": "string"
         },
         "entry_point": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
           "title": "Entry Point",
           "type": "string"
         },
@@ -632,6 +640,7 @@
           "type": "array"
         },
         "surface_contract": {
+          "pattern": "^[a-z][a-z0-9_.-]{1,63}$",
           "title": "Surface Contract",
           "type": "string"
         }
@@ -1767,6 +1776,8 @@
           "title": "Artifact Content Hash"
         },
         "compiler_version": {
+          "maxLength": 100,
+          "minLength": 1,
           "title": "Compiler Version",
           "type": "string"
         },
@@ -1776,30 +1787,42 @@
           "type": "string"
         },
         "discovery_run_id": {
+          "pattern": "^run_[0-9a-f]{32}$",
           "title": "Discovery Run Id",
           "type": "string"
         },
         "evidence_manifest_key": {
+          "pattern": "^evidence://[^\\s]+$",
           "title": "Evidence Manifest Key",
           "type": "string"
         },
         "model": {
+          "maxLength": 200,
+          "minLength": 1,
           "title": "Model",
           "type": "string"
         },
         "prompt_policy_version": {
+          "maxLength": 100,
+          "minLength": 1,
           "title": "Prompt Policy Version",
           "type": "string"
         },
         "provider": {
+          "maxLength": 100,
+          "minLength": 1,
           "title": "Provider",
           "type": "string"
         },
         "surface_adapter_version": {
+          "maxLength": 100,
+          "minLength": 1,
           "title": "Surface Adapter Version",
           "type": "string"
         },
         "target_fingerprint": {
+          "maxLength": 200,
+          "minLength": 1,
           "title": "Target Fingerprint",
           "type": "string"
         }
@@ -2645,7 +2668,17 @@
         "enum": {
           "default": [],
           "items": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
           },
           "title": "Enum",
           "type": "array"

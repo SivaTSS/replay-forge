@@ -15,6 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from replayforge.policy.types import RISK_RANK, DataClassification, Risk
 
+_FIELD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_STABLE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
+
 
 class ArtifactModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
@@ -48,7 +51,7 @@ class ValueSchema(ArtifactModel):
     additional_properties: Literal[False] = False
     pattern: str | None = None
     format: Literal["date", "date-time", "decimal"] | None = None
-    enum: tuple[str, ...] = ()
+    enum: tuple[str | int | bool, ...] = ()
     const: str | int | bool | None = None
     min_length: int | None = Field(default=None, ge=0)
     max_length: int | None = Field(default=None, ge=0)
@@ -60,8 +63,28 @@ class ValueSchema(ArtifactModel):
             unknown = set(self.required) - self.properties.keys()
             if unknown:
                 raise ValueError(f"required properties are not declared: {sorted(unknown)}")
+            if self.pattern is not None or self.format is not None or self.enum:
+                raise ValueError("object schemas cannot declare scalar constraints")
+            if self.const is not None or self.min_length is not None or self.max_length is not None:
+                raise ValueError("object schemas cannot declare scalar constraints")
+            if self.example is not None:
+                raise ValueError("object schema examples are not supported")
         elif self.properties or self.required:
             raise ValueError("only object schemas may declare properties or required fields")
+        if len(set(self.required)) != len(self.required):
+            raise ValueError("required properties must be unique")
+        invalid_properties = [
+            name for name in self.properties if not _FIELD_NAME_PATTERN.fullmatch(name)
+        ]
+        if invalid_properties:
+            raise ValueError(f"property names are invalid: {sorted(invalid_properties)}")
+        if self.type is not JsonValueType.STRING and (
+            self.pattern is not None
+            or self.format is not None
+            or self.min_length is not None
+            or self.max_length is not None
+        ):
+            raise ValueError("only string schemas may declare string constraints")
         if (
             self.min_length is not None
             and self.max_length is not None
@@ -73,6 +96,16 @@ class ValueSchema(ArtifactModel):
                 re.compile(self.pattern)
             except re.error as exc:
                 raise ValueError("pattern must be a valid regular expression") from exc
+        if len(set(self.enum)) != len(self.enum):
+            raise ValueError("enum values must be unique")
+        if any(not _matches_json_type(self.type, item) for item in self.enum):
+            raise ValueError("enum values must match the declared value type")
+        if self.const is not None and not _matches_json_type(self.type, self.const):
+            raise ValueError("const must match the declared value type")
+        if self.example is not None and not _matches_json_type(self.type, self.example):
+            raise ValueError("example must match the declared value type")
+        if self.const is not None and self.enum and self.const not in self.enum:
+            raise ValueError("const must be included in enum")
         return self
 
 
@@ -87,7 +120,24 @@ class ObjectContract(ArtifactModel):
         unknown = set(self.required) - self.properties.keys()
         if unknown:
             raise ValueError(f"required properties are not declared: {sorted(unknown)}")
+        if len(set(self.required)) != len(self.required):
+            raise ValueError("required properties must be unique")
+        invalid_properties = [
+            name for name in self.properties if not _FIELD_NAME_PATTERN.fullmatch(name)
+        ]
+        if invalid_properties:
+            raise ValueError(f"property names are invalid: {sorted(invalid_properties)}")
         return self
+
+
+def _matches_json_type(value_type: JsonValueType, value: object) -> bool:
+    if value_type is JsonValueType.STRING:
+        return isinstance(value, str)
+    if value_type is JsonValueType.INTEGER:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if value_type is JsonValueType.BOOLEAN:
+        return isinstance(value, bool)
+    return False
 
 
 class InputValue(ArtifactModel):
@@ -187,6 +237,26 @@ class LocatorCandidate(ArtifactModel):
                 raise ValueError("coordinate region must fit inside the recorded viewport")
             if self.portability is not Portability.LOW:
                 raise ValueError("coordinate locator must declare low portability")
+        common = {"strategy", "expected_count", "match", "portability"}
+        strategy_fields = {
+            LocatorStrategy.ROLE_NAME: {"role", "name"},
+            LocatorStrategy.RELATIVE_TEXT: {"anchor", "relation", "element", "text"},
+            LocatorStrategy.COORDINATES: {
+                "capture_group_label",
+                "x",
+                "y",
+                "width",
+                "height",
+                "viewport_width",
+                "viewport_height",
+            },
+        }
+        allowed = common | strategy_fields.get(self.strategy, {"value"})
+        unexpected = self.model_fields_set - allowed
+        if unexpected:
+            raise ValueError(
+                f"{self.strategy.value} locator contains unrelated fields: {sorted(unexpected)}"
+            )
         return self
 
 
@@ -545,6 +615,15 @@ class Step(ArtifactModel):
         )
         if requires_target and self.target is None:
             raise ValueError(f"{self.action.kind} action requires a target")
+        if not requires_target and self.target is not None:
+            raise ValueError(f"{self.action.kind} action cannot declare a target")
+        for reference_name, references in (
+            ("recovery", self.recovery_refs),
+            ("outcome", self.outcome_refs),
+            ("failure", self.failure_refs),
+        ):
+            if len(set(references)) != len(references):
+                raise ValueError(f"step {reference_name} references must be unique")
         return self
 
 
@@ -595,24 +674,45 @@ class SurfaceFingerprint(ArtifactModel):
 
 
 class Compatibility(ArtifactModel):
-    application_family: str
-    base_variant: str
+    application_family: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    base_variant: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
     supported_variants: tuple[str, ...] = Field(min_length=1)
-    surface_contract: str
-    entry_point: str
+    surface_contract: str = Field(pattern=r"^[a-z][a-z0-9_.-]{1,63}$")
+    entry_point: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
     rendered_surface: bool = False
     fingerprint: SurfaceFingerprint
+
+    @model_validator(mode="after")
+    def validate_variants(self) -> Self:
+        if len(set(self.supported_variants)) != len(self.supported_variants):
+            raise ValueError("supported variants must be unique")
+        if any(
+            re.fullmatch(r"[a-z][a-z0-9_-]{1,63}", item) is None for item in self.supported_variants
+        ):
+            raise ValueError("supported variants contain an invalid identifier")
+        return self
 
 
 class CapabilityMetadata(ArtifactModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
     version: str = Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
-    name: str
-    description: str
-    application_family: str
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=1_000)
+    application_family: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
     surface: SurfaceKind
     risk: Risk
     tags: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_tags(self) -> Self:
+        if len(set(self.tags)) != len(self.tags):
+            raise ValueError("capability tags must be unique")
+        if any(
+            not tag or len(tag) > 64 or _STABLE_ID_PATTERN.fullmatch(tag) is None
+            for tag in self.tags
+        ):
+            raise ValueError("capability tags must be stable identifiers")
+        return self
 
 
 class CapabilityPolicy(ArtifactModel):
@@ -627,6 +727,23 @@ class CapabilityPolicy(ArtifactModel):
 
     @model_validator(mode="after")
     def validate_route_patterns(self) -> Self:
+        known_actions = {
+            "navigate",
+            "click",
+            "type",
+            "press_keys",
+            "select",
+            "scroll",
+            "wait_for",
+            "extract",
+            "assert",
+            "switch_context",
+            "checkpoint",
+        }
+        if not self.allowed_action_types or not self.allowed_action_types <= known_actions:
+            raise ValueError("capability policy contains unknown action types")
+        if not self.allowed_entry_points:
+            raise ValueError("capability policy requires an entry point")
         for pattern in self.allowed_route_patterns:
             if (
                 not pattern.startswith("/")
@@ -640,16 +757,22 @@ class CapabilityPolicy(ArtifactModel):
 
 
 class Provenance(ArtifactModel):
-    discovery_run_id: str
-    provider: str
-    model: str
-    prompt_policy_version: str
-    surface_adapter_version: str
-    compiler_version: str
+    discovery_run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
+    provider: str = Field(min_length=1, max_length=100)
+    model: str = Field(min_length=1, max_length=200)
+    prompt_policy_version: str = Field(min_length=1, max_length=100)
+    surface_adapter_version: str = Field(min_length=1, max_length=100)
+    compiler_version: str = Field(min_length=1, max_length=100)
     created_at: datetime
-    target_fingerprint: str
-    evidence_manifest_key: str
+    target_fingerprint: str = Field(min_length=1, max_length=200)
+    evidence_manifest_key: str = Field(pattern=r"^evidence://[^\s]+$")
     artifact_content_hash: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_provenance(self) -> Self:
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
+            raise ValueError("provenance timestamp must include an offset")
+        return self
 
 
 def _condition_outputs(condition: Condition) -> set[str]:
@@ -662,6 +785,47 @@ def _condition_outputs(condition: Condition) -> set[str]:
     if isinstance(condition, NotCondition):
         return _condition_outputs(condition.condition)
     return set()
+
+
+def _walk_conditions(condition: Condition) -> tuple[Condition, ...]:
+    if isinstance(condition, AllCondition | AnyCondition):
+        return (
+            condition,
+            *(item for nested in condition.conditions for item in _walk_conditions(nested)),
+        )
+    if isinstance(condition, NotCondition):
+        return (condition, *_walk_conditions(condition.condition))
+    return (condition,)
+
+
+def _contract_has_path(contract: ObjectContract, path: str) -> bool:
+    parts = path.split(".")
+    properties = contract.properties
+    for index, part in enumerate(parts):
+        schema = properties.get(part)
+        if schema is None:
+            return False
+        if index == len(parts) - 1:
+            return True
+        if schema.type is not JsonValueType.OBJECT:
+            return False
+        properties = schema.properties
+    return False
+
+
+def _validate_condition_references(
+    condition: Condition, inputs: ObjectContract, outputs: ObjectContract
+) -> None:
+    for item in _walk_conditions(condition):
+        if isinstance(item, OutputValidCondition) and item.output not in outputs.properties:
+            raise ValueError(f"condition references unknown output {item.output}")
+        if isinstance(item, IdentityMatchesCondition):
+            if item.extracted_output not in outputs.properties:
+                raise ValueError(
+                    f"identity condition references unknown output {item.extracted_output}"
+                )
+            if not _contract_has_path(inputs, item.input_path):
+                raise ValueError(f"identity condition references unknown input {item.input_path}")
 
 
 _GEOMETRY_FREE_CANDIDATE_TYPES = (
@@ -693,10 +857,10 @@ def _validate_geometry_free_target(target: LocatorBundle) -> None:
 def _validate_geometry_free_condition(condition: Condition) -> None:
     if isinstance(condition, RenderedTextCondition):
         return
-    if isinstance(condition, VisualTextCondition):
-        raise ValueError("schema 1.3 conditions cannot contain legacy visual geometry or tuning")
+    if isinstance(condition, TextCondition | VisualTextCondition):
+        raise ValueError("rendered-surface conditions must use geometry-free rendered text")
     if isinstance(condition, ElementCondition):
-        raise ValueError("schema 1.3 conditions cannot contain DOM element locators")
+        raise ValueError("rendered-surface conditions cannot contain DOM element locators")
     if isinstance(condition, AllCondition | AnyCondition):
         for nested in condition.conditions:
             _validate_geometry_free_condition(nested)
@@ -764,6 +928,11 @@ class CapabilityArtifact(ArtifactModel):
                 raise ValueError("schema 1.4 artifacts require non-empty route patterns")
             if self.compatibility.rendered_surface:
                 _validate_geometry_free_visual_contract(self)
+            if re.fullmatch(r"[0-9a-f]{64}", self.provenance.target_fingerprint) is None:
+                raise ValueError("schema 1.4 artifacts require a SHA-256 target fingerprint")
+            expected_evidence_prefix = f"evidence://{self.provenance.discovery_run_id}/"
+            if not self.provenance.evidence_manifest_key.startswith(expected_evidence_prefix):
+                raise ValueError("schema 1.4 provenance evidence must belong to its discovery run")
         if self.capability.application_family != self.compatibility.application_family:
             raise ValueError("capability and compatibility application families must match")
         if self.capability.risk is not self.policy.maximum_risk:
@@ -792,6 +961,17 @@ class CapabilityArtifact(ArtifactModel):
         failure_steps = {
             failure.code: frozenset(failure.allowed_after_steps) for failure in self.failures
         }
+        for outcome in self.outcomes:
+            if len(set(outcome.allowed_after_steps)) != len(outcome.allowed_after_steps):
+                raise ValueError(f"outcome {outcome.code} allowed steps must be unique")
+            for source in outcome.result.details.values():
+                if isinstance(source, InputValue) and not _contract_has_path(
+                    self.inputs, source.path
+                ):
+                    raise ValueError(f"outcome {outcome.code} references an unknown input")
+        for failure in self.failures:
+            if len(set(failure.allowed_after_steps)) != len(failure.allowed_after_steps):
+                raise ValueError(f"application failure {failure.code} allowed steps must be unique")
 
         bound_outputs: set[str] = set()
         recovery_steps = tuple(
@@ -828,7 +1008,7 @@ class CapabilityArtifact(ArtifactModel):
                 else None
             )
             if isinstance(input_source, InputValue) and (
-                input_source.path.split(".", 1)[0] not in self.inputs.properties
+                not _contract_has_path(self.inputs, input_source.path)
             ):
                 raise ValueError(f"step {step.id} references an unknown input")
             if isinstance(step.action, ExtractAction):
@@ -842,6 +1022,10 @@ class CapabilityArtifact(ArtifactModel):
                 raise ValueError(f"step {step.id} references an unknown business outcome")
             if not set(step.failure_refs) <= failure_codes:
                 raise ValueError(f"step {step.id} references an unknown application failure")
+            if isinstance(step.action, CheckpointAction) and (
+                step.action.checkpoint_id != self.checkpoint.id
+            ):
+                raise ValueError(f"step {step.id} references an unknown checkpoint")
             for outcome_code in step.outcome_refs:
                 if step.id not in outcome_steps[outcome_code]:
                     raise ValueError(f"outcome {outcome_code} is not allowed after step {step.id}")
@@ -850,6 +1034,18 @@ class CapabilityArtifact(ArtifactModel):
                     raise ValueError(
                         f"application failure {failure_code} is not allowed after step {step.id}"
                     )
+            for condition in (*step.preconditions, *step.postconditions):
+                _validate_condition_references(condition, self.inputs, self.outputs)
+
+        for condition in self.preconditions:
+            _validate_condition_references(condition, self.inputs, self.outputs)
+        for recovery in self.recoveries:
+            _validate_condition_references(recovery.trigger, self.inputs, self.outputs)
+        for outcome in self.outcomes:
+            _validate_condition_references(outcome.detect, self.inputs, self.outputs)
+        for failure in self.failures:
+            _validate_condition_references(failure.detect, self.inputs, self.outputs)
+        _validate_condition_references(self.checkpoint.condition, self.inputs, self.outputs)
 
         missing_bindings = set(self.outputs.required) - bound_outputs
         if missing_bindings:

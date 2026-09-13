@@ -316,6 +316,92 @@ def test_value_schema_rejects_invalid_shapes(schema: dict[str, Any], message: st
 
 
 @pytest.mark.parametrize(
+    ("schema", "message"),
+    [
+        (
+            {
+                "type": "integer",
+                "description": "Contradictory integer",
+                "data_classification": "public",
+                "pattern": "^[0-9]+$",
+            },
+            "only string schemas",
+        ),
+        (
+            {
+                "type": "boolean",
+                "description": "Wrong constant type",
+                "data_classification": "public",
+                "const": "true",
+            },
+            "const must match",
+        ),
+        (
+            {
+                "type": "integer",
+                "description": "Wrong enum type",
+                "data_classification": "public",
+                "enum": [1, "2"],
+            },
+            "enum values must match",
+        ),
+        (
+            {
+                "type": "string",
+                "description": "Conflicting constant",
+                "data_classification": "public",
+                "enum": ["open", "closed"],
+                "const": "missing",
+            },
+            "const must be included",
+        ),
+        (
+            {
+                "type": "object",
+                "description": "Object with scalar constraint",
+                "data_classification": "public",
+                "format": "date",
+            },
+            "object schemas cannot declare scalar",
+        ),
+    ],
+)
+def test_value_schema_rejects_constraints_for_a_different_type(
+    schema: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        ValueSchema.model_validate(schema)
+
+
+def test_integer_value_schema_accepts_integer_enum() -> None:
+    schema = ValueSchema.model_validate(
+        {
+            "type": "integer",
+            "description": "Retry count",
+            "data_classification": "operational",
+            "enum": [1, 2, 3],
+        }
+    )
+
+    assert schema.enum == (1, 2, 3)
+
+
+def test_object_contract_rejects_duplicate_and_invalid_field_names(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["inputs"]["required"] = ["member_id", "member_id"]
+    with pytest.raises(ValidationError, match="required properties must be unique"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+    valid_artifact_data["inputs"]["required"] = ["member_id"]
+    valid_artifact_data["inputs"]["properties"]["Member ID"] = valid_artifact_data["inputs"][
+        "properties"
+    ]["member_id"]
+    with pytest.raises(ValidationError, match="property names are invalid"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize(
     ("candidate", "message"),
     [
         ({"strategy": "role_name", "role": "button"}, "requires role and name"),
@@ -345,6 +431,18 @@ def test_locator_candidate_rejects_incomplete_strategy_data(
         LocatorCandidate.model_validate(candidate)
 
 
+def test_locator_candidate_rejects_fields_from_another_strategy() -> None:
+    with pytest.raises(ValidationError, match="contains unrelated fields"):
+        LocatorCandidate.model_validate(
+            {
+                "strategy": "role_name",
+                "role": "button",
+                "name": "Submit",
+                "value": "#submit",
+            }
+        )
+
+
 @pytest.mark.parametrize(
     "retry",
     [
@@ -361,6 +459,60 @@ def test_targeted_action_requires_locator(valid_artifact_data: dict[str, Any]) -
     valid_artifact_data["steps"][1].pop("target")
 
     with pytest.raises(ValidationError, match="click action requires a target"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+def test_non_targeted_action_rejects_locator(valid_artifact_data: dict[str, Any]) -> None:
+    valid_artifact_data["steps"][0]["action"] = {
+        "kind": "assert",
+        "condition": {"kind": "route", "pattern": "/members/search"},
+    }
+
+    with pytest.raises(ValidationError, match="assert action cannot declare a target"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("condition_output", "condition references unknown output"),
+        ("identity_input", "identity condition references unknown input"),
+        ("outcome_input", "outcome member_not_found references an unknown input"),
+        ("checkpoint_action", "references an unknown checkpoint"),
+        ("duplicate_step_ref", "outcome references must be unique"),
+    ],
+)
+def test_artifact_rejects_dangling_or_duplicate_semantic_references(
+    valid_artifact_data: dict[str, Any], mutation: str, message: str
+) -> None:
+    if mutation == "condition_output":
+        valid_artifact_data["steps"][0]["postconditions"] = [
+            {"kind": "output_valid", "output": "missing"}
+        ]
+    elif mutation == "identity_input":
+        valid_artifact_data["checkpoint"]["condition"]["conditions"].append(
+            {
+                "kind": "identity_matches",
+                "extracted_output": "available_balance",
+                "input_path": "missing",
+            }
+        )
+    elif mutation == "outcome_input":
+        valid_artifact_data["outcomes"][0]["result"]["details"]["member_id"]["path"] = "missing"
+    elif mutation == "checkpoint_action":
+        valid_artifact_data["steps"][0].pop("target")
+        valid_artifact_data["steps"][0]["action"] = {
+            "kind": "checkpoint",
+            "checkpoint_id": "missing",
+        }
+        valid_artifact_data["policy"]["allowed_action_types"].append("checkpoint")
+    else:
+        valid_artifact_data["steps"][1]["outcome_refs"] = [
+            "member_not_found",
+            "member_not_found",
+        ]
+
+    with pytest.raises(ValidationError, match=message):
         CapabilityArtifact.model_validate(valid_artifact_data)
 
 
