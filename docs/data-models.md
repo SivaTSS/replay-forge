@@ -223,19 +223,20 @@ binary attachments, and the optional terminal result.
 | Human handoff | UI status flag; lease only; separate writes | Intervention plus versioned lease in one transaction: workflow and authority cannot diverge |
 | Run completion | Nullable fields in one result | Discriminated result union: impossible states are rejected |
 | Evidence | Raw logs; arbitrary blobs; typed manifest | Redact before storage, hash every object, and bind every key to its run |
-| Persistence now | PostgreSQL immediately; memory only | Memory metadata plus durable local evidence for the runnable slice; explicit repository seams preserve the migration path |
+| Persistence now | PostgreSQL immediately; memory only | Immutable capability/assets and evidence on disk; mutable live coordination in memory |
 
 ## Durability
 
 | Data | Current storage | Restart behavior |
 |---|---|---|
-| Checked-in capability versions | YAML repository | Survives; registry reloads them |
+| Published capability versions | Atomic immutable YAML files | Survive; a fresh registry validates and reloads them |
+| Content-addressed visual assets | Atomic immutable PNG files | Survive; hash verification rejects missing or changed bytes |
 | Application registrations | YAML repository | Survives; registry reloads them |
 | Evidence objects and manifests | Confined local directory | Survive |
-| Capability registry records | Process memory | Rebuilt from YAML |
 | Runs and discovery suites | Process memory | Lost |
 | Interventions and leases | Process memory | Lost together |
 | Retained browser sessions | Worker thread and Chromium | Lost |
 
-The paired repository guarantees atomicity inside the current process, not crash recovery.
-PostgreSQL durability, migrations, and restart reconciliation are the next architecture task.
+The paired intervention repository guarantees atomicity inside the current process, not crash
+recovery. PostgreSQL is deferred until mutable operational history or multi-process coordination
+creates a concrete need; it is not required to reload and replay a saved capability.

@@ -19,6 +19,13 @@ including its verified inverse state, demonstrates reversible compilation. The e
 remains the visual portability and failure fixture. All use the same Pydantic definition in
 [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py).
 
+Publication is the durability boundary. A validated discovery allocates the next semantic version,
+computes its canonical hash, and atomically exposes a complete YAML file at
+`capabilities/<capability-id>/<version>.yaml`. Existing versions are immutable and identical retries
+are idempotent. A fresh runtime validates the file's size, path identity, schema, and declared hash
+before making it available to model-free replay. Visual assets use the same write-then-publish rule
+under `capabilities/_assets/`; evidence remains a separate audit record, not the executable registry.
+
 ## Shape
 
 ```mermaid

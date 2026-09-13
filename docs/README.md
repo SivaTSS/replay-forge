@@ -54,7 +54,7 @@ Every page uses these labels consistently:
 | Browser replay | Implemented, evidenced | Rendered semantic candidates first, optional DOM locators second; no model dependency |
 | Same-session handoff | Implemented, evidenced | Polling PNG viewport and bounded HTTP input |
 | Two tenant variants | Implemented, evidenced | One artifact supports `harbor` and `summit` |
-| Persistence | Partly implemented | Evidence on disk; operational metadata in memory |
+| Persistence | Implemented for required durable objects | Atomic capability/assets and evidence on disk; live operational state in memory |
 | Canvas/non-DOM browser control | Implemented, tested | Canvas-only visual-terminal and visual-workbench; OCR, frame-local relations, canonical signatures |
 | Native desktop control | Designed | Surface ports exist; no OS adapter executes them |
 | Full operations UI | Cut | The UI is an intervention console only |

@@ -63,7 +63,7 @@ flowchart LR
 | Demo bank | `3001` | Synthetic two-tenant target and controlled faults | Expose a task-completion API |
 | Langfuse stack | `3100` | Local model-call metrics for discovery | Participate in replay |
 
-PostgreSQL is not part of the implemented runtime. Capability, lease, intervention, journal, application-registration, and discovery-suite metadata live in process memory. Sanitized evidence is written to disk. The application catalog is checked-in YAML so onboarding is reviewable; its repository interface is the later PostgreSQL seam.
+PostgreSQL is not part of the implemented runtime. Published capabilities and content-addressed visual assets are immutable local files; sanitized evidence is also written to disk. Lease, intervention, journal, and discovery-suite state remains in process memory. The application catalog is checked-in YAML so onboarding is reviewable.
 
 `config/applications.yaml` is the onboarding boundary. It owns only application facts: a
 credential-free origin, tenant variants, symbolic entry points, route aliases, readiness
@@ -89,7 +89,7 @@ The key rule is structural: `replay` does not import `providers`. A test enforce
 |---|---|---|
 | Model decision | `ModelProvider` | OpenAI Responses API |
 | UI perception/action | `SurfaceDriver`, `SurfaceSession` | Synchronous Playwright |
-| Artifact storage | `CapabilityRegistry` | Thread-safe memory loaded from YAML |
+| Artifact storage | `CapabilityRegistry` | Atomic immutable YAML files |
 | Evidence bytes | `EvidenceStore` | Atomic local files |
 | Run audit | `RunRecorder` | In-memory journal backed by evidence files |
 | Handoff state | `InterventionTransitionRepository` | Atomic intervention-and-lease memory adapter |
@@ -176,7 +176,7 @@ and horizontal layouts. No artifact target stores coordinates or target-specific
 | Process topology | Microservices, queued workers, monolith | Modular monolith | Preserves explicit boundaries without adding deployment failure modes |
 | Browser concurrency | Shared browser thread, async Playwright, worker per run | Worker per run | Keeps the synchronous Playwright session on one thread, including handoff |
 | Target | Public sandbox, real bank, local synthetic app | Local synthetic app | Legal, deterministic, credential-free, and able to inject failures |
-| Persistence | PostgreSQL/S3, memory/files, browser-local state | Memory + atomic files | Small runnable submission; repository ports leave a migration seam |
+| Persistence | PostgreSQL/S3, memory/files, browser-local state | Atomic files for immutable artifacts/evidence; memory for live state | Exactly the saved-capability guarantee without unrelated operational infrastructure |
 | Tenant model | Artifact copy per tenant, free-form overrides, shared contract | Shared supported-variant list | Demonstrates reuse without unsafe override complexity |
 | Responsive grounding | Saved offsets, ordinal row selection, frame-local graph | Frame-local graph + canonical visual signature | Recomputes geometry after layout changes and fails closed on ties |
 | DPR handling | Rescale stored pixels, screenshot in device pixels, CSS-pixel capture | CSS-pixel capture + explicit context DPR | Mouse coordinates and screenshot regions remain in one coordinate space |

@@ -65,7 +65,7 @@ goal
   registration; a new surface contract still needs an adapter.
 - Rendered OCR, label relations, and visual signatures execute today; legacy image anchors remain supported; accessibility-path and native desktop adapters do not.
 - Compatibility fingerprints are recorded; startup/runtime drift enforcement is not implemented.
-- Operational metadata is not durable across process restart.
+- Published capabilities and evidence survive restart; operational run and handoff state does not.
 - The control plane is not a complete product UI.
 - The API is synchronous and has no WebSocket endpoint.
 - Authentication, authorization, retention enforcement, PostgreSQL, object storage, and distributed workers are not implemented.

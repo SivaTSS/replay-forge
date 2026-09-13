@@ -182,4 +182,4 @@ docs/                implementation-accurate design documentation
 
 ## Deliberate cuts
 
-Operational metadata is in memory; only evidence is durable. The control plane is an intervention console, not a complete run or capability UI. There is no PostgreSQL adapter, WebSocket, distributed queue, authentication layer, native desktop adapter, or discovery continuation after human takeover. The visual adapter is implemented for browser-rendered surfaces; Citrix and native desktop transport remain outside this slice.
+Published capability artifacts, content-addressed visual assets, and sanitized evidence are durable local files. Run journals, discovery-suite progress, leases, interventions, and live browser sessions remain in memory. The control plane is an intervention console, not a complete run or capability UI. There is no PostgreSQL adapter, WebSocket, distributed queue, authentication layer, native desktop adapter, or discovery continuation after human takeover. The visual adapter is implemented for browser-rendered surfaces; Citrix and native desktop transport remain outside this slice.

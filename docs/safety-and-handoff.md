@@ -165,7 +165,7 @@ The operator viewport is live and therefore unmasked for the authorized lease ho
 
 ## Known limits
 
-- Restarting FastAPI loses active leases, interventions, journals, continuations, and the capability registry's runtime state.
+- Restarting FastAPI loses active leases, interventions, journals, continuations, and browser sessions. Published capabilities reload from their immutable YAML files.
 - There is no authentication or institution authorization layer; operator IDs are caller-supplied labels.
 - HTTP is loopback-oriented and not production transport security.
 - There is no continuous video, drag, right-click, clipboard, file upload, or multi-operator co-browsing.

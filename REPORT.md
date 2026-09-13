@@ -21,7 +21,7 @@ The engines depend on typed ports, not FastAPI, OpenAI, Playwright, or filesyste
 | Microservices and a queue | Rejected | Adds deployment and recovery problems without improving the evaluated local flow |
 | Unstructured single script | Rejected | Makes policy, surfaces, and evidence inseparable |
 | Modular monolith with ports | **Chosen** | Strong replaceable boundaries with one-process operability |
-| PostgreSQL and object storage | Deferred | Operational metadata is in memory; atomic evidence files keep the submission runnable and inspectable |
+| PostgreSQL and object storage | Deferred | Immutable artifacts, visual assets, and evidence need durable files; distributed operational history is outside the evaluated flow |
 
 The primary path is rendered-surface automation. Discovery combines screenshots with local OCR tokens and optional semantic facts. Replay resolves geometry-free rendered text, label-to-control/value relationships, and a content-addressed group signature before optional DOM/accessibility candidates. The canonical target exposes the workflow as one canvas; Playwright provides CSS-pixel screenshots and mouse/keyboard transport, not element identity. Native desktop transport is the remaining extension seam.
 
@@ -41,7 +41,7 @@ identity/version
 └── provenance and canonical SHA-256
 ```
 
-Pydantic models reject unknown fields and invalid cross-references. Every required output must be extracted by the main flow and checked by the final checkpoint. Published `(capability ID, version)` content is immutable; discovery receives the next patch version. Symbolic values such as `input.member_id` make a recording reusable without retaining the discovery value.
+Pydantic models reject unknown fields and invalid cross-references. Every required output must be extracted by the main flow and checked by the final checkpoint. Published `(capability ID, version)` content is immutable; discovery receives the next patch version. Publication atomically adds the validated YAML under `capabilities/<id>/<version>.yaml`; a fresh runtime revalidates its path, schema, and canonical hash before replay. Symbolic values such as `input.member_id` make a recording reusable without retaining the discovery value.
 
 Target bundles contain a human-readable description, reviewed target risk, optional frame scope, ordered visual and semantic candidates, expected cardinality, state, and portability. Version `3.2.0` uses rendered text for named actions, frame-local label relationships for controls and values, and a content-addressed canonical edge signature scoped by the freshly observed `Savings` label. Its workbench renders three identical account-row icons, so a global match is ambiguous and must fail closed; the semantic group graph selects the unique matching component. Schema `1.3` forbids target geometry and target-specific tuning fields recursively.
 
@@ -132,7 +132,7 @@ compiler, policy engine, and replay interpreter.
 
 | Cut | What exists instead | Next production step |
 |---|---|---|
-| PostgreSQL repositories | Thread-safe in-memory registry, journal metadata, leases, interventions | Transactional repositories and restart recovery |
+| PostgreSQL repositories | Atomic local capability registry; in-memory journal metadata, leases, interventions, and suites | Transactional operational history when multi-process coordination requires it |
 | S3-compatible evidence | Opaque keys over atomic local files | Object store plus authorized download service |
 | Full operations UI | Focused intervention console | Run list, capability catalog, evidence viewer, authentication |
 | WebSocket/video co-browsing | PNG polling and bounded HTTP input | Backpressured stream with durable control events |
