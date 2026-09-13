@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from math import exp
 from time import monotonic
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 import cv2
 import numpy as np
@@ -42,10 +42,28 @@ class TextRecognizer(Protocol):
     def recognize(self, png: bytes) -> tuple[VisualToken, ...]: ...
 
 
+VisualNodeKind = Literal["phrase", "control", "image", "container"]
+
+
 @dataclass(frozen=True, slots=True)
-class _VisualComponent:
+class VisualNode:
+    id: str
+    kind: VisualNodeKind
     region: ScreenRegion
-    edge: np.ndarray
+    edge: np.ndarray | None = field(default=None, compare=False, repr=False)
+    token: VisualToken | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VisualLayoutGraph:
+    frame_hash: str
+    viewport: Viewport
+    median_text_height: float
+    nodes: tuple[VisualNode, ...]
+    containment: tuple[tuple[str, str], ...]
+
+    def of_kind(self, kind: VisualNodeKind) -> tuple[VisualNode, ...]:
+        return tuple(node for node in self.nodes if node.kind == kind)
 
 
 @dataclass(slots=True)
@@ -85,10 +103,14 @@ class VisionGrounder:
     assets: CapabilityAssetStore
     policy: VisionGroundingPolicy | None = None
     _ocr_cache: dict[str, tuple[VisualToken, ...]] = field(default_factory=dict, init=False)
+    _graph_cache: dict[str, VisualLayoutGraph] = field(default_factory=dict, init=False)
 
     def resolve(
         self, candidate: VisualLocatorCandidate, png: bytes, viewport: Viewport
     ) -> VisualTargetData:
+        started = monotonic()
+        if self.policy is not None:
+            self._validate_frame_budget(png)
         frame_hash = self.frame_hash(png)
         if isinstance(candidate, OcrTextCandidate):
             matches = self._matching_tokens(
@@ -133,23 +155,41 @@ class VisionGrounder:
         if isinstance(candidate, ImageAnchorCandidate):
             return self._match_template(candidate, png, viewport, frame_hash)
         if isinstance(candidate, RenderedTextCandidate):
-            matches = self._semantic_matching_tokens(png, candidate.value, candidate.match)
-            return self._unique_text_target(matches, "rendered_text", frame_hash)
+            matches = self._semantic_matching_tokens(png, candidate.value, candidate.match, started)
+            result = self._unique_text_target(matches, "rendered_text", frame_hash)
+            self._check_deadline(started)
+            return result
         if isinstance(candidate, RenderedLabeledControlCandidate):
-            return self._resolve_labeled_control(candidate, png, viewport, frame_hash)
+            return self._resolve_labeled_control(candidate, png, viewport, frame_hash, started)
         if isinstance(candidate, RenderedFieldValueCandidate):
-            return self._resolve_field_value(candidate, png, frame_hash)
+            return self._resolve_field_value(candidate, png, viewport, frame_hash, started)
         if isinstance(candidate, RenderedGroupImageCandidate):
-            return self._resolve_group_image(candidate, png, viewport, frame_hash)
+            return self._resolve_group_image(candidate, png, viewport, frame_hash, started)
         raise TypeError("unsupported visual locator candidate")
 
     def tokens(self, png: bytes) -> tuple[VisualToken, ...]:
         return self._tokens(png)
 
-    def extract(self, png: bytes, region: ScreenRegion, minimum_confidence: float = 0.75) -> str:
+    def extract(
+        self,
+        png: bytes,
+        region: ScreenRegion,
+        minimum_confidence: float = 0.75,
+        expected_frame_hash: str | None = None,
+    ) -> str:
+        started = monotonic()
+        if self.policy is not None:
+            self._validate_frame_budget(png)
+        if expected_frame_hash is not None and self.frame_hash(png) != expected_frame_hash:
+            raise SurfaceError(
+                "visual_frame_changed",
+                "The rendered frame changed between target resolution and extraction.",
+                recoverable=True,
+                effect_absent=True,
+            )
         tokens = [
             token
-            for token in self._tokens(png)
+            for token in self._tokens(png, started)
             if token.confidence >= minimum_confidence and self._center_in(token.region, region)
         ]
         tokens.sort(key=lambda token: (token.region.y, token.region.x))
@@ -159,7 +199,10 @@ class VisionGrounder:
                 "No readable text was found inside the resolved visual region.",
                 effect_absent=True,
             )
-        return " ".join(token.text for token in tokens)
+        value = " ".join(token.text for token in tokens)
+        if self.policy is not None:
+            self._check_deadline(started)
+        return value
 
     def contains_text(
         self,
@@ -170,12 +213,24 @@ class VisionGrounder:
         search_region: NormalizedRegion | None,
         viewport: Viewport,
     ) -> bool:
-        return bool(
-            self._matching_tokens(png, value, match, minimum_confidence, search_region, viewport)
+        started = monotonic()
+        if self.policy is not None:
+            self._validate_frame_budget(png)
+        result = bool(
+            self._matching_tokens(
+                png, value, match, minimum_confidence, search_region, viewport, started
+            )
         )
+        if self.policy is not None:
+            self._check_deadline(started)
+        return result
 
     def contains_rendered_text(self, png: bytes, value: str, match: MatchMode) -> bool:
-        return bool(self._semantic_matching_tokens(png, value, match))
+        started = monotonic()
+        self._validate_frame_budget(png)
+        result = bool(self._semantic_matching_tokens(png, value, match, started))
+        self._check_deadline(started)
+        return result
 
     def create_edge_template(self, png: bytes, region: ScreenRegion) -> tuple[str, str]:
         image = self._decode(png)
@@ -207,25 +262,34 @@ class VisionGrounder:
         """Store a cropped, normalized component signature for semantic image matching."""
 
         policy = self._required_policy()
-        image = self._decode(png)
-        clipped = self._clip_region(region, Viewport(image.shape[1], image.shape[0]))
-        components = self._visual_components(png, Viewport(image.shape[1], image.shape[0]))
+        started = monotonic()
+        self._validate_frame_budget(png)
+        graph = self._layout_graph(png, self._png_viewport(png), started)
+        clipped = self._clip_region(region, graph.viewport)
+        components = graph.of_kind("image")
         matching_components = [
             component
             for component in components
-            if self._region_iou(clipped, component.region) > 0.05
+            if self._region_iou(clipped, component.region)
+            > policy.image.signature_capture_minimum_iou
         ]
-        if matching_components:
-            clipped = max(
-                matching_components,
-                key=lambda component: self._region_iou(clipped, component.region),
-            ).region
-        crop = image[
-            clipped.y : clipped.y + clipped.height,
-            clipped.x : clipped.x + clipped.width,
-        ]
-        edge = self._trim_edges(self._edge_map(crop))
-        if edge.size < 64 or int(np.count_nonzero(edge)) < 12:
+        if not matching_components:
+            raise SurfaceError(
+                "target_absent",
+                "The discovery target is not a distinct non-text visual component.",
+                recoverable=True,
+                effect_absent=True,
+            )
+        component = max(
+            matching_components,
+            key=lambda item: self._region_iou(clipped, item.region),
+        )
+        assert component.edge is not None
+        edge = component.edge
+        if (
+            edge.size < policy.image.minimum_signature_pixels
+            or int(np.count_nonzero(edge)) < policy.image.minimum_signature_edge_pixels
+        ):
             raise SurfaceError(
                 "template_low_information",
                 "The visual target does not contain enough stable structure for a signature.",
@@ -238,22 +302,34 @@ class VisionGrounder:
                 "template_encoding_failed", "The visual signature could not be encoded."
             )
         try:
-            return self.assets.write(encoded.tobytes())
+            result = self.assets.write(encoded.tobytes())
         except CapabilityAssetError as error:
             raise SurfaceError(
                 "template_storage_failed", "The visual signature could not be stored."
             ) from error
+        self._check_deadline(started)
+        return result
 
     @staticmethod
     def frame_hash(png: bytes) -> str:
         return f"sha256:{hashlib.sha256(png).hexdigest()}"
 
-    def _tokens(self, png: bytes) -> tuple[VisualToken, ...]:
+    def _tokens(self, png: bytes, started: float | None = None) -> tuple[VisualToken, ...]:
+        if started is not None and self.policy is not None:
+            self._check_deadline(started)
         key = self.frame_hash(png)
         if key not in self._ocr_cache:
             if len(self._ocr_cache) >= 8:
                 self._ocr_cache.pop(next(iter(self._ocr_cache)))
             self._ocr_cache[key] = self.recognizer.recognize(png)
+        if self.policy is not None and len(self._ocr_cache[key]) > self.policy.ocr.maximum_tokens:
+            raise SurfaceError(
+                "visual_ocr_budget_exceeded",
+                "The rendered frame exceeds the visual OCR token budget.",
+                effect_absent=True,
+            )
+        if started is not None and self.policy is not None:
+            self._check_deadline(started)
         return self._ocr_cache[key]
 
     def _matching_tokens(
@@ -264,11 +340,12 @@ class VisionGrounder:
         minimum_confidence: float,
         search_region: NormalizedRegion | None,
         viewport: Viewport,
+        started: float | None = None,
     ) -> tuple[VisualToken, ...]:
         region = self._normalized_region(search_region, viewport) if search_region else None
         expected = self._normalize(value)
         matches: list[VisualToken] = []
-        for token in self._tokens(png):
+        for token in self._tokens(png, started):
             if token.confidence < minimum_confidence or (
                 region is not None and not self._center_in(token.region, region)
             ):
@@ -311,51 +388,20 @@ class VisionGrounder:
         png: bytes,
         viewport: Viewport,
         frame_hash: str,
+        started: float,
     ) -> VisualTargetData:
-        labels = self._semantic_matching_tokens(png, candidate.label, candidate.label_match)
+        labels = self._semantic_matching_tokens(
+            png, candidate.label, candidate.label_match, started
+        )
         if len(labels) != 1:
             raise self._cardinality_error(len(labels), "rendered control label")
         label = labels[0]
-        components = self._visual_components(png, viewport)
-        median_height = self._median_text_height(self._tokens(png))
-        # Ignore text glyph contours and the enclosing card. The group image
-        # signature describes a visual component with dimensions comparable to
-        # the label height, not the entire responsive row.
-        components = tuple(
-            component
-            for component in components
-            if component.region.height >= median_height * 1.8
-            and component.region.width >= median_height * 1.8
-            and self._region_iou(component.region, label.region) == 0
-        )
-        # Edge maps also contain the glyphs that formed the label and any
-        # placeholder text inside the control. A text input is the larger
-        # frame-local component, so reject text-sized contours before applying
-        # the label-to-control relationship.
-        components = tuple(
-            component
-            for component in components
-            if component.region.height >= median_height * 1.8
-            and component.region.width >= median_height * 4
-            and self._region_iou(component.region, label.region) == 0
-        )
-        related = [
-            (self._control_relation(label.region, component.region, median_height), component)
-            for component in components
-        ]
-        related = [(rank, component) for rank, component in related if rank is not None]
-        if not related:
-            raise SurfaceError(
-                "target_absent",
-                "No visual control was associated with the rendered label.",
-                recoverable=True,
-                effect_absent=True,
-            )
-        related.sort(key=lambda item: (item[0], item[1].region.x, item[1].region.y))
-        best_rank = related[0][0]
-        best = [component for rank, component in related if rank == best_rank]
+        graph = self._layout_graph(png, viewport, started)
+        controls = self._nodes_in_anchor_container(graph, label.region, "control")
+        best = self._select_structural_row(label.region, controls, graph.median_text_height)
         if len(best) != 1:
             raise self._cardinality_error(len(best), "rendered labeled control")
+        self._check_deadline(started)
         return VisualTargetData(
             best[0].region, "rendered_labeled_control", label.confidence, frame_hash
         )
@@ -364,39 +410,44 @@ class VisionGrounder:
         self,
         candidate: RenderedFieldValueCandidate,
         png: bytes,
+        viewport: Viewport,
         frame_hash: str,
+        started: float,
     ) -> VisualTargetData:
         policy = self._required_policy()
-        labels = self._semantic_matching_tokens(png, candidate.label, candidate.label_match)
+        labels = self._semantic_matching_tokens(
+            png, candidate.label, candidate.label_match, started
+        )
         if len(labels) != 1:
             raise self._cardinality_error(len(labels), "rendered field label")
         label = labels[0]
-        tokens = [
+        graph = self._layout_graph(png, viewport, started)
+        container = self._anchor_container(graph, label.region, "phrase")
+        tokens = tuple(
             token
-            for token in self._tokens(png)
+            for token in self._tokens(png, started)
             if token.confidence >= policy.ocr.minimum_confidence
-            and not self._regions_equal(token.region, label.region)
-        ]
-        median_height = self._median_text_height(tokens)
-        related = [
-            (self._value_relation(label.region, token.region, median_height), token)
-            for token in tokens
-        ]
-        related = [(rank, token) for rank, token in related if rank is not None]
-        if not related:
+            and not self._center_in(token.region, label.region)
+            and self._contains(container.region, token.region)
+        )
+        value_tokens = self._associated_value_tokens(label.region, tokens, graph.median_text_height)
+        if not value_tokens:
             raise SurfaceError(
                 "target_absent",
                 "No visual field value was associated with the rendered label.",
                 recoverable=True,
                 effect_absent=True,
             )
-        related.sort(key=lambda item: (item[0], item[1].region.x, item[1].region.y))
-        best_rank = related[0][0]
-        best = [token for rank, token in related if rank == best_rank]
-        if len(best) != 1:
-            raise self._cardinality_error(len(best), "rendered field value")
+        region: ScreenRegion | None = None
+        for token in value_tokens:
+            region = self._union_region(region, token.region)
+        assert region is not None
+        self._check_deadline(started)
         return VisualTargetData(
-            best[0].region, "rendered_field_value", best[0].confidence, frame_hash
+            region,
+            "rendered_field_value",
+            min(token.confidence for token in value_tokens),
+            frame_hash,
         )
 
     def _resolve_group_image(
@@ -405,22 +456,20 @@ class VisionGrounder:
         png: bytes,
         viewport: Viewport,
         frame_hash: str,
+        started: float,
     ) -> VisualTargetData:
         policy = self._required_policy()
-        started = monotonic()
         labels = self._semantic_matching_tokens(
-            png, candidate.group_label, candidate.group_label_match
+            png, candidate.group_label, candidate.group_label_match, started
         )
         if len(labels) != 1:
             raise self._cardinality_error(len(labels), "rendered image group label")
         label = labels[0]
-        components = self._visual_components(png, viewport)
-        median_height = self._median_text_height(self._tokens(png))
-        related = [
-            (self._image_relation(label.region, component.region, median_height), component)
-            for component in components
-        ]
-        related = [(rank, component) for rank, component in related if rank is not None]
+        graph = self._layout_graph(png, viewport, started)
+        images = self._nodes_in_anchor_container(graph, label.region, "image")
+        related = self._select_structural_row(
+            label.region, images, graph.median_text_height, image=True
+        )
         if not related:
             raise SurfaceError(
                 "target_absent",
@@ -440,15 +489,11 @@ class VisionGrounder:
         if template is None:
             raise SurfaceError("template_invalid", "The visual signature could not be decoded.")
         normalized_template = self._normalize_signature(template, policy)
-        relation_ranks: list[tuple[int, float]] = [
-            rank for rank, _component in related if rank is not None
-        ]
-        best_relation_tier = min(rank[0] for rank in relation_ranks)
-        scored = [
-            (self._signature_score(normalized_template, component.edge, policy), component)
-            for rank, component in related
-            if rank is not None and rank[0] == best_relation_tier
-        ]
+        scored: list[tuple[float, VisualNode]] = []
+        for node in related:
+            if node.edge is not None:
+                scored.append((self._signature_score(normalized_template, node.edge, policy), node))
+            self._check_deadline(started)
         scored.sort(key=lambda item: item[0], reverse=True)
         if not scored:
             raise SurfaceError(
@@ -474,23 +519,18 @@ class VisionGrounder:
                     "second_score": round(second_score, 4),
                 },
             )
-        if (monotonic() - started) * 1000 > policy.budgets.maximum_grounding_milliseconds:
-            raise SurfaceError(
-                "visual_grounding_budget_exceeded",
-                "Visual grounding exceeded its bounded execution budget.",
-                effect_absent=True,
-            )
+        self._check_deadline(started)
         return VisualTargetData(
             best_component.region, "rendered_group_image", best_score, frame_hash
         )
 
     def _semantic_matching_tokens(
-        self, png: bytes, value: str, match: MatchMode
+        self, png: bytes, value: str, match: MatchMode, started: float
     ) -> tuple[VisualToken, ...]:
         policy = self._required_policy()
         expected = self._normalize(value)
         matches: list[VisualToken] = []
-        for token in self._semantic_phrases(png, policy):
+        for token in self._semantic_phrases(png, policy, started):
             observed = self._normalize(token.text)
             matched = (
                 observed == expected
@@ -507,33 +547,19 @@ class VisionGrounder:
         return tuple(unique.values())
 
     def _semantic_phrases(
-        self, png: bytes, policy: VisionGroundingPolicy
+        self, png: bytes, policy: VisionGroundingPolicy, started: float
     ) -> tuple[VisualToken, ...]:
         tokens = [
             token
-            for token in self._tokens(png)
+            for token in self._tokens(png, started)
             if token.confidence >= policy.ocr.minimum_confidence
         ]
         if not tokens:
             return ()
         median_height = self._median_text_height(tokens)
-        lines: list[list[VisualToken]] = []
-        for token in sorted(tokens, key=lambda item: (item.region.y, item.region.x)):
-            matching_line = next(
-                (
-                    line
-                    for line in lines
-                    if self._same_text_line(token.region, line[0].region, median_height)
-                ),
-                None,
-            )
-            if matching_line is None:
-                lines.append([token])
-            else:
-                matching_line.append(token)
+        lines = self._text_lines(tuple(tokens), median_height)
         phrases: list[VisualToken] = []
         for line in lines:
-            line.sort(key=lambda item: item.region.x)
             for start in range(len(line)):
                 words: list[str] = []
                 region: ScreenRegion | None = None
@@ -551,108 +577,354 @@ class VisionGrounder:
                     confidence = min(confidence, line[end].confidence)
                     assert region is not None
                     phrases.append(VisualToken(" ".join(words), confidence, region))
+            self._check_deadline(started)
         return tuple(phrases)
 
-    def _visual_components(self, png: bytes, viewport: Viewport) -> tuple[_VisualComponent, ...]:
+    def _layout_graph(self, png: bytes, viewport: Viewport, started: float) -> VisualLayoutGraph:
         policy = self._required_policy()
+        key = self.frame_hash(png)
+        cached = self._graph_cache.get(key)
+        if cached is not None and cached.viewport == viewport:
+            self._check_deadline(started)
+            return cached
+        self._validate_frame_budget(png)
         image = self._decode(png)
-        if image.shape[1] * image.shape[0] > policy.budgets.maximum_frame_pixels:
-            raise SurfaceError(
-                "visual_frame_budget_exceeded",
-                "The rendered frame exceeds the visual grounding budget.",
-                effect_absent=True,
-            )
+        tokens = tuple(
+            token
+            for token in self._tokens(png, started)
+            if token.confidence >= policy.ocr.minimum_confidence
+        )
+        median_height = self._median_text_height(tokens)
+        phrases = self._semantic_phrases(png, policy, started)
         edge = self._edge_map(image)
-        dilated = cv2.dilate(edge, np.ones((3, 3), dtype=np.uint8), iterations=1)
-        contours, _ = cv2.findContours(dilated, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        boxes = self._segmented_boxes(image, edge, started)
         image_area = max(1, image.shape[0] * image.shape[1])
-        min_area = image_area * policy.segmentation.minimum_component_area_ratio
-        max_area = image_area * policy.segmentation.maximum_component_area_ratio
-        boxes: list[ScreenRegion] = []
-        for contour in contours[: policy.segmentation.maximum_components]:
-            x, y, width, height = cv2.boundingRect(contour)
-            area = width * height
-            if area < min_area or area > max_area or width < 4 or height < 4:
+        nodes: list[VisualNode] = [
+            VisualNode(
+                "container:viewport",
+                "container",
+                ScreenRegion(0, 0, image.shape[1], image.shape[0]),
+            )
+        ]
+        nodes.extend(
+            VisualNode(f"phrase:{index}", "phrase", phrase.region, token=phrase)
+            for index, phrase in enumerate(phrases)
+        )
+        component_nodes: list[VisualNode] = []
+        for index, box in enumerate(boxes):
+            contained_tokens = sum(self._center_in(token.region, box) for token in tokens)
+            area_ratio = box.width * box.height / image_area
+            aspect_ratio = box.width / max(1, box.height)
+            text_overlap = self._text_overlap_ratio(box, tokens)
+            if (
+                area_ratio >= policy.segmentation.minimum_container_area_ratio
+                and contained_tokens >= policy.segmentation.minimum_container_text_tokens
+            ):
+                kind: VisualNodeKind = "container"
+            elif (
+                box.height
+                >= policy.segmentation.minimum_control_height_in_text_heights * median_height
+                and aspect_ratio >= policy.segmentation.minimum_control_aspect_ratio
+            ):
+                kind = "control"
+            elif text_overlap <= policy.segmentation.text_overlap_threshold:
+                kind = "image"
+            else:
                 continue
-            boxes.append(ScreenRegion(x, y, width, height))
+            component_nodes.append(
+                VisualNode(
+                    f"{kind}:{index}",
+                    kind,
+                    box,
+                    edge=self._trim_edges(
+                        edge[box.y : box.y + box.height, box.x : box.x + box.width]
+                    ),
+                )
+            )
+        nodes.extend(component_nodes)
+        containers = tuple(node for node in nodes if node.kind == "container")
+        containment = tuple(
+            (container.id, child.id)
+            for container in containers
+            for child in nodes
+            if container.id != child.id and self._contains(container.region, child.region)
+        )
+        graph = VisualLayoutGraph(key, viewport, median_height, tuple(nodes), containment)
+        if len(self._graph_cache) >= 8:
+            self._graph_cache.pop(next(iter(self._graph_cache)))
+        self._graph_cache[key] = graph
+        self._check_deadline(started)
+        return graph
+
+    def _segmented_boxes(
+        self, image: np.ndarray, edge: np.ndarray, started: float
+    ) -> tuple[ScreenRegion, ...]:
+        policy = self._required_policy()
+        image_area = max(1, image.shape[0] * image.shape[1])
+        scale = min(
+            1.0,
+            (policy.segmentation.maximum_analysis_pixels / image_area) ** 0.5,
+        )
+        if scale < 1:
+            analysis_size = (
+                max(1, round(image.shape[1] * scale)),
+                max(1, round(image.shape[0] * scale)),
+            )
+            analysis_image = cv2.resize(image, analysis_size, interpolation=cv2.INTER_AREA)
+            analysis_edge = cv2.resize(edge, analysis_size, interpolation=cv2.INTER_NEAREST)
+        else:
+            analysis_image = image
+            analysis_edge = edge
+        kernel_size = policy.segmentation.morphology_kernel_size
+        kernel = np.ones((kernel_size, kernel_size), dtype=np.uint8)
+        sources = [cv2.dilate(analysis_edge, kernel, iterations=1)]
+        gray = cv2.cvtColor(analysis_image, cv2.COLOR_BGR2GRAY)
+        for mode in (cv2.THRESH_BINARY, cv2.THRESH_BINARY_INV):
+            _threshold, binary = cv2.threshold(gray, 0, 255, mode | cv2.THRESH_OTSU)
+            sources.append(binary)
+        minimum_area = image_area * policy.segmentation.minimum_component_area_ratio
+        maximum_area = image_area * policy.segmentation.maximum_component_area_ratio
+        boxes: list[ScreenRegion] = []
+        for source in sources:
+            contours, _hierarchy = cv2.findContours(source, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours[: policy.segmentation.maximum_components]:
+                source_x, source_y, source_width, source_height = cv2.boundingRect(contour)
+                x = round(source_x / scale)
+                y = round(source_y / scale)
+                width = max(1, round(source_width / scale))
+                height = max(1, round(source_height / scale))
+                area = width * height
+                if (
+                    area < minimum_area
+                    or area > maximum_area
+                    or width < policy.segmentation.minimum_component_dimension
+                    or height < policy.segmentation.minimum_component_dimension
+                ):
+                    continue
+                boxes.append(ScreenRegion(x, y, width, height))
+            self._check_deadline(started)
         boxes.sort(key=lambda region: region.width * region.height, reverse=True)
         distinct: list[ScreenRegion] = []
         for box in boxes:
-            if any(self._region_iou(box, existing) > 0.5 for existing in distinct):
+            if any(
+                self._region_iou(box, existing) > policy.segmentation.duplicate_iou_threshold
+                for existing in distinct
+            ):
                 continue
             distinct.append(box)
-        return tuple(
-            _VisualComponent(
-                region=box,
-                edge=self._trim_edges(edge[box.y : box.y + box.height, box.x : box.x + box.width]),
+        return tuple(distinct[: policy.segmentation.maximum_components])
+
+    def _nodes_in_anchor_container(
+        self, graph: VisualLayoutGraph, anchor: ScreenRegion, kind: VisualNodeKind
+    ) -> tuple[VisualNode, ...]:
+        container = self._anchor_container(graph, anchor, kind)
+        contained_ids = {
+            child_id for container_id, child_id in graph.containment if container_id == container.id
+        }
+        return tuple(node for node in graph.of_kind(kind) if node.id in contained_ids)
+
+    def _anchor_container(
+        self, graph: VisualLayoutGraph, anchor: ScreenRegion, child_kind: VisualNodeKind
+    ) -> VisualNode:
+        children = graph.of_kind(child_kind)
+        child_ids = {child.id for child in children}
+        child_regions = {child.id: child.region for child in children}
+        contained_by = {
+            container.id: {
+                child_id
+                for container_id, child_id in graph.containment
+                if container_id == container.id
+            }
+            for container in graph.of_kind("container")
+        }
+        containers = [
+            container
+            for container in graph.of_kind("container")
+            if self._contains(container.region, anchor)
+            and any(
+                child_id in child_ids
+                and (
+                    child_kind != "phrase" or self._region_iou(child_regions[child_id], anchor) == 0
+                )
+                for child_id in contained_by[container.id]
             )
-            for box in distinct
+        ]
+        if not containers:
+            raise SurfaceError(
+                "target_absent",
+                "No visual container associated the rendered anchor with a target.",
+                recoverable=True,
+                effect_absent=True,
+            )
+        smallest_area = min(node.region.width * node.region.height for node in containers)
+        smallest = [
+            node for node in containers if node.region.width * node.region.height == smallest_area
+        ]
+        if len(smallest) != 1:
+            raise self._cardinality_error(len(smallest), "visual anchor container")
+        return smallest[0]
+
+    def _select_structural_row(
+        self,
+        anchor: ScreenRegion,
+        candidates: tuple[VisualNode, ...],
+        median_height: float,
+        *,
+        image: bool = False,
+    ) -> tuple[VisualNode, ...]:
+        policy = self._required_policy().association
+        same_row: list[VisualNode] = []
+        following: list[VisualNode] = []
+        for candidate in candidates:
+            if self._region_iou(anchor, candidate.region) > 0:
+                continue
+            vertical_overlap = self._overlap_length(
+                anchor.y,
+                anchor.y + anchor.height,
+                candidate.region.y,
+                candidate.region.y + candidate.region.height,
+            )
+            overlap_ratio = vertical_overlap / max(1, min(anchor.height, candidate.region.height))
+            center_delta = abs(
+                candidate.region.y + candidate.region.height / 2 - (anchor.y + anchor.height / 2)
+            )
+            if candidate.region.x >= anchor.x + anchor.width and (
+                overlap_ratio >= policy.minimum_axis_overlap_ratio
+                or (
+                    image
+                    and center_delta
+                    <= policy.image_center_tolerance_in_text_heights * median_height
+                )
+            ):
+                same_row.append(candidate)
+                continue
+            horizontal_overlap = self._overlap_length(
+                anchor.x,
+                anchor.x + anchor.width,
+                candidate.region.x,
+                candidate.region.x + candidate.region.width,
+            )
+            gap = candidate.region.y - (anchor.y + anchor.height)
+            if (
+                horizontal_overlap > 0
+                and gap >= 0
+                and gap <= policy.maximum_following_gap_in_text_heights * median_height
+            ):
+                following.append(candidate)
+        if same_row:
+            return tuple(same_row)
+        if not following:
+            return ()
+        nearest_y = min(node.region.y for node in following)
+        tolerance = policy.row_tolerance_in_text_heights * median_height
+        return tuple(node for node in following if abs(node.region.y - nearest_y) <= tolerance)
+
+    def _associated_value_tokens(
+        self,
+        label: ScreenRegion,
+        tokens: tuple[VisualToken, ...],
+        median_height: float,
+    ) -> tuple[VisualToken, ...]:
+        policy = self._required_policy()
+        lines = self._text_lines(tokens, median_height)
+        horizontal = [
+            line
+            for line in lines
+            if self._line_overlaps_region(line, label)
+            and min(token.region.x for token in line) >= label.x + label.width
+        ]
+        if horizontal:
+            groups = self._token_groups(horizontal[0], median_height)
+            if len(groups) != 1:
+                raise self._cardinality_error(len(groups), "rendered field value")
+            return groups[0]
+        following = [
+            line
+            for line in lines
+            if min(token.region.y for token in line) >= label.y + label.height
+            and self._line_horizontal_overlap(line, label) > 0
+            and min(token.region.y for token in line) - (label.y + label.height)
+            <= policy.association.maximum_following_gap_in_text_heights * median_height
+        ]
+        if not following:
+            return ()
+        nearest_y = min(min(token.region.y for token in line) for line in following)
+        nearest = [
+            line
+            for line in following
+            if abs(min(token.region.y for token in line) - nearest_y)
+            <= policy.association.row_tolerance_in_text_heights * median_height
+        ]
+        groups = tuple(
+            group
+            for line in nearest
+            for group in self._token_groups(line, median_height)
+            if self._line_horizontal_overlap(group, label) > 0
+        )
+        if len(groups) != 1:
+            raise self._cardinality_error(len(groups), "rendered field value")
+        return groups[0]
+
+    def _text_lines(
+        self, tokens: tuple[VisualToken, ...], median_height: float
+    ) -> list[list[VisualToken]]:
+        del median_height
+        policy = self._required_policy().association
+        lines: list[list[VisualToken]] = []
+        for token in sorted(tokens, key=lambda item: (item.region.y, item.region.x)):
+            matching_line = next(
+                (
+                    line
+                    for line in lines
+                    if self._axis_overlap_ratio(token.region, line[0].region, vertical=True)
+                    >= policy.minimum_axis_overlap_ratio
+                ),
+                None,
+            )
+            if matching_line is None:
+                lines.append([token])
+            else:
+                matching_line.append(token)
+        for line in lines:
+            line.sort(key=lambda item: item.region.x)
+        return lines
+
+    def _token_groups(
+        self, line: list[VisualToken], median_height: float
+    ) -> tuple[tuple[VisualToken, ...], ...]:
+        maximum_gap = (
+            self._required_policy().phrases.maximum_line_gap_in_text_heights * median_height
+        )
+        groups: list[list[VisualToken]] = []
+        for token in sorted(line, key=lambda item: item.region.x):
+            if (
+                not groups
+                or token.region.x - (groups[-1][-1].region.x + groups[-1][-1].region.width)
+                > maximum_gap
+            ):
+                groups.append([token])
+            else:
+                groups[-1].append(token)
+        return tuple(tuple(group) for group in groups)
+
+    def _line_overlaps_region(self, line: list[VisualToken], region: ScreenRegion) -> bool:
+        return any(
+            self._axis_overlap_ratio(token.region, region, vertical=True)
+            >= self._required_policy().association.minimum_axis_overlap_ratio
+            for token in line
         )
 
     @staticmethod
-    def _control_relation(
-        label: ScreenRegion, component: ScreenRegion, median_height: float
-    ) -> tuple[int, float] | None:
-        vertical_overlap = VisionGrounder._overlap_length(
-            label.y, label.y + label.height, component.y, component.y + component.height
-        )
-        if vertical_overlap >= min(label.height, component.height) * 0.5 and component.x >= label.x:
-            return 0, max(0.0, component.x - (label.x + label.width)) / max(1.0, median_height)
-        horizontal_overlap = VisionGrounder._overlap_length(
-            label.x, label.x + label.width, component.x, component.x + component.width
-        )
-        gap = component.y - (label.y + label.height)
-        if horizontal_overlap > 0 and gap >= 0 and gap <= 6 * median_height:
-            return 1, gap / max(1.0, median_height)
-        return None
-
-    @staticmethod
-    def _value_relation(
-        label: ScreenRegion, value: ScreenRegion, median_height: float
-    ) -> tuple[int, float] | None:
-        vertical_overlap = VisionGrounder._overlap_length(
-            label.y, label.y + label.height, value.y, value.y + value.height
-        )
-        if (
-            vertical_overlap >= min(label.height, value.height) * 0.5
-            and value.x >= label.x + label.width
-        ):
-            return 0, max(0.0, value.x - (label.x + label.width)) / max(1.0, median_height)
-        horizontal_overlap = VisionGrounder._overlap_length(
-            label.x, label.x + label.width, value.x, value.x + value.width
-        )
-        gap = value.y - (label.y + label.height)
-        if horizontal_overlap > 0 and gap >= 0 and gap <= 6 * median_height:
-            return 1, gap / max(1.0, median_height)
-        return None
-
-    @staticmethod
-    def _image_relation(
-        label: ScreenRegion, component: ScreenRegion, median_height: float
-    ) -> tuple[int, float] | None:
-        label_center_y = label.y + label.height / 2
-        component_center_y = component.y + component.height / 2
-        if (
-            component.x >= label.x + label.width
-            and abs(component_center_y - label_center_y) <= 2.5 * median_height
-        ):
-            return 0, max(0.0, component.x - (label.x + label.width)) / max(1.0, median_height)
-        horizontal_overlap = VisionGrounder._overlap_length(
-            label.x, label.x + label.width, component.x, component.x + component.width
-        )
-        gap = component.y - (label.y + label.height)
-        if horizontal_overlap > 0 and gap >= 0 and gap <= 8 * median_height:
-            return 1, gap / max(1.0, median_height)
-        return None
-
-    @staticmethod
-    def _same_text_line(first: ScreenRegion, second: ScreenRegion, median_height: float) -> bool:
-        overlap = VisionGrounder._overlap_length(
-            first.y, first.y + first.height, second.y, second.y + second.height
-        )
-        return (
-            overlap >= min(first.height, second.height) * 0.5
-            or abs(first.y - second.y) <= median_height
+    def _line_horizontal_overlap(
+        line: list[VisualToken] | tuple[VisualToken, ...], region: ScreenRegion
+    ) -> int:
+        line_region: ScreenRegion | None = None
+        for token in line:
+            line_region = VisionGrounder._union_region(line_region, token.region)
+        if line_region is None:
+            return 0
+        return VisionGrounder._overlap_length(
+            line_region.x, line_region.x + line_region.width, region.x, region.x + region.width
         )
 
     @staticmethod
@@ -660,6 +932,40 @@ class VisionGrounder:
         first_start: int, first_end: int, second_start: int, second_end: int
     ) -> int:
         return max(0, min(first_end, second_end) - max(first_start, second_start))
+
+    @staticmethod
+    def _contains(container: ScreenRegion, child: ScreenRegion) -> bool:
+        return (
+            child.x >= container.x
+            and child.y >= container.y
+            and child.x + child.width <= container.x + container.width
+            and child.y + child.height <= container.y + container.height
+        )
+
+    @staticmethod
+    def _axis_overlap_ratio(first: ScreenRegion, second: ScreenRegion, *, vertical: bool) -> float:
+        if vertical:
+            overlap = VisionGrounder._overlap_length(
+                first.y, first.y + first.height, second.y, second.y + second.height
+            )
+            denominator = min(first.height, second.height)
+        else:
+            overlap = VisionGrounder._overlap_length(
+                first.x, first.x + first.width, second.x, second.x + second.width
+            )
+            denominator = min(first.width, second.width)
+        return overlap / max(1, denominator)
+
+    @staticmethod
+    def _text_overlap_ratio(region: ScreenRegion, tokens: tuple[VisualToken, ...]) -> float:
+        overlap = 0
+        for token in tokens:
+            left = max(region.x, token.region.x)
+            top = max(region.y, token.region.y)
+            right = min(region.x + region.width, token.region.x + token.region.width)
+            bottom = min(region.y + region.height, token.region.y + token.region.height)
+            overlap += max(0, right - left) * max(0, bottom - top)
+        return min(1.0, overlap / max(1, region.width * region.height))
 
     @staticmethod
     def _union_region(first: ScreenRegion | None, second: ScreenRegion) -> ScreenRegion:
@@ -675,10 +981,6 @@ class VisionGrounder:
     def _median_text_height(tokens: list[VisualToken] | tuple[VisualToken, ...]) -> float:
         heights = [token.region.height for token in tokens if token.region.height > 0]
         return float(np.median(heights)) if heights else 1.0
-
-    @staticmethod
-    def _regions_equal(first: ScreenRegion, second: ScreenRegion) -> bool:
-        return first == second
 
     @staticmethod
     def _region_iou(first: ScreenRegion, second: ScreenRegion) -> float:
@@ -706,9 +1008,10 @@ class VisionGrounder:
         )
         if trimmed.size == 0:
             return canvas
+        padding = policy.image.signature_padding_pixels
         scale = min(
-            (policy.image.canonical_width - 4) / max(1, trimmed.shape[1]),
-            (policy.image.canonical_height - 4) / max(1, trimmed.shape[0]),
+            (policy.image.canonical_width - padding) / max(1, trimmed.shape[1]),
+            (policy.image.canonical_height - padding) / max(1, trimmed.shape[0]),
         )
         width = max(1, round(trimmed.shape[1] * scale))
         height = max(1, round(trimmed.shape[0] * scale))
@@ -737,8 +1040,13 @@ class VisionGrounder:
         )
         forward = float(candidate_distance[template_edges].mean())
         backward = float(template_distance[candidate_edges].mean())
-        chamfer = exp(-((forward + backward) / 2) / max(1.0, template.shape[0] * 0.12))
-        return float(0.6 * overlap + 0.4 * chamfer)
+        chamfer = exp(
+            -((forward + backward) / 2)
+            / max(1.0, template.shape[0] * policy.image.chamfer_decay_ratio)
+        )
+        return float(
+            policy.image.overlap_weight * overlap + (1 - policy.image.overlap_weight) * chamfer
+        )
 
     def _required_policy(self) -> VisionGroundingPolicy:
         if self.policy is None:
@@ -748,6 +1056,40 @@ class VisionGrounder:
                 effect_absent=True,
             )
         return self.policy
+
+    def _validate_frame_budget(self, png: bytes) -> None:
+        policy = self._required_policy()
+        dimensions = self._png_dimensions(png)
+        if dimensions is not None:
+            width, height = dimensions
+            if width <= 0 or height <= 0 or width * height > policy.budgets.maximum_frame_pixels:
+                raise SurfaceError(
+                    "visual_frame_budget_exceeded",
+                    "The rendered frame exceeds the visual grounding pixel budget.",
+                    effect_absent=True,
+                )
+
+    @staticmethod
+    def _png_dimensions(png: bytes) -> tuple[int, int] | None:
+        if len(png) < 24 or not png.startswith(b"\x89PNG\r\n\x1a\n"):
+            return None
+        return int.from_bytes(png[16:20], "big"), int.from_bytes(png[20:24], "big")
+
+    @classmethod
+    def _png_viewport(cls, png: bytes) -> Viewport:
+        dimensions = cls._png_dimensions(png)
+        if dimensions is None:
+            raise SurfaceError("frame_invalid", "The rendered surface frame is not a valid PNG.")
+        return Viewport(*dimensions)
+
+    def _check_deadline(self, started: float) -> None:
+        policy = self._required_policy()
+        if (monotonic() - started) * 1000 > policy.budgets.maximum_grounding_milliseconds:
+            raise SurfaceError(
+                "visual_grounding_budget_exceeded",
+                "Visual grounding exceeded its bounded execution budget.",
+                effect_absent=True,
+            )
 
     def _match_template(
         self,

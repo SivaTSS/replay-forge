@@ -702,8 +702,11 @@ class PlaywrightSurfaceSession:
                 raise SurfaceError(
                     "visual_grounder_unavailable", "Visual extraction is unavailable."
                 )
-            fresh = self._fresh_visual(target)
-            return self.vision.extract(self._capture_grounding_frame(), fresh.region).strip()
+            frame = self._capture_grounding_frame()
+            fresh = self._fresh_visual(target, frame)
+            return self.vision.extract(
+                frame, fresh.region, expected_frame_hash=fresh.frame_hash
+            ).strip()
         return self._target_locator(target).inner_text().strip()
 
     def wait_until(
@@ -797,7 +800,7 @@ class PlaywrightSurfaceSession:
                 "target_handle_stale", "Resolved target is no longer available."
             ) from exc
 
-    def _fresh_visual(self, target: ResolvedTarget) -> Any:
+    def _fresh_visual(self, target: ResolvedTarget, frame: bytes | None = None) -> Any:
         if self.vision is None:
             raise SurfaceError("visual_grounder_unavailable", "Visual grounding is unavailable.")
         candidate = self._visual_candidates.get(target.handle)
@@ -805,7 +808,8 @@ class PlaywrightSurfaceSession:
             if target.handle in self._coordinate_candidates and target.visual is not None:
                 return target.visual
             raise SurfaceError("target_handle_stale", "Visual target handle is unavailable.")
-        return self.vision.resolve(candidate, self._capture_grounding_frame(), self._viewport())
+        grounding_frame = frame if frame is not None else self._capture_grounding_frame()
+        return self.vision.resolve(candidate, grounding_frame, self._viewport())
 
     def _coordinate_target(self, candidate: LocatorCandidate) -> VisualTargetData:
         assert None not in (

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from time import sleep
 from typing import Any, cast
 
 import cv2
@@ -48,6 +49,13 @@ def png_with_icon(x: int, y: int) -> bytes:
     cv2.rectangle(image, (x, y), (x + 60, y + 50), (20, 80, 140), 3)
     cv2.line(image, (x + 22, y + 15), (x + 39, y + 25), (20, 80, 140), 4)
     cv2.line(image, (x + 39, y + 25), (x + 22, y + 35), (20, 80, 140), 4)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    return encoded.tobytes()
+
+
+def blank_png(width: int = 400, height: int = 240) -> bytes:
+    image = np.full((height, width, 3), 245, dtype=np.uint8)
     ok, encoded = cv2.imencode(".png", image)
     assert ok
     return encoded.tobytes()
@@ -147,12 +155,57 @@ def test_rendered_field_value_associates_horizontal_value(tmp_path: Path) -> Non
 
     resolved = vision.resolve(
         RenderedFieldValueCandidate(strategy="rendered_field_value", label="Currency"),
-        b"field-frame",
+        blank_png(),
         Viewport(400, 240),
     )
 
     assert resolved.region == ScreenRegion(150, 80, 45, 20)
     assert resolved.method == "rendered_field_value"
+
+
+def test_rendered_field_value_unions_every_token_in_the_selected_value(tmp_path: Path) -> None:
+    frame = blank_png()
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Available", 0.99, ScreenRegion(20, 80, 80, 20)),
+            VisualToken("balance", 0.99, ScreenRegion(105, 80, 65, 20)),
+            VisualToken("USD", 0.98, ScreenRegion(210, 80, 35, 20)),
+            VisualToken("1,420.57", 0.97, ScreenRegion(250, 80, 75, 20)),
+        ),
+    )
+
+    resolved = vision.resolve(
+        RenderedFieldValueCandidate(strategy="rendered_field_value", label="Available balance"),
+        frame,
+        Viewport(400, 240),
+    )
+
+    assert resolved.region == ScreenRegion(210, 80, 115, 20)
+    assert (
+        vision.extract(frame, resolved.region, expected_frame_hash=resolved.frame_hash)
+        == "USD 1,420.57"
+    )
+
+
+def test_rendered_field_value_unions_a_stacked_value_line(tmp_path: Path) -> None:
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Account", 0.99, ScreenRegion(20, 50, 65, 20)),
+            VisualToken("owner", 0.99, ScreenRegion(90, 50, 55, 20)),
+            VisualToken("Ada", 0.98, ScreenRegion(20, 82, 35, 20)),
+            VisualToken("Lovelace", 0.98, ScreenRegion(60, 82, 75, 20)),
+        ),
+    )
+
+    resolved = vision.resolve(
+        RenderedFieldValueCandidate(strategy="rendered_field_value", label="Account owner"),
+        blank_png(),
+        Viewport(400, 240),
+    )
+
+    assert resolved.region == ScreenRegion(20, 82, 115, 20)
 
 
 def test_rendered_field_value_rejects_duplicate_labels(tmp_path: Path) -> None:
@@ -169,6 +222,30 @@ def test_rendered_field_value_rejects_duplicate_labels(tmp_path: Path) -> None:
         vision.resolve(
             RenderedFieldValueCandidate(strategy="rendered_field_value", label="Currency"),
             b"duplicate-field-frame",
+            Viewport(400, 240),
+        )
+
+    assert error.value.code == "target_ambiguous"
+
+
+def test_labeled_control_rejects_two_controls_in_the_same_structural_row(
+    tmp_path: Path,
+) -> None:
+    image = np.full((240, 400, 3), 245, dtype=np.uint8)
+    cv2.rectangle(image, (135, 80), (245, 120), (20, 80, 140), 3)
+    cv2.rectangle(image, (270, 80), (390, 120), (20, 80, 140), 3)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    vision = semantic_vision(
+        tmp_path, (VisualToken("Member ID", 0.99, ScreenRegion(20, 90, 90, 20)),)
+    )
+
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            RenderedLabeledControlCandidate(
+                strategy="rendered_labeled_control", label="Member ID", control_kind="text_input"
+            ),
+            encoded.tobytes(),
             Viewport(400, 240),
         )
 
@@ -324,6 +401,55 @@ def test_rendered_group_image_rejects_competing_components(tmp_path: Path) -> No
         )
 
     assert error.value.code == "target_ambiguous"
+
+
+def test_rendered_group_image_is_scoped_to_the_smallest_detected_container(
+    tmp_path: Path,
+) -> None:
+    image = np.full((260, 400, 3), 245, dtype=np.uint8)
+    for row_y in (25, 145):
+        cv2.rectangle(image, (10, row_y), (340, row_y + 85), (90, 100, 115), 2)
+        cv2.rectangle(image, (270, row_y + 16), (325, row_y + 70), (20, 80, 140), 3)
+        cv2.line(
+            image,
+            (288, row_y + 32),
+            (307, row_y + 43),
+            (20, 80, 140),
+            4,
+        )
+        cv2.line(
+            image,
+            (307, row_y + 43),
+            (288, row_y + 56),
+            (20, 80, 140),
+            4,
+        )
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    frame = encoded.tobytes()
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Savings", 0.99, ScreenRegion(25, 50, 70, 20)),
+            VisualToken("0421", 0.98, ScreenRegion(120, 50, 45, 20)),
+            VisualToken("Checking", 0.99, ScreenRegion(25, 170, 80, 20)),
+            VisualToken("0110", 0.98, ScreenRegion(120, 170, 45, 20)),
+        ),
+    )
+    key, digest = vision.create_visual_signature(frame, ScreenRegion(270, 41, 56, 55))
+
+    resolved = vision.resolve(
+        RenderedGroupImageCandidate(
+            strategy="rendered_group_image",
+            group_label="Savings",
+            asset_key=key,
+            content_hash=digest,
+        ),
+        frame,
+        Viewport(400, 260),
+    )
+
+    assert resolved.region.y < 120
 
 
 def test_global_template_matching_rejects_identical_same_scale_icons(tmp_path: Path) -> None:
@@ -501,3 +627,75 @@ def test_invalid_frame_and_missing_ocr_target_fail_closed(tmp_path: Path) -> Non
     with pytest.raises(SurfaceError) as error:
         vision.create_edge_template(b"invalid", ScreenRegion(0, 0, 20, 20))
     assert error.value.code == "frame_invalid"
+
+
+def test_phrase_assembly_does_not_merge_adjacent_text_lines(tmp_path: Path) -> None:
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("First", 0.99, ScreenRegion(20, 50, 45, 20)),
+            VisualToken("Second", 0.99, ScreenRegion(20, 70, 60, 20)),
+        ),
+    )
+
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            RenderedTextCandidate(strategy="rendered_text", value="First Second"),
+            b"two-lines",
+            Viewport(400, 240),
+        )
+
+    assert error.value.code == "target_absent"
+
+
+def test_semantic_grounding_rejects_png_dimensions_before_ocr(tmp_path: Path) -> None:
+    policy = load_vision_policy(Path("config/vision-policy.yaml"))
+    frame = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8 + (4000).to_bytes(4, "big") * 2
+    vision = VisionGrounder(StubRecognizer(()), LocalCapabilityAssetStore(tmp_path), policy)
+
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            RenderedTextCandidate(strategy="rendered_text", value="anything"),
+            frame,
+            Viewport(4000, 4000),
+        )
+
+    assert error.value.code == "visual_frame_budget_exceeded"
+
+
+def test_semantic_text_grounding_enforces_the_time_budget(tmp_path: Path) -> None:
+    @dataclass(frozen=True)
+    class SlowRecognizer:
+        def recognize(self, png: bytes) -> tuple[VisualToken, ...]:
+            del png
+            sleep(0.005)
+            return (VisualToken("Search", 0.99, ScreenRegion(20, 20, 60, 20)),)
+
+    policy = load_vision_policy(Path("config/vision-policy.yaml"))
+    policy = policy.model_copy(
+        update={"budgets": policy.budgets.model_copy(update={"maximum_grounding_milliseconds": 1})}
+    )
+    vision = VisionGrounder(SlowRecognizer(), LocalCapabilityAssetStore(tmp_path), policy)
+
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            RenderedTextCandidate(strategy="rendered_text", value="Search"),
+            b"slow-frame",
+            Viewport(400, 240),
+        )
+
+    assert error.value.code == "visual_grounding_budget_exceeded"
+
+
+def test_extract_rejects_a_region_resolved_from_another_frame(tmp_path: Path) -> None:
+    token = VisualToken("USD", 0.99, ScreenRegion(20, 20, 40, 20))
+    vision = semantic_vision(tmp_path, (token,))
+
+    with pytest.raises(SurfaceError) as error:
+        vision.extract(
+            b"current-frame",
+            token.region,
+            expected_frame_hash=vision.frame_hash(b"previous-frame"),
+        )
+
+    assert error.value.code == "visual_frame_changed"

@@ -139,6 +139,9 @@ class ReplayEngine:
                     lease.version,
                 )
                 if isinstance(result, RecoveryResume):
+                    lease = self.lease_service.heartbeat(
+                        session.session_id, lease.version, AUTOMATION_OWNER
+                    )
                     step_index = step_indexes[result.step_id]
                     continue
                 if result is not None:
@@ -154,6 +157,9 @@ class ReplayEngine:
                             step_index,
                         )
                     return result
+                lease = self.lease_service.heartbeat(
+                    session.session_id, lease.version, AUTOMATION_OWNER
+                )
                 step_index += 1
 
             return self._complete(request, session, inputs, outputs)
@@ -255,6 +261,10 @@ class ReplayEngine:
                     automation_lease_version,
                 )
                 if isinstance(result, RecoveryResume):
+                    refreshed = self.lease_service.heartbeat(
+                        session.session_id, automation_lease_version, AUTOMATION_OWNER
+                    )
+                    automation_lease_version = refreshed.version
                     step_index = step_indexes[result.step_id]
                     continue
                 if result is not None:
@@ -270,6 +280,10 @@ class ReplayEngine:
                             step_index,
                         )
                     return result
+                refreshed = self.lease_service.heartbeat(
+                    session.session_id, automation_lease_version, AUTOMATION_OWNER
+                )
+                automation_lease_version = refreshed.version
                 step_index += 1
             return self._complete(request, session, continuation.inputs, continuation.outputs)
         except SurfaceError as error:
