@@ -145,6 +145,15 @@ class PlaywrightSurfaceDriver:
             raise SurfaceError(
                 code, "The requested application target is not registered."
             ) from error
+        if (
+            launch.rendered_surface
+            and (launch.required_landmarks or launch.forbidden_landmarks)
+            and self.vision is None
+        ):
+            raise SurfaceError(
+                "vision_not_configured",
+                "Rendered readiness requires a configured vision adapter.",
+            )
         if self.playwright is None:
             self.playwright = sync_playwright().start()
             try:

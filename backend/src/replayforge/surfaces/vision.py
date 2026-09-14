@@ -74,7 +74,7 @@ class VisualLayoutGraph:
 
 @dataclass(slots=True)
 class RapidOcrTextRecognizer:
-    """Lazy local OCR adapter; model initialization never performs a network call."""
+    """Lazy local OCR adapter; model files must be provisioned for offline startup."""
 
     _engine: RapidOCR | None = field(default=None, init=False, repr=False)
     _lock: Lock = field(default_factory=Lock, init=False, repr=False)

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, ClassVar, cast
 
 import pytest
 from playwright.sync_api import BrowserContext, Page
 from playwright.sync_api import Error as PlaywrightError
 
+from replayforge.applications.registry import load_application_registry
 from replayforge.capabilities.models import ElementCondition, IdentityMatchesCondition
 from replayforge.surfaces.models import ActionableControl, ExtractableField, SurfaceError
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver, PlaywrightSurfaceSession
@@ -34,6 +36,17 @@ def session_with(page: FakePage) -> PlaywrightSurfaceSession:
 def test_driver_requires_explicit_application_registration() -> None:
     with pytest.raises(ValueError, match="application registry"):
         PlaywrightSurfaceDriver("http://127.0.0.1:3001")
+
+
+def test_rendered_readiness_requires_vision_before_browser_launch() -> None:
+    registry = load_application_registry(
+        Path(__file__).resolve().parents[4] / "config/applications.yaml"
+    )
+    driver = PlaywrightSurfaceDriver("http://127.0.0.1:3001", application_registry=registry)
+    with pytest.raises(SurfaceError) as error:
+        driver.open("northstar_member_service", "harbor", "visual_member_workbench")
+    assert error.value.code == "vision_not_configured"
+    assert driver.playwright is None
 
 
 @pytest.mark.parametrize(

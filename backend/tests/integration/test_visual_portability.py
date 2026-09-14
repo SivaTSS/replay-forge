@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from replayforge.applications.registry import load_application_registry
+from replayforge.capabilities.assets import LocalCapabilityAssetStore
 from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
@@ -15,6 +16,8 @@ from replayforge.runtime.settings import RuntimeSettings
 from replayforge.shared.clock import SystemClock
 from replayforge.surfaces.models import Viewport
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
+from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
+from replayforge.surfaces.vision_policy import load_vision_policy
 
 pytestmark = pytest.mark.integration
 REPOSITORY = Path(__file__).resolve().parents[3]
@@ -261,6 +264,11 @@ def test_visual_workbench_exposes_only_a_canvas(demo_bank: str) -> None:
     driver = PlaywrightSurfaceDriver(
         demo_bank,
         application_registry=load_application_registry(REPOSITORY / "config/applications.yaml"),
+        vision=VisionGrounder(
+            RapidOcrTextRecognizer(),
+            LocalCapabilityAssetStore(REPOSITORY / "capabilities/_assets"),
+            load_vision_policy(REPOSITORY / "config/vision-policy.yaml"),
+        ),
     )
     session = driver.open("northstar_member_service", "harbor", "visual_member_workbench")
     try:
