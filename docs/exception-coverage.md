@@ -99,3 +99,7 @@ Run `servicing_loan_payoff_quote` and `temporary_card_lock` separately to keep b
 resource use bounded. Capture stops on an unsuccessful discovery or validation. Private capture
 files are not submission evidence: export and verify sanitized bundles using the
 [evidence workflow](verification.md), including actual run IDs and the recording commit.
+
+To extend a committed example without rediscovering its successful path, add
+`--primary-version 1.0.1`. The exact version must first pass fresh replay. Its original discovery
+provenance remains intact; only the new scenario runs are new discovery evidence.

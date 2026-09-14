@@ -24,6 +24,7 @@ from replayforge.capabilities.models import (
 from replayforge.capabilities.registry import (
     CapabilityConflictError,
     CapabilityIntegrityError,
+    CapabilityNotFoundError,
     CapabilityPublicationError,
     CapabilityRegistry,
 )
@@ -104,11 +105,14 @@ class DiscoverySuite:
     status: DiscoverySuiteStatus = DiscoverySuiteStatus.COLLECTING
     published_version: str | None = None
     validation_failures: tuple[CompatibilityValidationFailure, ...] = ()
+    primary_source: Literal["new_discovery", "published_capability"] = "new_discovery"
 
     def __post_init__(self) -> None:
         parse_id(self.suite_id, EntityKind.SUITE)
         if not isinstance(self.status, DiscoverySuiteStatus):
             raise ValueError("discovery suite status must use the domain enum")
+        if self.primary_source not in {"new_discovery", "published_capability"}:
+            raise ValueError("discovery primary source is invalid")
         if not self.goal.strip():
             raise ValueError("discovery suite goal cannot be empty")
         identifiers = (
@@ -170,6 +174,7 @@ class DiscoverySuite:
             "tenant": self.tenant,
             "entry_point": self.entry_point,
             "primary": _result_snapshot(primary),
+            "primary_source": self.primary_source,
             "scenario_count": len(self.scenarios),
             "scenarios": [
                 {
@@ -275,6 +280,42 @@ class DiscoverySuiteService:
                 if isinstance(result, DiscoverySuccess)
                 else DiscoverySuiteStatus.FAILED
             ),
+        )
+        self._store.save(suite)
+        return suite
+
+    def from_published(
+        self, *, capability_id: str, version: str, tenant: str, inputs: dict[str, Any]
+    ) -> DiscoverySuite:
+        """Extend an immutable learned trace; do not claim a new primary discovery ran."""
+        try:
+            artifact = self.registry.get(capability_id, version).artifact
+        except (
+            CapabilityNotFoundError,
+            CapabilityIntegrityError,
+            CapabilityPublicationError,
+        ) as error:
+            raise DiscoverySuiteError("published primary is unavailable") from error
+        family = artifact.capability.application_family
+        entry_point = artifact.compatibility.entry_point
+        self._assert_application_target(family, tenant, entry_point)
+        if self.validator is None or not self.validator(artifact, tenant, inputs).verifies():
+            raise DiscoverySuiteError("published primary did not pass fresh deterministic replay")
+        primary = DiscoverySuccess(
+            status="success",
+            run_id=artifact.provenance.discovery_run_id,
+            artifact=artifact,
+            evidence_manifest=artifact.provenance.evidence_manifest_key,
+        )
+        suite = DiscoverySuite(
+            suite_id=str(new_id(EntityKind.SUITE)),
+            goal=artifact.capability.description,
+            application_family=family,
+            tenant=tenant,
+            entry_point=entry_point,
+            primary_inputs=deepcopy(inputs),
+            primary=primary,
+            primary_source="published_capability",
         )
         self._store.save(suite)
         return suite

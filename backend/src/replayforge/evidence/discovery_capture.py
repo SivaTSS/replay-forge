@@ -43,6 +43,7 @@ class SuiteCaptureRequest:
     expected_outputs: tuple[str, ...]
     max_steps: int = 40
     scenarios: tuple[ScenarioCaptureRequest, ...] = ()
+    primary_version: str | None = None
 
 
 def _request_json(
@@ -91,10 +92,21 @@ def invoke_suite(
         if suite_id is not None
         else _request_json(
             base_url,
-            "/api/v1/discovery-suites",
+            (
+                "/api/v1/discovery-suites/from-published"
+                if request.primary_version
+                else "/api/v1/discovery-suites"
+            ),
             timeout_seconds,
             method="POST",
             payload={
+                "capability_id": request.expected_capability_id,
+                "version": request.primary_version,
+                "tenant": request.tenant,
+                "inputs": request.inputs,
+            }
+            if request.primary_version
+            else {
                 "goal": request.goal,
                 "application_family": request.application_family,
                 "tenant": request.tenant,
@@ -307,5 +319,6 @@ def capture_suite(
         "run_id": str(result["run_id"]),
         "status": str(result["status"]),
         "suite_id": str(response["suite"]["suite_id"]),
+        "primary_source": str(response["suite"].get("primary_source", "new_discovery")),
         "version": artifact.capability.version,
     }

@@ -112,6 +112,62 @@ def test_read_only_suite_publishes_only_at_finalize() -> None:
     assert service.finalize(suite.suite_id).status == "published"
 
 
+def test_extend_published_preserves_real_provenance_without_new_model_calls() -> None:
+    artifact = sample_artifact()
+    service = service_for(artifact)
+    service.registry.publish(artifact)
+    calls: list[str] = []
+
+    def validate(
+        artifact: CapabilityArtifact, tenant: str, inputs: dict[str, object]
+    ) -> ReplayValidation:
+        calls.append(tenant)
+        return successful_validation()
+
+    service.validator = validate
+    suite = service.from_published(
+        capability_id=artifact.capability.id,
+        version=artifact.capability.version,
+        tenant="harbor",
+        inputs={"member_id": "12345"},
+    )
+    assert calls == ["harbor"]
+    assert suite.snapshot()["primary_source"] == "published_capability"
+    assert isinstance(suite.primary, DiscoverySuccess)
+    assert suite.primary.run_id == artifact.provenance.discovery_run_id
+    assert suite.primary.evidence_manifest == artifact.provenance.evidence_manifest_key
+    assert suite.primary.artifact == artifact
+    assert suite.status == "collecting"
+
+
+@pytest.mark.parametrize("failure", ["missing", "no_validator", "replay_failed"])
+def test_extend_published_requires_available_version_and_fresh_success(failure: str) -> None:
+    artifact = sample_artifact()
+    service = service_for(artifact)
+    if failure != "missing":
+        service.registry.publish(artifact)
+    if failure == "no_validator":
+        service.validator = None
+    elif failure == "replay_failed":
+        service.validator = lambda *_args: ReplayValidation(
+            FailureResult(
+                status="failure",
+                run_id="run_" + "a" * 32,
+                code="target_absent",
+                message="Missing",
+                recoverable=False,
+                evidence_manifest="evidence://run_" + "a" * 32 + "/manifest.json",
+            )
+        )
+    with pytest.raises(ValueError):
+        service.from_published(
+            capability_id=artifact.capability.id,
+            version=artifact.capability.version,
+            tenant="harbor",
+            inputs={"member_id": "12345"},
+        )
+
+
 def test_suite_rejects_contradictory_lifecycle_state() -> None:
     service = service_for(sample_artifact())
     suite = service.create(

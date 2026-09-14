@@ -344,6 +344,7 @@ class DiscoveryEngine:
                         screenshot_png=session.capture_provider_frame(),
                         action_history=tuple(history),
                         allowed_action_types=effective_policy.allowed_action_types,
+                        rendered_surface=bool(getattr(session, "rendered_surface", False)),
                         output_contract=output_contract,
                         captured_output_names=tuple(
                             name for name in output_contract.properties if name in outputs

@@ -52,6 +52,10 @@ class DiscoveryInvoker(Protocol):
 class DiscoverySuiteInvoker(Protocol):
     def ready(self) -> bool: ...
 
+    def from_published(
+        self, *, capability_id: str, version: str, tenant: str, inputs: dict[str, Any]
+    ) -> DiscoverySuite: ...
+
     def create(
         self,
         *,

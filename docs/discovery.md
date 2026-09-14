@@ -236,6 +236,12 @@ typed draft ──► successful trace ──► optional observed scenarios
 
 The suite endpoints are `/api/v1/discovery-suites`, `/scenarios`, `/validations`, and `/finalize`. Compatibility variants are only added after a deterministic replay proof. The model may describe an observed branch; it cannot publish an unseen branch from speculation.
 
+`POST /api/v1/discovery-suites/from-published` extends an exact immutable capability version.
+It first requires fresh successful replay with the supplied tenant and inputs. The suite reports
+`primary_source: published_capability` and retains the original discovery run and evidence
+references; it does not claim another model-driven primary run occurred. New scenarios still
+require genuine discovery and the same complete replay/publication gates.
+
 Scenario inputs remain private suite state and are replayed during tenant validation and final
 publication. A negative scenario must return its exact declared disposition and code; a recovery
 must both complete the task and emit its own `recovery_completed` event. Happy-path success alone

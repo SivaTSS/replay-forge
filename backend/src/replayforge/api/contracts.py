@@ -105,6 +105,13 @@ class ViewerSnapshot(ApiModel):
     retention_seconds: int = Field(ge=1)
 
 
+class PublishedSuiteInvocation(ApiModel):
+    capability_id: str = Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+    version: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
+    tenant: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
+    inputs: dict[str, Any]
+
+
 class DiscoverySuiteScenario(ApiModel):
     kind: Literal["business_outcome", "application_failure", "recovery"]
     goal: str = Field(min_length=10, max_length=1_000)

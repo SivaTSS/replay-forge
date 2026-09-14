@@ -222,6 +222,7 @@ class ProviderContext:
     reference_steps: tuple[Step, ...] = ()
     scenario_kind: Literal["business_outcome", "application_failure", "recovery"] | None = None
     branch_observed: bool = False
+    rendered_surface: bool = False
 
     def __post_init__(self) -> None:
         captured = set(self.captured_output_names)

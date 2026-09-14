@@ -43,6 +43,7 @@ def _workflow_request(raw: dict[str, Any]) -> SuiteCaptureRequest:
             )
             for index, item in enumerate(scenarios, start=1)
         ),
+        primary_version=raw.get("primary_version"),
     )
 
 
@@ -55,6 +56,9 @@ def main() -> None:
     )
     parser.add_argument("--workflow", action="append", help="Workflow key; omit to capture all")
     parser.add_argument("--resume-suite", help="Resume validation for one existing suite ID")
+    parser.add_argument(
+        "--primary-version", help="Extend this published version after fresh replay"
+    )
     parser.add_argument("--output-directory", type=Path, default=Path(".local/discovery-captures"))
     arguments = parser.parse_args()
     if not 10 <= arguments.timeout_seconds <= 600:
@@ -74,6 +78,12 @@ def main() -> None:
         parser.error(f"unknown workflow: {', '.join(unknown)}")
     if arguments.resume_suite and len(selected) != 1:
         parser.error("--resume-suite requires exactly one --workflow")
+    if arguments.primary_version and (
+        len(selected) != 1
+        or arguments.resume_suite
+        or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", arguments.primary_version)
+    ):
+        parser.error("--primary-version requires one workflow, a semantic version, and no resume")
 
     arguments.output_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     capture_directory = Path(tempfile.mkdtemp(prefix="capture-", dir=arguments.output_directory))
@@ -87,7 +97,16 @@ def main() -> None:
             arguments.base_url,
             arguments.timeout_seconds,
             output,
-            _workflow_request(item),
+            _workflow_request(
+                {
+                    **item,
+                    **(
+                        {"primary_version": arguments.primary_version}
+                        if arguments.primary_version
+                        else {}
+                    ),
+                }
+            ),
             arguments.resume_suite,
         )
     print(json.dumps(summaries, sort_keys=True))

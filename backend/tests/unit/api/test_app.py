@@ -426,6 +426,31 @@ def test_intervention_inbox_returns_active_transition_context(mode: str | None) 
     assert response.json()["items"][0]["trigger_code"] == "unexpected_dialog"
 
 
+def test_extend_published_endpoint_preserves_original_discovery() -> None:
+    from tests.artifacts import sample_artifact
+    from tests.unit.runs.test_discovery_suite import service_for
+
+    artifact = sample_artifact()
+    suites = service_for(artifact)
+    suites.registry.publish(artifact)
+    client = TestClient(
+        create_app(ApiServices(FakeReplayInvoker(), discovery_suite_invoker=suites))
+    )
+    response = client.post(
+        "/api/v1/discovery-suites/from-published",
+        json={
+            "capability_id": artifact.capability.id,
+            "version": artifact.capability.version,
+            "tenant": "harbor",
+            "inputs": {"member_id": "12345"},
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["primary_source"] == "published_capability"
+    assert response.json()["primary"]["run_id"] == artifact.provenance.discovery_run_id
+    assert "12345" not in response.text
+
+
 def test_intervention_viewport_is_non_cacheable_png() -> None:
     transition = intervention_transition()
     api = TestClient(

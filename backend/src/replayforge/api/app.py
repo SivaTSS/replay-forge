@@ -24,6 +24,7 @@ from replayforge.api.contracts import (
     InterventionTransitionResponse,
     KeyInputPayload,
     LeaseTransitionRequest,
+    PublishedSuiteInvocation,
     ReplayInvocation,
     ResumeInterventionResponse,
     TerminateInterventionRequest,
@@ -203,6 +204,19 @@ def create_app(services: ApiServices) -> FastAPI:
             )
         suite = invoker.create(**body.model_dump())
         return JSONResponse(suite.snapshot(), status_code=200)
+
+    @app.post("/api/v1/discovery-suites/from-published")
+    def extend_published_suite(request: Request, body: PublishedSuiteInvocation) -> JSONResponse:
+        invoker = services.discovery_suite_invoker
+        if invoker is None or not invoker.ready():
+            return _error_response(
+                request,
+                status_code=503,
+                code="discovery_not_ready",
+                message="The configured discovery service is unavailable.",
+                retryable=True,
+            )
+        return JSONResponse(invoker.from_published(**body.model_dump()).snapshot())
 
     @app.get("/api/v1/discovery-suites/{suite_id}")
     def get_discovery_suite(request: Request, suite_id: str) -> JSONResponse:

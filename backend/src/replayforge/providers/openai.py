@@ -88,6 +88,8 @@ using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
 Conditions use operand as the route pattern, visible text, or output name. Identity conditions use
 operand for the extracted output and secondary_operand for the input path.
+When rendered_surface is true, use rendered_text for visible-text conditions, not text (which
+queries DOM text). Native DOM select is unavailable on that surface; use visible interactions.
 Use output_equals to verify an extracted state against an observed constant; operand is the output
 name and secondary_operand is the required state. Attach expected_condition to an action when its
 effect can be checked immediately, including an extraction's identity/state check. The runtime
@@ -811,6 +813,7 @@ class OpenAIModelProvider:
             "recent_actions": list(context.action_history[-20:]),
             "scenario_kind": context.scenario_kind,
             "branch_observed": context.branch_observed,
+            "rendered_surface": context.rendered_surface,
             "reference_steps": [
                 {
                     "id": step.id,
