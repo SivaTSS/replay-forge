@@ -126,6 +126,44 @@ def test_discovered_workflows_replay_across_registered_tenants(
         runtime.close()
 
 
+@pytest.mark.parametrize("tenant", ["harbor", "summit"])
+def test_discovered_servicing_quote_reuses_new_inputs_at_larger_viewport(
+    demo_bank: str, tmp_path: Path, tenant: str
+) -> None:
+    """No provider: reuse the genuine trace with another member, date, and layout."""
+    viewport = Viewport(1440, 900, 1.0)
+    runtime = build_runtime(
+        RuntimeSettings(
+            artifact_directory=REPOSITORY / "capabilities",
+            capability_asset_directory=REPOSITORY / "capabilities/_assets",
+            evidence_directory=evidence_path(tmp_path, tenant, viewport),
+            demo_base_url=demo_bank,
+            browser_viewport_width=viewport.width,
+            browser_viewport_height=viewport.height,
+            openai_api_key=None,
+            langfuse_public_key=None,
+            langfuse_secret_key=None,
+        )
+    )
+    try:
+        result = runtime.service.invoke(
+            "member.servicing_loan_payoff_quote",
+            "1.0.1",
+            tenant,
+            {"member_id": "12346", "payoff_date": "2026-09-21"},
+        )
+        assert isinstance(result, SuccessResult), result
+        # Integer-domain ACT/365, rounded once: 900000 + 2140 + 1430 cents.
+        assert result.outputs == {
+            "payoff_amount": "$9,035.70",
+            "good_through_date": "2026-09-21",
+            "confirmation_reference": "HBR-000001" if tenant == "harbor" else "SUM-000001",
+        }
+        assert result.checkpoint.verified
+    finally:
+        runtime.close()
+
+
 @pytest.mark.parametrize(
     ("tenant", "viewport"),
     [

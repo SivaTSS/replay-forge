@@ -39,6 +39,9 @@ _COMMITTED_ARTIFACT_HASHES = {
     "member.lookup_savings_balance/3.2.0.yaml": (
         "sha256:7bb65d0ade7518edd1ba8b5543e3dc0f649397b6d321a520a0462105b6a162cf"
     ),
+    "member.servicing_loan_payoff_quote/1.0.1.yaml": (
+        "sha256:ea95e6c1a0aa65528270e7078374eb8997f57a573389fa3a1d827bc516d8f737"
+    ),
     "member.temporary_card_lock/1.0.0.yaml": (
         "sha256:b8844028e13118a6ab091ed9ba460eeee97ff6a3511d1d9d9faabfb5685294a9"
     ),
