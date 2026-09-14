@@ -9,9 +9,11 @@ from datetime import timedelta
 from typing import Any, cast
 
 from replayforge.capabilities.models import (
+    AllCondition,
     AssertAction,
     CapabilityArtifact,
     ExtractAction,
+    IdentityMatchesCondition,
     InputValue,
     Landmark,
     LiteralValue,
@@ -40,14 +42,19 @@ from replayforge.discovery.constraints import (
 )
 from replayforge.discovery.models import (
     ActProposal,
+    BranchProposal,
     CapabilityDraftSpec,
     CompleteProposal,
+    DiscoveryProposal,
     DiscoveryResult,
     DiscoverySuccess,
     EscalateProposal,
+    ObservedBranch,
     PlanningContext,
     ProviderContext,
+    RecordedActionProposal,
     RecordedDiscoveryStep,
+    ScenarioContext,
 )
 from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelProviderError
 from replayforge.discovery.privacy import (
@@ -72,7 +79,7 @@ from replayforge.policy.models import (
     PrincipalType,
     RunMode,
 )
-from replayforge.policy.types import Decision
+from replayforge.policy.types import Decision, Risk
 from replayforge.runs.ports import InterventionRouter, RunRecorder
 from replayforge.runs.results import (
     ArtifactPrivacyDiagnostic,
@@ -94,6 +101,7 @@ class DiscoveryRequest:
     entry_point: str
     inputs: dict[str, Any]
     existing_capability_id: str | None = None
+    scenario: ScenarioContext | None = None
     max_steps: int = DEFAULT_DISCOVERY_STEPS
     timeout: timedelta = DEFAULT_DISCOVERY_TIMEOUT
     max_repeated_state: int = 2
@@ -270,6 +278,7 @@ class DiscoveryEngine:
                 draft.outputs if draft is not None else self.artifact_compiler.output_contract
             )
             recordings: list[RecordedDiscoveryStep] = []
+            observed_branch: ObservedBranch | None = None
             history: list[str] = []
             outputs: dict[str, Any] = {}
             previous_fingerprint: str | None = None
@@ -338,7 +347,7 @@ class DiscoveryEngine:
                         allowed_action_types=effective_policy.allowed_action_types,
                         output_contract=output_contract,
                         captured_output_names=tuple(
-                            name for name in output_contract.required if name in outputs
+                            name for name in output_contract.properties if name in outputs
                         ),
                         maximum_risk=effective_policy.maximum_risk,
                         previous_visual_text=(
@@ -349,6 +358,11 @@ class DiscoveryEngine:
                             if recordings
                             else ()
                         ),
+                        reference_steps=(
+                            request.scenario.primary.steps if request.scenario else ()
+                        ),
+                        scenario_kind=request.scenario.kind if request.scenario else None,
+                        branch_observed=observed_branch is not None,
                     )
                 )
                 self.recorder.record(
@@ -360,6 +374,12 @@ class DiscoveryEngine:
                     yield from handoff(proposal.reason_code, observation)
                     continue
                 if isinstance(proposal, CompleteProposal):
+                    if request.scenario is not None and observed_branch is None:
+                        return self._failure(
+                            request,
+                            "scenario_branch_missing",
+                            "Scenario completion requires a verified branch marker.",
+                        )
                     try:
                         artifact = self._compile(
                             request,
@@ -421,6 +441,69 @@ class DiscoveryEngine:
                         run_id=request.run_id,
                         artifact=artifact,
                         evidence_manifest=self.recorder.evidence_manifest_key,
+                        branch=observed_branch,
+                    )
+
+                pending_branch: ObservedBranch | None = None
+                if isinstance(proposal, RecordedActionProposal):
+                    reference = (
+                        next(
+                            (
+                                step
+                                for step in request.scenario.primary.steps
+                                if step.id == proposal.step_id
+                            ),
+                            None,
+                        )
+                        if request.scenario
+                        else None
+                    )
+                    if reference is None:
+                        return self._failure(
+                            request,
+                            "scenario_reference_invalid",
+                            "The requested recorded action is unavailable.",
+                        )
+                    proposal = ActProposal(
+                        kind="act",
+                        action=reference.action,
+                        target=reference.target,
+                        rationale=proposal.rationale,
+                        expected_effect="Reobserve the recorded action's effect.",
+                        expected_condition=(
+                            AllCondition(
+                                kind="all",
+                                conditions=tuple(
+                                    condition
+                                    for condition in reference.postconditions
+                                    if isinstance(condition, IdentityMatchesCondition)
+                                ),
+                            )
+                            if any(
+                                isinstance(condition, IdentityMatchesCondition)
+                                for condition in reference.postconditions
+                            )
+                            else proposal.expected_condition
+                        ),
+                        declared_risk=reference.risk,
+                        confidence=1.0,
+                    )
+                elif isinstance(proposal, BranchProposal):
+                    if request.scenario is None or observed_branch is not None or not recordings:
+                        return self._failure(
+                            request,
+                            "scenario_branch_invalid",
+                            "A scenario requires one branch after an executed prefix.",
+                        )
+                    pending_branch = ObservedBranch(len(recordings), proposal.condition)
+                    proposal = ActProposal(
+                        kind="act",
+                        action=AssertAction(kind="assert", condition=proposal.condition),
+                        rationale=proposal.rationale,
+                        expected_effect="Verify the observed branch.",
+                        expected_condition=proposal.condition,
+                        declared_risk=Risk.READ_ONLY,
+                        confidence=1.0,
                     )
 
                 action_fingerprint = self._operation_fingerprint(proposal)
@@ -513,6 +596,16 @@ class DiscoveryEngine:
                     return act_result
                 recording, history_item = act_result
                 recordings.append(recording)
+                if pending_branch is not None:
+                    observed_branch = pending_branch
+                    self.recorder.record(
+                        "branch_observed",
+                        request.run_id,
+                        details={
+                            "after_step_count": observed_branch.after_step_count,
+                            "condition_kind": observed_branch.condition.kind,
+                        },
+                    )
                 history.append(history_item)
 
             return self._failure(request, "max_steps_exceeded", "Discovery step budget exhausted.")
@@ -530,6 +623,32 @@ class DiscoveryEngine:
         session: SurfaceSession,
         effective_policy: EffectivePolicy,
     ) -> CapabilityDraftSpec | None:
+        if request.scenario is not None:
+            primary = request.scenario.primary
+            if (
+                primary.capability.application_family != request.application_family
+                or primary.compatibility.entry_point != request.entry_point
+            ):
+                raise ModelProviderError(
+                    "scenario_target_invalid", "Scenario target differs from its primary."
+                )
+            try:
+                validate_object(primary.inputs, request.inputs)
+            except ContractValidationError as error:
+                raise ModelProviderError(
+                    "discovery_input_invalid",
+                    "Scenario inputs do not satisfy the primary contract.",
+                ) from error
+            return CapabilityDraftSpec(
+                operation_slug=primary.capability.id.rsplit(".", 1)[-1],
+                capability_id=primary.capability.id,
+                name=primary.capability.name,
+                description=request.goal,
+                inputs=primary.inputs,
+                outputs=ObjectContract(required=(), properties=primary.outputs.properties),
+                risk=Risk.READ_ONLY,
+                observation_only=True,
+            )
         if self.contract_planner is None:
             return None
         try:
@@ -671,7 +790,7 @@ class DiscoveryEngine:
                 ) from error
         if isinstance(proposal.action, ExtractAction):
             output_name = proposal.action.output
-            if output_name not in output_contract.required:
+            if output_name not in output_contract.properties:
                 raise SurfaceError(
                     "output_not_declared",
                     "Extraction output is not declared by the capability contract.",
@@ -867,8 +986,10 @@ class DiscoveryEngine:
 
     @staticmethod
     def _proposal_summary(
-        proposal: ActProposal | CompleteProposal | EscalateProposal,
+        proposal: DiscoveryProposal,
     ) -> dict[str, object]:
+        if isinstance(proposal, RecordedActionProposal):
+            return {"proposal_kind": proposal.kind, "source_step_id": proposal.step_id}
         if not isinstance(proposal, ActProposal):
             return {"proposal_kind": proposal.kind}
         target = proposal.target

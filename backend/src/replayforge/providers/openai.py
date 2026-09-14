@@ -114,7 +114,23 @@ output value in an extraction locator (including ocr_relative target_text). Use 
 for labeled values, with relation right_of or below when the screenshot establishes the value's
 direction from its label. This distinguishes horizontal table fields from stacked fields without
 coordinates. Never extract an undeclared output. Complete when remaining_output_fields is
-empty and the requested result is verified from the final state."""
+empty and the requested result is verified from the final state.
+When scenario_kind is set, this is an observation-only branch discovery, not a new happy path.
+The reference_steps come from an actual prior discovery, not a hand-written navigation recipe.
+Use recorded_action with the next reference step ID to repeat that exact action when the live
+screen supports it. This still resolves the target and checks policy against the current screen.
+Follow the same prefix until the requested exceptional state is visible. Then emit exactly one
+branch proposal with a distinctive visible-text condition that is true now, not a generic page
+heading and not speculative absence. Prefer a complete exact visual token with no customer values.
+Do not invent outputs in scenario mode. Available output fields may be extracted only to verify
+record identity or restored state; none must be invented to report a legitimate negative result.
+For a business outcome or application failure,
+complete immediately after its branch marker has been verified. For recovery, mark the blocker
+BEFORE correcting it, discover and execute only safe corrective actions, and assert a distinctive
+restored surface condition before completing. Restore any invocation-dependent form fields reset
+by navigation using symbolic inputs. Rejoin immediately before the next unexecuted reference step;
+do not perform the rest of the task or skip primary steps. Never change permissions, substitute a
+different customer/record, alter caller inputs, or bypass restrictions to recover."""
 
 
 _PLAN_INSTRUCTIONS = """Plan a reusable capability from the natural-language goal and initial
@@ -417,6 +433,19 @@ class ProviderSwitchContextProposal(ProviderActProposalBase):
     target: None = None
 
 
+class ProviderRecordedActionProposal(ProviderModel):
+    kind: Literal["recorded_action"]
+    step_id: str = Field(pattern=r"^[a-z][a-z0-9_.-]+$")
+    rationale: str = Field(min_length=1, max_length=500)
+    expected_condition: ProviderCondition | None = None
+
+
+class ProviderBranchProposal(ProviderModel):
+    kind: Literal["branch"]
+    condition: ProviderCondition
+    rationale: str = Field(min_length=1, max_length=500)
+
+
 class ProposalEnvelope(ProviderModel):
     proposal: (
         ProviderClickProposal
@@ -431,6 +460,8 @@ class ProposalEnvelope(ProviderModel):
         | ProviderSwitchContextProposal
         | CompleteProposal
         | EscalateProposal
+        | ProviderRecordedActionProposal
+        | ProviderBranchProposal
     )
 
 
@@ -471,6 +502,8 @@ def _proposal_payload(proposal: BaseModel) -> dict[str, Any]:
         action["condition"] = _condition_payload(action["condition"])
     if isinstance(payload.get("expected_condition"), dict):
         payload["expected_condition"] = _condition_payload(payload["expected_condition"])
+    if payload.get("kind") == "branch" and isinstance(payload.get("condition"), dict):
+        payload["condition"] = _condition_payload(payload["condition"])
     return payload
 
 
@@ -733,6 +766,10 @@ class OpenAIModelProvider:
                 _output_requirement(name, context.output_contract.properties[name])
                 for name in context.required_output_names
             ],
+            "available_output_fields": [
+                _output_requirement(name, schema)
+                for name, schema in context.output_contract.properties.items()
+            ],
             "captured_output_fields": list(context.captured_output_names),
             "remaining_output_fields": list(context.remaining_output_names),
             "observation": {
@@ -769,6 +806,16 @@ class OpenAIModelProvider:
                 "dialog_text": context.observation.dialog_text,
             },
             "recent_actions": list(context.action_history[-20:]),
+            "scenario_kind": context.scenario_kind,
+            "branch_observed": context.branch_observed,
+            "reference_steps": [
+                {
+                    "id": step.id,
+                    "action": step.action.model_dump(mode="json"),
+                    "target": step.target.model_dump(mode="json") if step.target else None,
+                }
+                for step in context.reference_steps
+            ],
             "previous_visual_text": list(context.previous_visual_text),
             "allowed_action_types": sorted(context.allowed_action_types),
             "maximum_risk": context.maximum_risk.value,

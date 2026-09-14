@@ -229,6 +229,13 @@ def create_app(services: ApiServices) -> FastAPI:
         suite = invoker.add_scenario(suite_id, **body.model_dump())
         return JSONResponse(suite.snapshot(), status_code=200)
 
+    @app.get("/api/v1/discovery-suites/{suite_id}/scenarios/{code}/artifact")
+    def get_scenario_artifact(request: Request, suite_id: str, code: str) -> JSONResponse:
+        invoker = _discovery_suite_invoker(request, services)
+        if isinstance(invoker, JSONResponse):
+            return invoker
+        return JSONResponse(invoker.scenario_artifact(suite_id, code).model_dump(mode="json"))
+
     @app.post("/api/v1/discovery-suites/{suite_id}/finalize")
     def finalize_discovery_suite(request: Request, suite_id: str) -> JSONResponse:
         invoker = _discovery_suite_invoker(request, services)

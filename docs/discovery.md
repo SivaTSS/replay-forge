@@ -239,6 +239,25 @@ must both complete the task and emit its own `recovery_completed` event. Happy-p
 cannot validate either claim. Shared-prefix matching includes action, target scope/candidates/state,
 and risk—not merely the fact that both recordings clicked something.
 
+Scenario discovery reuses the primary input contract and exposes its recorded steps to the model.
+`recorded_action` selects a prior action by ID; the normal live grounding and policy checks still
+execute it. `branch` marks a positively observed exceptional state and becomes a verified assertion
+in the trace. The compiler binds that marker to the matching executed prefix; it never infers a
+branch from the last piece of text on a page. Normal task discovery cannot use these scenario-only
+proposals.
+
+Negative scenarios stop at the marker without fabricating happy-path outputs. Optional extraction
+is available for identity checks. Recovery scenarios mark the blocker first, execute a bounded
+correction, and assert a distinct restored state. They rejoin at the next primary step, cannot skip
+the remaining program, and must pass a fresh complete replay that actually uses the recovery.
+
+| Choice | Alternative | Reason |
+|---|---|---|
+| Explicit, executed branch assertion | Infer a detector from the final screen | Preserve the exact branch boundary and reject speculation |
+| Model-selected reuse of discovered actions | Hand-written per-task scenario recipes | Keep application navigation in learned artifacts, with fresh grounding on every action |
+| Optional scenario outputs | Invent a balance, receipt, or status value to finish discovery | A legitimate negative result need not contain successful-task outputs |
+| Check recovery triggers after the action | Wait for a later target failure | The exceptional state matters even when the primary action lacks a postcondition |
+
 Suite states are `collecting → validated → published`, with `failed` terminal. Read-only and
 explicitly reversible work may publish after deterministic validation. Sensitive and irreversible
 drafts fail closed; there is no reviewer or approval stage after discovery. A failed tenant replay

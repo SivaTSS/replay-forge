@@ -884,10 +884,14 @@ def test_declared_application_failure_returns_debuggable_typed_result(
     assert [kind for kind, _, _ in recorder.attachments] == ["failure-state"]
 
 
+@pytest.mark.parametrize("has_postcondition", [True, False])
 def test_declared_recovery_executes_once_and_resumes_at_named_step(
     valid_artifact_data: dict[str, Any],
+    has_postcondition: bool,
 ) -> None:
     add_interstitial_recovery(valid_artifact_data)
+    if not has_postcondition:
+        valid_artifact_data["steps"][1]["postconditions"] = []
     session = FakeSurfaceSession(interstitial_visible=True)
     engine, recorder, _ = build_engine(session)
 

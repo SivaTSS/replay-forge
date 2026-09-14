@@ -11,7 +11,7 @@ from replayforge.capabilities.registry import (
     CapabilityRegistry,
 )
 from replayforge.discovery.engine import DiscoveryRequest
-from replayforge.discovery.models import DiscoveryResult
+from replayforge.discovery.models import DiscoveryResult, ScenarioContext
 from replayforge.shared.ids import EntityKind, new_id
 
 
@@ -71,6 +71,7 @@ class DiscoveryApplicationService:
         max_steps: int,
         timeout_seconds: int,
         existing_capability_id: str | None = None,
+        scenario: ScenarioContext | None = None,
     ) -> DiscoveryResult:
         """Run discovery and finalize evidence without publishing the artifact."""
         result = self._execute(
@@ -82,6 +83,7 @@ class DiscoveryApplicationService:
             max_steps=max_steps,
             timeout_seconds=timeout_seconds,
             existing_capability_id=existing_capability_id,
+            scenario=scenario,
         )
         return self.result_finalizer(result) if self.result_finalizer is not None else result
 
@@ -96,6 +98,7 @@ class DiscoveryApplicationService:
         max_steps: int,
         timeout_seconds: int,
         existing_capability_id: str | None,
+        scenario: ScenarioContext | None = None,
     ) -> DiscoveryResult:
         run_id = str(new_id(EntityKind.RUN))
         result = self.executor_factory(run_id).execute(
@@ -107,6 +110,7 @@ class DiscoveryApplicationService:
                 entry_point=entry_point,
                 inputs=inputs,
                 existing_capability_id=existing_capability_id,
+                scenario=scenario,
                 max_steps=max_steps,
                 timeout=timedelta(seconds=timeout_seconds),
             )

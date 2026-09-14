@@ -14,12 +14,12 @@ from typing import Any, Literal, Protocol
 from replayforge.applications.registry import ApplicationRegistry
 from replayforge.capabilities.models import (
     ApplicationFailure,
+    AssertAction,
     BusinessOutcome,
     CapabilityArtifact,
     Condition,
     OutcomeResult,
     Recovery,
-    Step,
 )
 from replayforge.capabilities.registry import (
     CapabilityConflictError,
@@ -28,7 +28,7 @@ from replayforge.capabilities.registry import (
     CapabilityRegistry,
 )
 from replayforge.capabilities.serialization import artifact_content_hash
-from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
+from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess, ScenarioContext
 from replayforge.policy.types import RISK_RANK, Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
 from replayforge.runs.results import FailureResult, InterventionRequiredResult, RunResult
@@ -315,6 +315,7 @@ class DiscoverySuiteService:
             inputs=inputs,
             max_steps=max_steps,
             timeout_seconds=timeout_seconds,
+            scenario=ScenarioContext(suite.primary.artifact, kind),
         )
         scenario = DiscoveryScenario(
             kind=kind,
@@ -464,6 +465,13 @@ class DiscoverySuiteService:
             raise DiscoverySuiteError("suite artifact is not published")
         return suite.artifact
 
+    def scenario_artifact(self, suite_id: str, code: str) -> CapabilityArtifact:
+        suite = self.get(suite_id)
+        for scenario in suite.scenarios:
+            if scenario.code == code and isinstance(scenario.result, DiscoverySuccess):
+                return scenario.result.artifact
+        raise DiscoverySuiteError("verified scenario artifact was not found")
+
 
 def _merge_scenarios(
     artifact: CapabilityArtifact, scenarios: tuple[DiscoveryScenario, ...]
@@ -475,17 +483,29 @@ def _merge_scenarios(
     for scenario in scenarios:
         if not isinstance(scenario.result, DiscoverySuccess):
             raise ValueError(f"scenario {scenario.code} did not produce verified evidence")
+        observed = scenario.result.branch
+        if observed is None:
+            raise ValueError("scenario trace lacks an explicit verified branch marker")
         prefix_length = _shared_prefix_length(artifact, scenario.result.artifact)
-        if prefix_length < 1:
+        if prefix_length < observed.after_step_count:
             raise ValueError("scenario trace does not share a verified primary prefix")
-        branch_index = min(prefix_length, len(steps)) - 1
+        prefix_length = observed.after_step_count
+        branch_index = prefix_length - 1
         branch_step = steps[branch_index]
         scenario_artifact = scenario.result.artifact
-        condition = _latest_step_surface_condition(scenario_artifact.steps[branch_index])
-        if condition is None:
-            condition = _latest_surface_condition(scenario_artifact.checkpoint.condition)
-        if condition is None:
-            raise ValueError("scenario completion lacks an observed surface condition")
+        if prefix_length >= len(scenario_artifact.steps):
+            raise ValueError("scenario branch marker is absent from its executed trace")
+        marker = scenario_artifact.steps[prefix_length]
+        if (
+            not isinstance(marker.action, AssertAction)
+            or marker.action.condition != observed.condition
+        ):
+            raise ValueError("scenario branch marker does not match its executed assertion")
+        condition = observed.condition
+        if condition.kind not in {"text", "rendered_text", "visual_text", "element"}:
+            raise ValueError("branch requires a positive distinctive surface condition")
+        if scenario.kind != "recovery" and len(scenario_artifact.steps) != prefix_length + 1:
+            raise ValueError("terminal scenario must stop after its verified branch marker")
         primary_surface_keys = {
             _condition_key(observed)
             for postcondition in branch_step.postconditions
@@ -526,7 +546,7 @@ def _merge_scenarios(
         elif scenario.kind == "recovery":
             if prefix_length >= len(steps):
                 raise ValueError("recovery trace has no primary state to rejoin")
-            recovery_source_steps = scenario_artifact.steps[prefix_length:]
+            recovery_source_steps = scenario_artifact.steps[prefix_length + 1 :]
             if not recovery_source_steps:
                 raise ValueError("recovery trace contains no recovery actions")
             if any(
@@ -537,13 +557,8 @@ def _merge_scenarios(
                 _condition_key(observed)
                 for observed in _surface_conditions(scenario_artifact.checkpoint.condition)
             }
-            expected_rejoin_keys = {
-                _condition_key(observed)
-                for postcondition in branch_step.postconditions
-                for observed in _surface_conditions(postcondition)
-            }
-            if not recovered_surface_keys.intersection(expected_rejoin_keys):
-                raise ValueError("recovery trace did not rejoin a verified primary state")
+            if not recovered_surface_keys - {_condition_key(condition)}:
+                raise ValueError("recovery trace lacks a distinct verified restored state")
             recovery_steps = tuple(
                 step.model_copy(
                     update={
@@ -575,6 +590,21 @@ def _merge_scenarios(
             "failures": tuple(failures),
             "recoveries": tuple(recoveries),
             "steps": tuple(steps),
+            "policy": artifact.policy.model_copy(
+                update={
+                    "allowed_action_types": artifact.policy.allowed_action_types
+                    | frozenset(
+                        step.action.kind for recovery in recoveries for step in recovery.steps
+                    ),
+                    "allowed_route_patterns": artifact.policy.allowed_route_patterns
+                    | frozenset(
+                        route
+                        for scenario in scenarios
+                        if isinstance(scenario.result, DiscoverySuccess)
+                        for route in scenario.result.artifact.policy.allowed_route_patterns
+                    ),
+                }
+            ),
             "provenance": artifact.provenance.model_copy(update={"artifact_content_hash": None}),
         }
     )
@@ -622,19 +652,6 @@ def _surface_conditions(condition: Condition) -> tuple[Condition, ...]:
     if child is not None and _surface_conditions(child):
         return (condition,)
     return ()
-
-
-def _latest_surface_condition(condition: Condition) -> Condition | None:
-    observed = _surface_conditions(condition)
-    return observed[-1] if observed else None
-
-
-def _latest_step_surface_condition(step: Step) -> Condition | None:
-    for condition in reversed(step.postconditions):
-        observed = _latest_surface_condition(condition)
-        if observed is not None:
-            return observed
-    return None
 
 
 def _condition_key(condition: Condition) -> str:

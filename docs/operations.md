@@ -23,6 +23,7 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | `POST` | `/api/v1/discovery-suites` | Creates a draft suite and runs its primary discovery trace |
 | `GET` | `/api/v1/discovery-suites/{id}` | Reads sanitized suite status and coverage |
 | `POST` | `/api/v1/discovery-suites/{id}/scenarios` | Adds observed outcome, failure, or recovery evidence |
+| `GET` | `/api/v1/discovery-suites/{id}/scenarios/{code}/artifact` | Reads the verified scenario trace, without publishing it as a callable task |
 | `POST` | `/api/v1/discovery-suites/{id}/validations` | Runs deterministic compatibility validation |
 | `POST` | `/api/v1/discovery-suites/{id}/finalize` | Compiles and applies the publication risk gate |
 | `GET` | `/api/v1/capabilities/schema` | Returns the artifact JSON Schema |
@@ -118,6 +119,8 @@ Run `uv run python scripts/capture_demo_workflows.py --spec config/servicing-dis
 Use `--workflow temporary_card_lock` (or another key in that file) to select one goal.
 The runner checks the draft's ID, risk, and requested input/output contract before validation
 or publication, then validates tenant reuse and finalizes automatically. No post-discovery reviewer exists.
+Configured `scenarios` supply only goals, synthetic inputs, and expected disposition/code. The runner
+discovers them before validation and exports their verified traces beside the primary artifact.
 
 The runtime publishes each new capability version to its configured registry. The capture command
 exports a separate owner-only copy under a fresh `.local/discovery-captures/capture-*` directory;

@@ -223,6 +223,7 @@ def test_suite_capture_requires_real_provenance_and_validated_contract(
                 "evidence_manifest": result["evidence_manifest"],
             },
             "artifact": artifact,
+            "scenarios": {},
         },
     )
     output = tmp_path / "suite.yaml"

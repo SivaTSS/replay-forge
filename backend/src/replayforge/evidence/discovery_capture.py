@@ -17,7 +17,16 @@ from replayforge.capabilities import (
     artifact_content_hash,
     dump_artifact_yaml,
 )
+from replayforge.runs.discovery_suite import ScenarioKind
 from replayforge.runs.results import ArtifactPrivacyDiagnostic
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioCaptureRequest:
+    code: str
+    kind: ScenarioKind
+    goal: str
+    inputs: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +42,7 @@ class SuiteCaptureRequest:
     expected_inputs: tuple[str, ...]
     expected_outputs: tuple[str, ...]
     max_steps: int = 40
+    scenarios: tuple[ScenarioCaptureRequest, ...] = ()
 
 
 def _request_json(
@@ -126,6 +136,49 @@ def invoke_suite(
             "discovered draft does not match the configured capture contract; not published"
         )
 
+    scenario_results: dict[str, Any] = {}
+    for scenario in request.scenarios:
+        existing = next(
+            (item for item in suite.get("scenarios", []) if item.get("code") == scenario.code), None
+        )
+        if existing is None:
+            suite = _request_json(
+                base_url,
+                f"/api/v1/discovery-suites/{suite_id}/scenarios",
+                timeout_seconds,
+                method="POST",
+                payload={
+                    "kind": scenario.kind,
+                    "code": scenario.code,
+                    "goal": scenario.goal,
+                    "description": scenario.goal,
+                    "inputs": scenario.inputs,
+                    "max_steps": request.max_steps,
+                    "timeout_seconds": timeout_seconds,
+                },
+            )
+            existing = next(
+                (item for item in suite.get("scenarios", []) if item.get("code") == scenario.code),
+                None,
+            )
+        if not isinstance(existing, dict) or existing.get("result", {}).get("status") != "success":
+            code = (
+                existing.get("result", {}).get("code", "missing_result")
+                if existing
+                else "missing_result"
+            )
+            raise RuntimeError(
+                f"scenario {scenario.code} in suite {suite_id} did not verify ({code})"
+            )
+        scenario_results[scenario.code] = {
+            **existing["result"],
+            "artifact": _request_json(
+                base_url,
+                f"/api/v1/discovery-suites/{suite_id}/scenarios/{scenario.code}/artifact",
+                timeout_seconds,
+            ),
+        }
+
     for tenant in request.validation_tenants:
         suite = _request_json(
             base_url,
@@ -148,7 +201,7 @@ def invoke_suite(
         f"/api/v1/discovery-suites/{suite_id}/artifact",
         timeout_seconds,
     )
-    return {"suite": suite, "primary": primary, "artifact": artifact}
+    return {"suite": suite, "primary": primary, "artifact": artifact, "scenarios": scenario_results}
 
 
 def validate_result(result: dict[str, Any]) -> CapabilityArtifact:
@@ -239,6 +292,11 @@ def capture_suite(
     if not required_tenants.issubset(supported):
         raise RuntimeError("published artifact omitted a validated tenant")
     write_new_artifact(artifact_output, artifact)
+    for code, scenario in response["scenarios"].items():
+        write_new_artifact(
+            artifact_output.with_name(f"{artifact_output.stem}.{code}.yaml"),
+            validate_result(scenario),
+        )
     return {
         "artifact_content_hash": artifact.provenance.artifact_content_hash or "",
         "artifact_output": str(artifact_output),

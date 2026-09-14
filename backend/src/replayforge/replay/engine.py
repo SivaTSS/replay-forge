@@ -480,6 +480,14 @@ class ReplayEngine:
             )
             if declared_failure is not None:
                 return self._application_failure(request, session, step.id, declared_failure)
+            # A positively observed exceptional state is meaningful even when the primary
+            # action has no postcondition. Do not wait for a later target failure to recover.
+            if allow_recovery:
+                recovery = self._attempt_recovery(
+                    request, session, step, inputs, outputs, recovery_uses, lease_version
+                )
+                if recovery is not None:
+                    return recovery
             for condition in step.postconditions:
                 if not session.wait_until(condition, outputs, inputs, step.timeout_ms):
                     outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)

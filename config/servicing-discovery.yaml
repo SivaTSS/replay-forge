@@ -7,6 +7,8 @@ workflows:
       description, and posting_status from the actual transaction details. Verify the returned
       transaction reference and account identity against the supplied inputs. Do not change
       any account or transaction state.
+      Submit the member inquiry before opening a matching record. Select account_id explicitly;
+      do not assume the default account is the requested one.
     application_family: northstar_member_service
     tenant: harbor
     validation_tenants: [summit]
@@ -19,6 +21,15 @@ workflows:
     expected_risk: read_only
     expected_inputs: [member_id, account_id, transaction_reference]
     expected_outputs: [transaction_reference, account_id, amount, posted_date, description, posting_status]
+    scenarios:
+      - code: member_not_found
+        kind: business_outcome
+        goal: Observe and verify that the supplied member does not exist. Stop without choosing another member.
+        inputs: {member_id: "00000", account_id: "00000-01", transaction_reference: "POS-80419"}
+      - code: transaction_not_found
+        kind: business_outcome
+        goal: Observe and verify that no transaction matches the supplied reference in the requested account. Do not substitute another transaction.
+        inputs: {member_id: "12345", account_id: "12345-01", transaction_reference: "NO-SUCH-TRANSACTION"}
   servicing_loan_payoff_quote:
     goal: >-
       In the synthetic servicing workstation, find the member identified by member_id,
@@ -42,6 +53,27 @@ workflows:
     expected_risk: read_only
     expected_inputs: [member_id, payoff_date]
     expected_outputs: [payoff_amount, good_through_date, confirmation_reference]
+    scenarios:
+      - code: member_not_found
+        kind: business_outcome
+        goal: Observe and verify that the supplied member does not exist. Stop without choosing another member.
+        inputs: {member_id: "00000", payoff_date: "2026-09-20"}
+      - code: quote_date_unavailable
+        kind: business_outcome
+        goal: Observe why a quote cannot be issued for the requested date outside the application's allowed window. Keep the requested date unchanged and stop at the verified notice.
+        inputs: {member_id: "12345", payoff_date: "2027-01-01"}
+      - code: invalid_payoff_date
+        kind: application_failure
+        goal: Observe the application's rejection of the invalid calendar date. Do not correct or substitute the caller's date and do not issue a quote.
+        inputs: {member_id: "12345", payoff_date: "2026-02-30"}
+      - code: member_restricted
+        kind: application_failure
+        goal: Verify that servicing is restricted for the selected member. Stop without changing roles, acknowledging away the restriction, or issuing a quote.
+        inputs: {member_id: "34567", payoff_date: "2026-09-20"}
+      - code: acknowledge_member_notice
+        kind: recovery
+        goal: Observe the non-restrictive member review notice that blocks quote calculation. After marking the blocker, verify the member record, acknowledge only that notice, and restore the quote workflow with the original requested date. Do not change permissions or issue the quote within the recovery trace.
+        inputs: {member_id: "23456", payoff_date: "2026-09-20"}
   temporary_card_lock:
     goal: >-
       Temporarily lock the card identified by card_id belonging to member_id, recording reason
@@ -64,3 +96,28 @@ workflows:
     expected_risk: reversible
     expected_inputs: [member_id, card_id, reason]
     expected_outputs: [card_id, lock_status, confirmation_reference]
+    scenarios:
+      - code: member_not_found
+        kind: business_outcome
+        goal: Observe and verify that the supplied member does not exist. Stop without choosing another member or card.
+        inputs: {member_id: "00000", card_id: "00000-D1", reason: "Synthetic precautionary lock"}
+      - code: card_already_locked
+        kind: business_outcome
+        goal: Verify the selected card identity and that it is already temporarily locked. Stop without unlocking it, changing its state, or inventing a new confirmation reference.
+        inputs: {member_id: "12345", card_id: "12345-D2", reason: "Synthetic precautionary lock"}
+      - code: card_expired
+        kind: business_outcome
+        goal: Verify the selected card identity and that the card is expired and ineligible for a temporary lock. Stop without changing its state or substituting another card.
+        inputs: {member_id: "12345", card_id: "12345-D3", reason: "Synthetic precautionary lock"}
+      - code: invalid_maintenance_reason
+        kind: application_failure
+        goal: Observe the application's rejection of the supplied maintenance reason. Keep the caller's reason unchanged and do not apply a card status change.
+        inputs: {member_id: "12345", card_id: "12345-D1", reason: "short"}
+      - code: member_restricted
+        kind: application_failure
+        goal: Verify that servicing is restricted for the selected member. Stop without changing roles, acknowledging away the restriction, or applying a card status change.
+        inputs: {member_id: "34567", card_id: "34567-D1", reason: "Synthetic precautionary lock"}
+      - code: acknowledge_member_notice
+        kind: recovery
+        goal: Observe the non-restrictive member review notice that blocks card maintenance. After marking the blocker, verify the member record, acknowledge only that notice, and restore the original card workflow and supplied reason. Do not change permissions or apply the lock within the recovery trace.
+        inputs: {member_id: "23456", card_id: "23456-D1", reason: "Synthetic precautionary lock"}

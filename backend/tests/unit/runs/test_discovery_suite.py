@@ -5,13 +5,14 @@ import pytest
 
 from replayforge.capabilities.models import (
     AllCondition,
+    AssertAction,
     CapabilityArtifact,
     MatchMode,
     TextCondition,
 )
 from replayforge.capabilities.registry import InMemoryCapabilityRegistry
 from replayforge.discovery.engine import DiscoveryRequest
-from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
+from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess, ObservedBranch
 from replayforge.policy.types import Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
 from replayforge.runs.discovery_suite import (
@@ -52,11 +53,17 @@ class Executor:
         self.artifact = artifact
 
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
+        marker = self.artifact.steps[-1].action
         return DiscoverySuccess(
             status="success",
             run_id=request.run_id,
             artifact=self.artifact,
             evidence_manifest=f"evidence://{request.run_id}/manifest.json",
+            branch=(
+                ObservedBranch(len(self.artifact.steps) - 1, marker.condition)
+                if request.scenario and isinstance(marker, AssertAction)
+                else None
+            ),
         )
 
 
@@ -246,15 +253,15 @@ def test_scenario_is_bound_to_a_verified_primary_prefix() -> None:
     branch_condition = TextCondition(kind="text", value="No matching member", match=MatchMode.EXACT)
     branch_step = primary_artifact.steps[-1].model_copy(
         update={
-            "postconditions": (
-                *primary_artifact.steps[-1].postconditions,
-                branch_condition,
-            )
+            "id": "branch_marker",
+            "action": AssertAction(kind="assert", condition=branch_condition),
+            "target": None,
+            "postconditions": (branch_condition,),
         }
     )
     branch_artifact = primary_artifact.model_copy(
         update={
-            "steps": (*primary_artifact.steps[:-1], branch_step),
+            "steps": (*primary_artifact.steps, branch_step),
             "checkpoint": primary_artifact.checkpoint.model_copy(
                 update={
                     "condition": AllCondition(

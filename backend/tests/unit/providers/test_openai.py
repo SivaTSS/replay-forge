@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -11,16 +11,23 @@ from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 
 from replayforge.capabilities.models import InputValue, JsonValueType
-from replayforge.discovery.models import ActProposal, CompleteProposal, ProviderContext
+from replayforge.discovery.models import (
+    ActProposal,
+    BranchProposal,
+    CompleteProposal,
+    ProviderContext,
+)
 from replayforge.discovery.ports import ModelProviderError
 from replayforge.observability.model_calls import ModelCallMetric
 from replayforge.policy.types import Risk
 from replayforge.providers.openai import (
     OpenAIModelProvider,
     ProposalEnvelope,
+    ProviderBranchProposal,
     ProviderClickAction,
     ProviderClickLocatorBundle,
     ProviderClickProposal,
+    ProviderCondition,
     ProviderExtractLocatorBundle,
     ProviderFrameLocator,
     ProviderFrameTitleCandidate,
@@ -28,6 +35,7 @@ from replayforge.providers.openai import (
     ProviderLocatorScope,
     ProviderOcrRelativeCandidate,
     ProviderOutputField,
+    ProviderRecordedActionProposal,
     ProviderRenderedFieldValueCandidate,
     ProviderTypeAction,
     ProviderTypeLocatorBundle,
@@ -134,6 +142,32 @@ def test_field_direction_is_nullable_and_required_in_strict_provider_schema() ->
         "string",
         "null",
     }
+
+
+def test_branch_proposal_is_strict_and_reference_context_contains_no_invocation_values() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(
+            proposal=ProviderBranchProposal(
+                kind="branch",
+                condition=ProviderCondition(kind="rendered_text", operand="No matching records"),
+                rationale="The live UI reports an empty result",
+            )
+        )
+    )
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy())
+    primary = sample_artifact()
+    result = provider.decide(
+        replace(context(), reference_steps=primary.steps, scenario_kind="business_outcome")
+    )
+    assert isinstance(result, BranchProposal)
+    assert result.condition.kind == "rendered_text"
+    sent = json.loads(responses.request["input"][0]["content"][0]["text"])
+    assert sent["scenario_kind"] == "business_outcome"
+    assert sent["reference_steps"][0]["id"] == primary.steps[0].id
+    assert "12345" not in json.dumps(sent)
+    schema = to_strict_json_schema(ProviderRecordedActionProposal)
+    assert "expected_condition" in schema["required"]
+    assert schema["additionalProperties"] is False
 
 
 def context() -> ProviderContext:

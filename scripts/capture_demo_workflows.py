@@ -10,11 +10,19 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from replayforge.evidence.discovery_capture import SuiteCaptureRequest, capture_suite
+from replayforge.api.contracts import DiscoverySuiteScenario
+from replayforge.evidence.discovery_capture import (
+    ScenarioCaptureRequest,
+    SuiteCaptureRequest,
+    capture_suite,
+)
 from replayforge.shared.yaml import load_unique_yaml
 
 
 def _workflow_request(raw: dict[str, Any]) -> SuiteCaptureRequest:
+    scenarios = tuple(
+        DiscoverySuiteScenario.model_validate(item) for item in raw.get("scenarios", [])
+    )
     return SuiteCaptureRequest(
         goal=str(raw["goal"]),
         application_family=str(raw["application_family"]),
@@ -26,6 +34,15 @@ def _workflow_request(raw: dict[str, Any]) -> SuiteCaptureRequest:
         expected_risk=str(raw["expected_risk"]),
         expected_inputs=tuple(raw["expected_inputs"]),
         expected_outputs=tuple(raw["expected_outputs"]),
+        scenarios=tuple(
+            ScenarioCaptureRequest(
+                code=item.code or f"scenario_{index}",
+                kind=item.kind,
+                goal=item.goal,
+                inputs=item.inputs,
+            )
+            for index, item in enumerate(scenarios, start=1)
+        ),
     )
 
 

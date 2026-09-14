@@ -24,6 +24,7 @@ _CODE_FIELDS = frozenset(
         "input_binding",
         "output_binding",
         "transform",
+        "source_step_id",
     }
 )
 _COUNT_FIELDS = frozenset(
@@ -40,6 +41,7 @@ _COUNT_FIELDS = frozenset(
         "x",
         "y",
         "character_count",
+        "after_step_count",
     }
 )
 _ENUM_FIELDS = {
@@ -59,7 +61,7 @@ _ENUM_FIELDS = {
     },
     "decision": {"allow", "deny", "require_human_approval"},
     "disposition": {"continue", "business_outcome"},
-    "proposal_kind": {"act", "complete", "escalate"},
+    "proposal_kind": {"act", "complete", "escalate", "recorded_action", "branch"},
     "action_type": {
         "click",
         "type",

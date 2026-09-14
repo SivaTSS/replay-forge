@@ -14,6 +14,7 @@ from replayforge.capabilities.models import (
     Condition,
     LocatorBundle,
     ObjectContract,
+    Step,
 )
 from replayforge.policy.types import DataClassification, Risk
 from replayforge.runs.results import FailureResult
@@ -52,6 +53,37 @@ class CompleteProposal(DiscoveryModel):
     rationale: str = Field(min_length=1, max_length=500)
 
 
+class RecordedActionProposal(DiscoveryModel):
+    """Model-selected reuse of a previously discovered action, re-grounded live."""
+
+    kind: Literal["recorded_action"]
+    step_id: str = Field(pattern=r"^[a-z][a-z0-9_.-]+$")
+    rationale: str = Field(min_length=1, max_length=500)
+    expected_condition: Condition | None = None
+
+
+class BranchProposal(DiscoveryModel):
+    kind: Literal["branch"]
+    condition: Condition
+    rationale: str = Field(min_length=1, max_length=500)
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedBranch:
+    after_step_count: int
+    condition: Condition
+
+    def __post_init__(self) -> None:
+        if self.after_step_count < 1:
+            raise ValueError("a branch requires at least one executed primary action")
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioContext:
+    primary: CapabilityArtifact
+    kind: Literal["business_outcome", "application_failure", "recovery"]
+
+
 class CapabilityDraftSpec(DiscoveryModel):
     """Provider-proposed task semantics, validated before any artifact is published."""
 
@@ -66,10 +98,11 @@ class CapabilityDraftSpec(DiscoveryModel):
     outputs: ObjectContract
     risk: Risk
     tags: tuple[str, ...] = Field(default=(), max_length=20)
+    observation_only: bool = False
 
     @model_validator(mode="after")
     def validate_contract_shape(self) -> Self:
-        if not self.outputs.required:
+        if not self.outputs.required and not self.observation_only:
             raise ValueError("capability drafts must declare at least one required output")
         for contract_name, contract in (("input", self.inputs), ("output", self.outputs)):
             names = tuple(contract.properties)
@@ -130,7 +163,8 @@ class EscalateProposal(DiscoveryModel):
 
 
 DiscoveryProposal = Annotated[
-    ActProposal | CompleteProposal | EscalateProposal, Field(discriminator="kind")
+    ActProposal | CompleteProposal | EscalateProposal | RecordedActionProposal | BranchProposal,
+    Field(discriminator="kind"),
 ]
 
 
@@ -160,6 +194,7 @@ class DiscoverySuccess:
     run_id: str
     artifact: CapabilityArtifact
     evidence_manifest: str
+    branch: ObservedBranch | None = None
 
     def __post_init__(self) -> None:
         if self.status != "success":
@@ -184,12 +219,15 @@ class ProviderContext:
     captured_output_names: tuple[str, ...] = ()
     maximum_risk: Risk = Risk.READ_ONLY
     previous_visual_text: tuple[str, ...] = ()
+    reference_steps: tuple[Step, ...] = ()
+    scenario_kind: Literal["business_outcome", "application_failure", "recovery"] | None = None
+    branch_observed: bool = False
 
     def __post_init__(self) -> None:
         captured = set(self.captured_output_names)
         if len(captured) != len(self.captured_output_names):
             raise ValueError("captured output names must be unique")
-        if not captured.issubset(self.output_contract.required):
+        if not captured.issubset(self.output_contract.properties):
             raise ValueError("captured outputs must be declared by the output contract")
 
     @property
