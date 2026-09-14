@@ -105,3 +105,8 @@ evidence: export and verify sanitized bundles using the
 To extend a committed example without rediscovering its successful path, add
 `--primary-version 1.0.1`. The exact version must first pass fresh replay. Its original discovery
 provenance remains intact; only the new scenario runs are new discovery evidence.
+
+The model-free replay capture tool accepts `expected_status: business_outcome` with an exact
+`expected_code`. A recovery case uses `expected_status: success` and `expected_recovery`;
+the named recovery must appear in an actual `recovery_completed` journal event. Contradictory
+expectations are rejected before browser execution; mismatched results are not exported.

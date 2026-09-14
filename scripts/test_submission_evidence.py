@@ -16,7 +16,13 @@ from capture_replay_evidence import ReplayCase, ReplaySpecification, validate_re
 from pydantic import ValidationError
 from verify_evidence_bundles import submission_gaps
 
-from replayforge.runs.results import FailureResult
+from replayforge.runs.results import (
+    BusinessOutcomeResult,
+    CapabilityReference,
+    FailureResult,
+    SuccessResult,
+    VerifiedCheckpoint,
+)
 
 
 class SubmissionEvidenceTests(unittest.TestCase):
@@ -125,6 +131,64 @@ class SubmissionEvidenceTests(unittest.TestCase):
             validate_result(
                 case.model_copy(update={"expected_outputs": {"secret": "private"}}), result
             )
+
+    def test_negative_outcome_and_recovery_need_their_own_proof(self) -> None:
+        case = ReplayCase.model_validate(
+            {
+                "capability_id": "records.inspect",
+                "invocation": {"tenant": "example", "inputs": {}},
+                "expected_status": "business_outcome",
+                "expected_code": "record_missing",
+            }
+        )
+        outcome = BusinessOutcomeResult(
+            status="business_outcome",
+            run_id="run_" + "a" * 32,
+            code="record_missing",
+            details={},
+            evidence_manifest="evidence://run_" + "a" * 32 + "/manifest.json",
+        )
+        validate_result(case, outcome)
+        with self.assertRaisesRegex(ValueError, "code did not match"):
+            validate_result(case, outcome.model_copy(update={"code": "other"}))
+        recovery_case = case.model_copy(
+            update={
+                "expected_status": "success",
+                "expected_code": None,
+                "expected_recovery": "dismiss_notice",
+            }
+        )
+        success = SuccessResult(
+            status="success",
+            run_id=outcome.run_id,
+            evidence_manifest=outcome.evidence_manifest,
+            capability=CapabilityReference(id="records.inspect", version="1.0.0"),
+            outputs={},
+            checkpoint=VerifiedCheckpoint(id="verified", verified=True),
+        )
+        with self.assertRaisesRegex(ValueError, "declared recovery"):
+            validate_result(recovery_case, success)
+        with self.assertRaisesRegex(ValueError, "declared recovery"):
+            validate_result(recovery_case, success, ("different_recovery",))
+        validate_result(recovery_case, success, ("dismiss_notice",))
+
+    def test_contradictory_proof_contract_is_rejected_before_execution(self) -> None:
+        base = {
+            "capability_id": "records.inspect",
+            "invocation": {"tenant": "example", "inputs": {}},
+        }
+        for expectation in (
+            {"expected_status": "failure"},
+            {"expected_status": "business_outcome"},
+            {"expected_status": "success", "expected_code": "record_missing"},
+            {
+                "expected_status": "failure",
+                "expected_code": "denied",
+                "expected_recovery": "notice",
+            },
+        ):
+            with self.assertRaises(ValidationError):
+                ReplayCase.model_validate({**base, **expectation})
 
 
 if __name__ == "__main__":

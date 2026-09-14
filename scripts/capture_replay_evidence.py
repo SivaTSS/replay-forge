@@ -9,12 +9,12 @@ import shlex
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from replayforge.api.contracts import ReplayInvocation
 from replayforge.evidence.export import EvidenceExportRequest, export_evidence_bundle
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.runs.results import FailureResult, RunResult, SuccessResult
+from replayforge.runs.results import BusinessOutcomeResult, FailureResult, RunResult, SuccessResult
 from replayforge.runtime.composition import build_runtime
 from replayforge.runtime.settings import RuntimeSettings
 from replayforge.shared.clock import SystemClock
@@ -28,9 +28,21 @@ class ReplayCase(BaseModel):
 
     capability_id: str = Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
     invocation: ReplayInvocation
-    expected_status: Literal["success", "failure"]
+    expected_status: Literal["success", "failure", "business_outcome"]
     expected_code: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,63}$")
     expected_outputs: dict[str, JsonValue] | None = None
+    expected_recovery: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{0,63}$")
+
+    @model_validator(mode="after")
+    def validate_proof_contract(self) -> ReplayCase:
+        if self.expected_status != "success":
+            if self.expected_code is None:
+                raise ValueError("negative replay requires an exact expected code")
+            if self.expected_outputs is not None or self.expected_recovery is not None:
+                raise ValueError("outputs and completed recovery require successful replay")
+        elif self.expected_code is not None:
+            raise ValueError("successful replay has no negative outcome code")
+        return self
 
 
 class ReplaySpecification(BaseModel):
@@ -38,18 +50,25 @@ class ReplaySpecification(BaseModel):
     cases: dict[ScenarioName, ReplayCase] = Field(min_length=1, max_length=20)
 
 
-def validate_result(case: ReplayCase, result: RunResult) -> None:
+def validate_result(
+    case: ReplayCase, result: RunResult, completed_recoveries: tuple[str, ...] = ()
+) -> None:
     # Report only a stable mismatch, never supplied inputs or returned financial values.
     if result.status != case.expected_status:
         raise ValueError("replay status did not match the declared expectation")
     if case.expected_code is not None and (
-        not isinstance(result, FailureResult) or result.code != case.expected_code
+        not isinstance(result, FailureResult | BusinessOutcomeResult)
+        or result.code != case.expected_code
     ):
-        raise ValueError("replay failure code did not match the declared expectation")
+        raise ValueError("replay outcome/failure code did not match the declared expectation")
     if case.expected_outputs is not None and (
         not isinstance(result, SuccessResult) or result.outputs != case.expected_outputs
     ):
         raise ValueError("replay outputs did not match the declared expectation")
+    if case.expected_recovery is not None and (
+        not isinstance(result, SuccessResult) or case.expected_recovery not in completed_recoveries
+    ):
+        raise ValueError("replay did not complete the declared recovery")
 
 
 def main() -> None:
@@ -115,13 +134,16 @@ def main() -> None:
                 case.invocation.tenant,
                 case.invocation.inputs,
             )
-            validate_result(case, result)
-            if not isinstance(result, SuccessResult | FailureResult):
+            events = runtime.journals[result.run_id].events()
+            completed = tuple(
+                str(event.details["recovery_id"])
+                for event in events
+                if event.event_type == "recovery_completed" and "recovery_id" in event.details
+            )
+            validate_result(case, result, completed)
+            if not isinstance(result, SuccessResult | FailureResult | BusinessOutcomeResult):
                 raise ValueError("replay did not produce a completed result")
-            if any(
-                event.event_type.startswith("model_")
-                for event in runtime.journals[result.run_id].events()
-            ):
+            if any(event.event_type.startswith("model_") for event in events):
                 raise ValueError("model activity is not permitted in replay evidence")
             export = export_evidence_bundle(
                 LocalEvidenceStore(settings.evidence_directory, SystemClock()),
