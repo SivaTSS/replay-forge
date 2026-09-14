@@ -19,7 +19,7 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 |---|---|---|
 | `GET` | `/health/live` | Process is serving requests |
 | `GET` | `/health/ready` | Capability registry, application catalog, and every registered target are available |
-| `POST` | `/api/v1/discoveries` | Runs unattended discovery synchronously; returns success or failure |
+| `POST` | `/api/v1/discoveries` | Runs discovery synchronously; returns an unpublished draft (`published: false`) or failure |
 | `POST` | `/api/v1/discovery-suites` | Creates a draft suite and runs its primary discovery trace |
 | `GET` | `/api/v1/discovery-suites/{id}` | Reads sanitized suite status and coverage |
 | `POST` | `/api/v1/discovery-suites/{id}/scenarios` | Adds observed outcome, failure, or recovery evidence |

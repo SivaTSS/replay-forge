@@ -128,10 +128,13 @@ sequenceDiagram
 
 Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence. Before persistence, every screenshot is fully masked in memory: neither DOM selectors nor OCR can establish that all remaining pixels are public.
 
-Discovery is unattended. Low confidence, repeated state/action, model escalation, or an unresolved
-safety boundary returns a typed failure and closes its browser; it does not create a human session.
-Replay retains its existing same-session handoff and verified continuation. In the execution
-viewer, earlier screenshots are read-only; return Live before claiming or sending input.
+Discovery can pause on low confidence, repeated state/action, model escalation, or an unresolved
+safety boundary. Its original loop resumes only after accepted human input changes the allowed
+live state. Used step/model budgets remain spent; human wait time is excluded. Outputs must be
+re-extracted, and publication still requires fresh model-free validation. Human actions remain
+audit evidence, never invented recorded automation. Replay additionally verifies the interrupted
+step's postcondition or a declared business outcome. Earlier replay screenshots remain read-only;
+return Live before claiming or sending input. Validation replays themselves never request a human.
 
 ## Stale-input protection
 

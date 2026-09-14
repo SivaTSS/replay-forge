@@ -9,14 +9,14 @@ can remain headless; its actual screenshots appear in the console on your machin
 | Mode | Execution | Viewing | Human control |
 |---|---|---|---|
 | Replay | A pinned published capability; no model calls | Live plus Back / Next / Live inspection | Claim a paused session, act on its current frame, resume |
-| Discovery | Model exploration, deterministic tenant validation, automatic publication | Latest actual screen and phase-labelled timeline | None; a blocker ends discovery with a typed failure |
+| Discovery | Model exploration, deterministic tenant validation, automatic publication | Latest actual screen and phase-labelled timeline | Correct a blocked discovery in the same session, then resume; no publication approval |
 
 Replay fields come from the capability input contract. Discovery accepts a goal and named JSON
 inputs. Presets are explicit configuration in `REPLAYFORGE_VIEWER_PRESETS_FILE`, not navigation
 recipes or recovered customer inputs. New applications use the same launch and viewing code.
 Validation actually executes the discovered task again in fresh sessions; select only tenants
 where those operations are authorized. Opening the page itself never starts a model call.
-Those validation replays are unattended too: an intervention boundary fails validation without
+Validation replays are unattended: an intervention boundary fails validation without
 creating an operator session or publishing the draft.
 
 ## Watching is not controlling
@@ -28,7 +28,7 @@ flowchart LR
     F --> L[Live view]
     F --> H[Replay history]
     H --> R[Read-only inspection]
-    L --> P{Replay paused?}
+    L --> P{Execution paused?}
     P -- yes --> C[Claim existing lease]
     C --> I[Current-frame human input]
     I --> E
@@ -70,7 +70,7 @@ The original synchronous APIs remain available and use the same engines.
 
 | Boundary | Limit / behavior |
 |---|---|
-| Active managed executions | 1, including paused replay; excess launches return `429` |
+| Active managed executions | 1, including paused discovery or replay; excess launches return `429` |
 | Retained execution records | At most 4; oldest completed records may be evicted |
 | Replay screenshots | At most 60 and 32 MiB per execution; oldest frames expire first |
 | Discovery screenshots | Latest frame only, including during deterministic validation |
@@ -80,7 +80,9 @@ The original synchronous APIs remain available and use the same engines.
 | Runtime restart | All viewing state is lost; no persistent screenshot archive |
 
 These are **managed-viewer** limits, not admission limits for the existing synchronous API.
-Paused replay remains available until resumed or terminated; it occupies the active slot.
+Paused replay or discovery remains available until resumed or terminated; it occupies the active slot.
+Direct discovery HTTP requests also wait during handoff; use the background viewer endpoint for
+interactive discovery, so a client request timeout does not hide the live intervention.
 
 Screens and final outputs can contain sensitive values. Access requires the opaque viewer token
 in a request header, never a URL; responses are `no-store`. The browser stores only reconnect
@@ -101,7 +103,7 @@ operator identities remain trusted local interfaces. Do not publicly expose the 
 | Read-only replay history | Browser rewind or generic undo | Inspect previous states without repeating side effects |
 | Transient screenshots | Persist raw screen history | Provide local inspection without a new durable PII archive |
 | Explicit synthetic presets | Hardcoded form fields or original discovery inputs | Keep runtime/application boundaries general and input reuse deliberate |
-| Stop blocked discovery | Human correction during exploration | Discovery remains unattended; human control belongs only to replay |
+| Handoff only on discovery blockage | Approval after every discovery | Satisfy live recovery without adding a publication reviewer; fresh replay still gates publication |
 
 See [verification](verification.md) for the distinction between injected unit/policy tests,
 real browser execution, and genuine provider-backed discovery evidence.

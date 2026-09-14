@@ -22,6 +22,7 @@ flowchart TB
     R --> S
     S --> B[Real Chromium UI]
     R -. pause .-> H[Human control]
+    D -. blocked .-> H
     H --> S
 ```
 
@@ -85,7 +86,8 @@ the previous effect is absent; uncertain mutations are never blindly repeated.
 | `failure` | Application, policy, targeting, or verification failure with step/context |
 | `intervention_required` | Automation paused with the live session retained |
 
-Known notices, delayed loads, permission denial, and ambiguity have executable coverage.
+Known notices, delayed loads, permission denial, and ambiguity have engine test coverage;
+the three published artifacts currently demonstrate successful business flows, not those branches.
 Open-ended model recovery was rejected because replay must remain reproducible.
 
 ## 4. Heterogeneity & multi-tenant
@@ -128,10 +130,16 @@ length, never manual text.
 Resume validates fresh location and the interrupted step's effect or a declared business outcome.
 An unchanged state cannot resume. Successful validation restores automation ownership and continues
 the remaining steps. HTTP frame polling provides the required real handoff with modest transport
-complexity. Discovery is unattended: blockers return a typed failure and close the session.
+complexity. Blocked discovery can also pause and resume its original loop in the same session;
+accepted human input and changed, allowlisted state are required. Used model/step budgets remain
+spent, while human wait is excluded. Outputs are re-extracted after correction.
 The execution console launches either mode, displays actual frames and a sanitized timeline,
 and provides bounded in-memory Back/Next/Live inspection for replay. Historical screens never
 authorize input. Discovery validation and publication remain automatic, without human approval.
+
+Human actions are audit records, not fabricated automation steps. Direct discovery returns a
+draft; only fresh deterministic suite validation can publish it. An essential unrecorded manual
+operation can therefore cause validation to fail, rather than produce an unreplayable capability.
 
 ## 6. Safety
 
@@ -168,7 +176,7 @@ those engine mechanisms have independent regression tests, not fabricated discov
 | S3 | Local durable evidence satisfies this single-node submission |
 | Durable screen recordings and continuous video | Step-wise live viewing and temporary replay inspection avoid a persistent raw-screen archive |
 | Native desktop adapter | Typed surface seam exists; OS transport requires separate implementation |
-| Human intervention during discovery | Discovery is intentionally unattended; live human control and resume belong to replay |
+| Human approval after discovery | Successful publication is gated by fresh replay, not an additional reviewer |
 | Tenant overlay engine | Shared-artifact validation proves reuse; specialization design is documented |
 | LLM replay fallback | Finite deterministic recovery preserves the production model boundary |
 

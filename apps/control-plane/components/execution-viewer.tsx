@@ -88,8 +88,7 @@ export default function ExecutionViewer({
     ? frames.findIndex((item) => item.sequence === frame.sequence)
     : -1;
   const intervention =
-    snapshot?.mode === "replay" &&
-    snapshot.state === "paused" &&
+    snapshot?.state === "paused" &&
     typeof snapshot.result?.intervention_id === "string"
       ? snapshot.result.intervention_id
       : null;
@@ -239,7 +238,7 @@ export default function ExecutionViewer({
         Frames update at execution boundaries, not as continuous video.
         {snapshot?.mode === "replay"
           ? ` ${snapshot.evicted_frames} earlier screens expired. History is temporary.`
-          : " Discovery keeps only the latest screen and never requests human takeover."}
+          : " Discovery keeps only the latest screen; human control is available only when blocked."}
       </p>
       {snapshot?.result && snapshot.state !== "paused" && (
         <section className="final-result" aria-label="Final result">

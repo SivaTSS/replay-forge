@@ -45,7 +45,9 @@ class Executor:
         )
 
 
-def test_successful_discovery_publishes_artifact(valid_artifact_data: dict[str, Any]) -> None:
+def test_successful_direct_discovery_returns_unpublished_draft(
+    valid_artifact_data: dict[str, Any],
+) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
     registry.publish(artifact)
@@ -64,9 +66,10 @@ def test_successful_discovery_publishes_artifact(valid_artifact_data: dict[str, 
 
     assert isinstance(result, DiscoverySuccess)
     assert executor.request is not None and executor.request.run_id.startswith("run_")
-    assert result.artifact.capability.version == "1.0.1"
+    assert result.artifact.capability.version == "1.0.0"
     assert registry.get(artifact.capability.id, "1.0.0").artifact == artifact
-    assert registry.get(artifact.capability.id, "1.0.1").artifact == result.artifact
+    with pytest.raises(CapabilityNotFoundError):
+        registry.get(artifact.capability.id, "1.0.1")
 
 
 def test_failed_discovery_is_not_published(valid_artifact_data: dict[str, Any]) -> None:
@@ -90,7 +93,7 @@ def test_failed_discovery_is_not_published(valid_artifact_data: dict[str, Any]) 
     assert not service.ready()
 
 
-def test_one_shot_discovery_blocks_sensitive_publication() -> None:
+def test_one_shot_discovery_does_not_publish_sensitive_drafts() -> None:
     artifact = sample_artifact(sensitive=True)
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
     service = DiscoveryApplicationService(
@@ -107,13 +110,12 @@ def test_one_shot_discovery_blocks_sensitive_publication() -> None:
         timeout_seconds=120,
     )
 
-    assert isinstance(result, FailureResult)
-    assert result.code == "capability_risk_blocked"
+    assert isinstance(result, DiscoverySuccess)
     with pytest.raises(CapabilityNotFoundError):
         registry.versions(artifact.capability.id)
 
 
-def test_success_is_finalized_after_publishing_next_version(
+def test_success_finalizes_the_original_draft_without_allocating_a_version(
     valid_artifact_data: dict[str, Any],
 ) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
@@ -143,10 +145,10 @@ def test_success_is_finalized_after_publishing_next_version(
         timeout_seconds=60,
     )
 
-    assert finalized_versions == ["1.0.1"]
+    assert finalized_versions == ["1.0.0"]
 
 
-def test_publication_failure_returns_a_sanitized_completed_failure(
+def test_direct_discovery_never_calls_the_publication_adapter(
     valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
@@ -179,8 +181,5 @@ def test_publication_failure_returns_a_sanitized_completed_failure(
         timeout_seconds=120,
     )
 
-    assert isinstance(result, FailureResult)
-    assert result.code == "capability_publication_failed"
-    assert result.recoverable
-    assert "/private/path" not in result.message
+    assert isinstance(result, DiscoverySuccess)
     assert finalized == [result]

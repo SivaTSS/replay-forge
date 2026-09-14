@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
+from functools import partial
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -268,16 +269,69 @@ class ManagedReplayExecutor:
 
 
 @dataclass(slots=True)
+class ManagedDiscoveryWait:
+    validate: Callable[[], None]
+    signal: Event = field(default_factory=Event)
+    version: int | None = None
+    completed: Event = field(default_factory=Event)
+
+    def resume(self, version: int) -> None:
+        self.version = version
+        self.signal.set()
+
+    def cancel(self) -> None:
+        self.version = None
+        self.signal.set()
+
+
+@dataclass(slots=True)
 class ManagedDiscoveryExecutor:
     engine: DiscoveryEngine
     driver: PlaywrightSurfaceDriver
     worker: SerialSessionWorker
+    live_sessions: dict[str, LiveBrowserSession]
+    waits: dict[str, ManagedDiscoveryWait]
+    lock: Lock
+    shutdown: Event
+    feed: RunFeed | None = None
 
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
+        paused_id: str | None = None
+        completed = Event()
         try:
-            return self.worker.call(lambda: self.engine.execute(request))
+            result = self.worker.call(lambda: self.engine.execute(request))
+            while isinstance(result, InterventionRequiredResult):
+                paused_id = result.intervention_id
+                pending = ManagedDiscoveryWait(
+                    partial(self.engine.validate_resume, paused_id), completed=completed
+                )
+                with self.lock:
+                    self.live_sessions[paused_id] = LiveBrowserSession(self.worker, self.driver)
+                    self.waits[paused_id] = pending
+                    if self.shutdown.is_set():
+                        pending.cancel()
+                if self.feed is not None:
+                    self.feed.result(result.model_dump(mode="json"))
+                # The caller waits, NOT the owner worker: viewport/input remain available.
+                pending.signal.wait()
+                with self.lock:
+                    self.waits.pop(paused_id, None)
+                    self.live_sessions.pop(paused_id, None)
+                if pending.version is None:
+                    return self.worker.call(partial(self.engine.cancel, paused_id))
+                version = pending.version
+                result = self.worker.call(partial(self.engine.resume, paused_id, version))
+                paused_id = None
+            return result
         finally:
-            self.worker.close(self.driver.close)
+            if paused_id is not None:
+                with self.lock:
+                    self.waits.pop(paused_id, None)
+                    self.live_sessions.pop(paused_id, None)
+            try:
+                self.worker.close(self.driver.close)
+            finally:
+                completed.set()
 
 
 @dataclass(slots=True)
@@ -289,6 +343,7 @@ class RuntimeInterventionService:
     replay_continuations: dict[str, ManagedReplayContinuation] = field(default_factory=dict)
     replay_result_finalizer: Callable[[RunResult], RunResult] | None = None
     run_feeds: dict[str, RunFeed] = field(default_factory=dict)
+    discovery_waits: dict[str, ManagedDiscoveryWait] = field(default_factory=dict)
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.coordinator.get(intervention_id)
@@ -328,6 +383,7 @@ class RuntimeInterventionService:
             self._invalidate_frame(intervention_id)
             session = self.live_sessions.get(intervention_id)
             managed = self.replay_continuations.get(intervention_id)
+            discovery = self.discovery_waits.get(intervention_id)
             journal = self.journals.get(str(started.intervention.run_id))
         if session is None or journal is None:
             with self.lock:
@@ -336,7 +392,7 @@ class RuntimeInterventionService:
                     "The retained session or run journal is unavailable.",
                 )
             return InterventionResume(reopened)
-        if managed is None:
+        if managed is None and discovery is None:
             journal.record(
                 "resume_rejected",
                 str(started.intervention.run_id),
@@ -349,8 +405,17 @@ class RuntimeInterventionService:
                 )
             return InterventionResume(reopened)
         try:
-            outcome = session.worker.call(managed.validate)
-        except ResumeValidationError as error:
+            if managed is not None:
+                outcome = session.worker.call(managed.validate)
+            else:
+                assert discovery is not None
+                if session.last_client_sequence == 0:
+                    raise SurfaceError(
+                        "resume_no_human_input", "Apply a correction before resuming discovery."
+                    )
+                session.worker.call(discovery.validate)
+                outcome = None
+        except (ResumeValidationError, SurfaceError) as error:
             journal.record(
                 "resume_rejected",
                 str(started.intervention.run_id),
@@ -364,7 +429,7 @@ class RuntimeInterventionService:
             resumed = self.coordinator.complete_resume(
                 intervention_id,
                 started.lease.version,
-                "Fresh state satisfied the interrupted step contract.",
+                "Fresh state passed the continuation's resume checks.",
             )
             self.replay_continuations.pop(intervention_id, None)
         journal.record(
@@ -375,6 +440,10 @@ class RuntimeInterventionService:
         feed = self.run_feeds.get(str(started.intervention.run_id))
         if feed is not None:
             feed.manager.resume(feed)
+        if discovery is not None:
+            discovery.resume(resumed.lease.version)
+            return InterventionResume(resumed)
+        assert managed is not None
         try:
             result = session.worker.call(lambda: managed.resume(resumed.lease.version, outcome))
         except BaseException:
@@ -524,11 +593,17 @@ class RuntimeInterventionService:
                 intervention_id, expected_lease_version, operator_id, resolution
             )
             session = self.live_sessions.pop(intervention_id, None)
-        if session is not None:
-            session.close()
-        feed = self.run_feeds.pop(str(transition.intervention.run_id), None)
+            discovery = self.discovery_waits.pop(intervention_id, None)
+            self.replay_continuations.pop(intervention_id, None)
+            feed = self.run_feeds.pop(str(transition.intervention.run_id), None)
+        # Publish termination before waking the discovery caller/finalizer.
         if feed is not None:
             feed.result({"status": "terminated", "run_id": str(transition.intervention.run_id)})
+        if discovery is not None:
+            discovery.cancel()
+            discovery.completed.wait()
+        elif session is not None:
+            session.close()
         return transition
 
 
@@ -544,6 +619,7 @@ class LocalRuntime:
     model_telemetry: ModelCallTelemetry
     _lock: Lock = field(repr=False)
     execution_controller: ExecutionController | None = None
+    discovery_shutdown: Event = field(default_factory=Event)
 
     @property
     def api_services(self) -> ApiServices:
@@ -556,6 +632,13 @@ class LocalRuntime:
         )
 
     def close(self) -> None:
+        self.discovery_shutdown.set()
+        with self._lock:
+            pending_discoveries = tuple(self.intervention_service.discovery_waits.values())
+            for pending in pending_discoveries:
+                pending.cancel()
+        for pending in pending_discoveries:
+            pending.completed.wait()
         if self.execution_controller is not None:
             self.execution_controller.viewer.close()
         with self._lock:
@@ -597,6 +680,8 @@ def build_runtime(settings: object) -> LocalRuntime:
     live_sessions: dict[str, LiveBrowserSession] = {}
     replay_continuations: dict[str, ManagedReplayContinuation] = {}
     run_feeds: dict[str, RunFeed] = {}
+    discovery_waits: dict[str, ManagedDiscoveryWait] = {}
+    discovery_shutdown = Event()
     lock = Lock()
 
     def executor_factory(run_id: str, record: CapabilityVersionRecord) -> ReplayExecutor:
@@ -721,6 +806,8 @@ def build_runtime(settings: object) -> LocalRuntime:
         )
         with lock:
             journals[run_id] = journal
+            if feed is not None:
+                run_feeds[run_id] = feed
             result_classifications[run_id] = {
                 "expected": DataClassification.PERSONAL,
                 "observed": DataClassification.PERSONAL,
@@ -776,11 +863,15 @@ def build_runtime(settings: object) -> LocalRuntime:
             capability_id_resolver=lambda family, operation: (
                 f"{application_registry.get(family).capability_namespace}.{operation}"
             ),
+            intervention_router=interventions,
         )
-        return ManagedDiscoveryExecutor(engine, driver, worker)
+        return ManagedDiscoveryExecutor(
+            engine, driver, worker, live_sessions, discovery_waits, lock, discovery_shutdown, feed
+        )
 
     def finalize_discovery(result: DiscoveryResult) -> DiscoveryResult:
         with lock:
+            run_feeds.pop(result.run_id, None)
             journal = journals[result.run_id]
             classifications = result_classifications[result.run_id]
         if isinstance(result, DiscoverySuccess):
@@ -824,6 +915,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         replay_continuations,
         finalize_replay,
         run_feeds,
+        discovery_waits,
     )
 
     def validate_artifact(
@@ -869,4 +961,5 @@ def build_runtime(settings: object) -> LocalRuntime:
             discovery_suite_service,
             settings.viewer_presets_file,
         ),
+        discovery_shutdown,
     )

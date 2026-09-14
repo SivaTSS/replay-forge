@@ -259,7 +259,10 @@ class ExecutionViewer:
             del item.events[: -self.limits.maximum_events]
 
     def run_result(self, feed: RunFeed, result: dict[str, Any]) -> None:
-        if feed.phase == "replay":
+        if feed.phase == "replay" or result.get("status") in {
+            "intervention_required",
+            "terminated",
+        }:
             self.finish(feed.execution_id, result)
 
     def finish(self, execution_id: str, result: dict[str, Any]) -> None:
@@ -268,7 +271,7 @@ class ExecutionViewer:
             if item is None or item.finished_at is not None:
                 return
             status = result.get("status")
-            if status == "intervention_required" and item.mode == "replay":
+            if status == "intervention_required":
                 item.state = "paused"
             elif status in {"success", "failure", "business_outcome", "terminated"}:
                 item.state = status

@@ -97,7 +97,8 @@ or use explicit demo defaults, and watch actual browser frames and the step time
 Replay's **Back / Next / Live** controls inspect temporary screen history without altering execution.
 When replay pauses, return Live, claim the retained browser, complete the interrupted step, and
 choose **Resume automation**. The standalone operator inbox is at `/interventions`.
-Discovery is unattended: blockers stop it; successful drafts are validated and published automatically.
+Discovery runs automatically until blocked; an operator can correct and resume that same session.
+Successful drafts are validated and published automatically, with no human approval stage.
 See [Live execution viewing](docs/live-viewing.md) for privacy, expiry, and exact behavior.
 The browser regression injects a sensitive boundary
 into a temporary copy of the payoff artifact to test this path; it does not publish a fake
@@ -208,5 +209,5 @@ Published capability artifacts, content-addressed visual assets, and sanitized e
 local files. Journals, suite progress, leases, browser sessions, and bounded execution views remain
 in memory. Replay screenshots expire; no screen-history files are saved. There is no PostgreSQL
 adapter, WebSocket/video stream, distributed queue, production authentication, or native desktop
-adapter. Discovery never involves human takeover. Citrix and native desktop transport remain
+adapter. Discovery requests human takeover only when blocked. Citrix and native desktop transport remain
 outside this browser-rendered implementation.

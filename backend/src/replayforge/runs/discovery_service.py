@@ -8,15 +8,10 @@ from datetime import timedelta
 from typing import Any, Protocol
 
 from replayforge.capabilities.registry import (
-    CapabilityConflictError,
-    CapabilityIntegrityError,
-    CapabilityPublicationError,
     CapabilityRegistry,
 )
 from replayforge.discovery.engine import DiscoveryRequest
-from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
-from replayforge.policy.types import Risk
-from replayforge.runs.results import FailureResult
+from replayforge.discovery.models import DiscoveryResult
 from replayforge.shared.ids import EntityKind, new_id
 
 
@@ -53,7 +48,8 @@ class DiscoveryApplicationService:
         timeout_seconds: int,
         existing_capability_id: str | None = None,
     ) -> DiscoveryResult:
-        result = self._execute(
+        """Discover a draft; all publication belongs to validated discovery suites."""
+        return self.discover(
             goal=goal,
             application_family=application_family,
             tenant=tenant,
@@ -63,48 +59,6 @@ class DiscoveryApplicationService:
             timeout_seconds=timeout_seconds,
             existing_capability_id=existing_capability_id,
         )
-        if isinstance(result, DiscoverySuccess):
-            if result.artifact.capability.risk is not Risk.READ_ONLY:
-                blocked = result.artifact.capability.risk in {Risk.SENSITIVE, Risk.IRREVERSIBLE}
-                result = FailureResult(
-                    status="failure",
-                    run_id=result.run_id,
-                    code="capability_risk_blocked" if blocked else "discovery_suite_required",
-                    message=(
-                        "Sensitive and irreversible capability drafts cannot be published."
-                        if blocked
-                        else (
-                            "Reversible discovery requires deterministic discovery-suite "
-                            "validation."
-                        )
-                    ),
-                    recoverable=False,
-                    evidence_manifest=result.evidence_manifest,
-                )
-            else:
-                try:
-                    published = self.registry.publish_next(result.artifact)
-                except (
-                    CapabilityConflictError,
-                    CapabilityIntegrityError,
-                    CapabilityPublicationError,
-                ) as error:
-                    result = FailureResult(
-                        status="failure",
-                        run_id=result.run_id,
-                        code="capability_publication_failed",
-                        message="The discovered capability could not be published safely.",
-                        recoverable=isinstance(error, CapabilityPublicationError),
-                        evidence_manifest=result.evidence_manifest,
-                    )
-                else:
-                    result = DiscoverySuccess(
-                        status="success",
-                        run_id=result.run_id,
-                        artifact=published.artifact,
-                        evidence_manifest=result.evidence_manifest,
-                    )
-        return self.result_finalizer(result) if self.result_finalizer is not None else result
 
     def discover(
         self,

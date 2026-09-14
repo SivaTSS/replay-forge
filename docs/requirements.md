@@ -25,10 +25,10 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 | Conservative risk | Evidenced | Sensitive pauses; irreversible denies | Policy and real-session browser tests |
 | No sensitive persistence | Hardened for synthetic demo; bounded | Restricted journal/terminal fields, keyed pseudonyms, artifact leak guard, full-frame masks, image capture disabled by default | Tested boundaries, not a universal PII detector; see [data policy](safety-and-handoff.md#data-exposure-boundaries) |
 | Structured evidence | Evidenced | Ordered events, result, hashes, manifest | Three genuine discovery bundles |
-| Detect and route intervention | Implemented, Tested | Replay safety/progress boundaries route to an operator; blocked discovery fails closed | Session and console tests |
+| Detect and route intervention | Implemented | Replay and blocked discovery route to the same operator surface | Discovery correction is not a post-publication approval stage |
 | Same-session control | Implemented, Tested | Retained context and worker; bounded human input | Live browser tests with explicit policy fixtures |
 | Explicit ownership | Implemented, Tested | TTL lease, owner, version, CAS | Conflict/race tests |
-| Safe resume | Implemented, Tested for replay | Fresh location, postcondition, and changed-fingerprint checks | Discovery is unattended and does not involve a human |
+| Safe resume | Implemented | Replay checks the interrupted contract; discovery requires manual input and changed allowed state | Human actions are audited, not invented as automation; fresh replay still gates publication |
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
 | Canvas visual control | Implemented, Tested | One canvas-only workstation exposes three discovered tasks using geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
 | Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
@@ -70,5 +70,12 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
   provenance; they are not literal pixel-equality drift gates.
 - Published capabilities and evidence survive restart; operational run and handoff state does not.
 - The operator console is not a complete product UI.
-- The API is synchronous and has no WebSocket endpoint.
+- Direct invocation is synchronous; the viewer launches background executions through HTTP 202
+  and polls their state. There is no WebSocket endpoint.
 - Authentication, authorization, retention enforcement, PostgreSQL, object storage, and distributed workers are not implemented.
+
+## Discovery handoff versus publication
+
+PDF §3.6 includes live human takeover when discovery gets stuck. This is different from approving
+an already successful discovery: the runtime supports the former and does not introduce the latter.
+Only fresh deterministic suite validation publishes a capability, including read-only tasks.

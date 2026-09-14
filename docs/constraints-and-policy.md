@@ -41,6 +41,8 @@ reviewed provider ceiling.
 Timeout enforcement is cooperative at operation boundaries. A provider or browser operation has
 its own timeout, so the discovery wall budget is checked before the next iteration rather than
 interrupting code mid-operation.
+Time waiting for a discovery operator is excluded from that automation budget; consumed steps
+and provider calls are not reset on resume. Paused sessions must be resumed or terminated.
 
 ## Fail-closed authority
 

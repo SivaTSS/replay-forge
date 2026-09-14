@@ -160,7 +160,7 @@ export default function LaunchForm({
         <p className="muted">
           {mode === "replay"
             ? "Deterministic execution · no model calls"
-            : "Real model-driven discovery · automated validation and publication · no human takeover"}
+            : "Model-driven discovery · human help only when blocked · automatic publication after validation"}
         </p>
         {mode === "replay" ? (
           <>

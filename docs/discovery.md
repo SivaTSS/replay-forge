@@ -6,10 +6,21 @@
 
 Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation
 inputs, and step/time limits. A contract-planning pass first produces a typed `CapabilityDraftSpec`;
-the action loop returns a validated draft or a typed failure. Discovery is unattended: blockers
-close the session rather than requesting human control. Direct discovery publishes read-only
-results; suites keep drafts unpublished until deterministic validation and finalization. The
+the action loop returns a validated draft or a typed failure, pausing for human control when blocked.
+Direct discovery returns an unpublished draft; only suites publish, after deterministic validation
+and finalization. This prevents human-assisted traces from bypassing the replay gate. The
 three-flow capture and [visual discovery launcher](live-viewing.md) use suites.
+
+On a blocker, the engine suspends its loop with the same browser, verified recordings, model
+instance, and remaining step/call budgets. The caller waits outside the browser owner thread,
+leaving that worker free for leased operator input. Resume requires an accepted manual action,
+a changed frame fingerprint, and an allowlisted location. Extracted outputs are invalidated and
+must be read again. Human waiting does not consume the automation wall budget.
+
+Manual operations are recorded as human audit events, not fabricated automation steps. A corrected
+discovery can continue, but an essential unrecorded manual operation may make its fresh replay
+fail; that draft remains unpublished. Termination and shutdown release the waiting caller and
+close the retained browser. Budget exhaustion and forbidden actions still fail closed.
 
 It is available only when all three conditions hold:
 

@@ -233,7 +233,7 @@ def test_operator_finds_controls_and_resumes_real_session(operator_stack: Operat
         expect(page.get_by_text("Input applied to the retained session.")).to_be_visible()
         page.get_by_role("button", name="Resume automation").click()
         expect(page.get_by_text("Replay result: success", exact=True)).to_be_visible(timeout=60_000)
-        expect(page.get_by_text("No replay sessions need an operator.")).to_be_visible()
+        expect(page.get_by_text("No sessions need an operator.")).to_be_visible()
         browser.close()
 
     events = "\n".join(

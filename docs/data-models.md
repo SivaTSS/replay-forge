@@ -46,7 +46,7 @@ Every runtime ID is a prefix plus 32 lowercase hexadecimal characters.
 IDs are opaque. The prefix prevents cross-entity substitution; code never interprets the random
 component.
 
-Execution viewing adds a bounded in-memory state machine: running → paused replay → running,
+Execution viewing adds a bounded in-memory state machine: running → paused → running,
 or a terminal success/failure/business-outcome/termination. Frame and timeline sequences are
 monotonic within the execution, with actual run and phase metadata. The viewer's access token
 is independent of its public execution ID and never grants an intervention control lease.
@@ -141,6 +141,14 @@ after policy allows it, the adapter executes it, and deterministic postcondition
 own `sui_` identity and four states: `collecting`, `validated`, `published`, or `failed`. A suite can
 publish only a successful, validated artifact whose version matches the published version. There
 is no reviewer or approval state after discovery.
+
+`DiscoveryPause` binds a blocker to its request, live session, effective policy, observation,
+and lease version. `DiscoveryContinuation` owns the suspended loop in memory; it is deliberately
+not serializable and never enters an artifact or evidence bundle. A managed wait releases the
+browser worker for operator input while the original application-service call remains pending.
+Resume preserves the loop's recordings and consumed budgets; cancellation closes it. Suite
+state changes only when that primary discovery actually completes. All publication uses the
+same fresh deterministic validation gate, including read-only and human-assisted drafts.
 
 ## Surface
 

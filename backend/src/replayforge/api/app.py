@@ -184,6 +184,7 @@ def create_app(services: ApiServices) -> FastAPI:
                 "status": result.status,
                 "run_id": result.run_id,
                 "artifact": result.artifact.model_dump(mode="json"),
+                "published": False,
                 "evidence_manifest": result.evidence_manifest,
             }
             return JSONResponse(payload, status_code=200)

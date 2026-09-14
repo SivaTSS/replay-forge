@@ -109,10 +109,9 @@ export default function InterventionConsole({
 
   const refreshInbox = useCallback(async (quiet = false) => {
     try {
-      const response = await fetch(
-        "/runtime/api/v1/interventions?run_mode=replay",
-        { cache: "no-store" },
-      );
+      const response = await fetch("/runtime/api/v1/interventions", {
+        cache: "no-store",
+      });
       setInbox((await readJson<{ items: Intervention[] }>(response)).items);
       if (!quiet) setError(null);
     } catch (cause) {
@@ -238,7 +237,11 @@ export default function InterventionConsole({
           if (action === "terminate")
             setNotice("Intervention terminated and session closed.");
           if (action === "resume" && !next.result)
-            setNotice(`Resume was not safe: ${next.explanation}`);
+            setNotice(
+              next.status === "resolved"
+                ? "Discovery resumed in the same session. Watch its progress in the execution viewer."
+                : `Resume was not safe: ${next.explanation}`,
+            );
         }
         await refreshInbox(true);
       } catch (cause) {
@@ -512,10 +515,10 @@ export default function InterventionConsole({
         </div>
       ) : null}
       <section className="console-grid">
-        <aside className="inbox" aria-label="Active replay interventions">
+        <aside className="inbox" aria-label="Active interventions">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Replay queue</p>
+              <p className="eyebrow">Operator queue</p>
               <h2>Active interventions</h2>
             </div>
             <span className="count">{inbox.length}</span>
@@ -530,7 +533,7 @@ export default function InterventionConsole({
                 >
                   <span className="inbox-top">
                     <strong>
-                      {item.capability_name ?? "Replay intervention"}
+                      {item.capability_name ?? "Blocked discovery"}
                     </strong>
                     <span className={`status status-${item.status}`}>
                       {expired(item, now) ? "expired" : item.status}
@@ -544,7 +547,7 @@ export default function InterventionConsole({
                 </button>
               ))
             ) : (
-              <p className="empty">No replay sessions need an operator.</p>
+              <p className="empty">No sessions need an operator.</p>
             )}
           </div>
           <details className="direct-lookup">
@@ -774,7 +777,7 @@ export default function InterventionConsole({
               <p className="eyebrow">Same-session handoff</p>
               <h2>Select an intervention</h2>
               <p>
-                Choose a paused replay. Context is visible before claiming; the
+                Choose a paused session. Context is visible before claiming; the
                 live viewport is restricted to its lease holder.
               </p>
             </div>

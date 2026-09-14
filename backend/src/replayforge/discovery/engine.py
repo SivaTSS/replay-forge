@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, cast
@@ -57,10 +57,13 @@ from replayforge.discovery.privacy import (
     target_contains_invocation_literal,
     validate_artifact_privacy,
 )
+from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
     AUTOMATION_OWNER,
+    InterventionContext,
+    InterventionRunMode,
 )
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import (
@@ -70,12 +73,14 @@ from replayforge.policy.models import (
     RunMode,
 )
 from replayforge.policy.types import Decision
-from replayforge.runs.ports import RunRecorder
+from replayforge.runs.ports import InterventionRouter, RunRecorder
 from replayforge.runs.results import (
     ArtifactPrivacyDiagnostic,
     FailureResult,
+    InterventionRequiredResult,
 )
 from replayforge.shared.clock import Clock
+from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import ActionStatus, NormalizedObservation, SurfaceError
 from replayforge.surfaces.ports import SurfaceDriver, SurfaceSession
 
@@ -111,6 +116,29 @@ class DiscoveryRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class DiscoveryPause:
+    request: DiscoveryRequest
+    session: SurfaceSession
+    policy: EffectivePolicy
+    observation: NormalizedObservation
+    lease_version: int
+    code: str
+    step_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryContinuation:
+    loop: Generator[DiscoveryPause, int, DiscoveryResult]
+    pause: DiscoveryPause
+
+
+class DiscoveryBlockedError(RuntimeError):
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+@dataclass(frozen=True, slots=True)
 class DiscoveryEngine:
     surface_driver: SurfaceDriver
     model_provider: ModelProvider
@@ -124,8 +152,105 @@ class DiscoveryEngine:
     contract_planner: Callable[[PlanningContext], CapabilityDraftSpec] | None = None
     capability_id_resolver: Callable[[str, str], str] | None = None
     privacy_redactor: StructuredRedactor = field(default_factory=StructuredRedactor)
+    intervention_router: InterventionRouter | None = None
+    _continuations: dict[str, DiscoveryContinuation] = field(default_factory=dict, repr=False)
 
-    def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
+    def execute(self, request: DiscoveryRequest) -> DiscoveryResult | InterventionRequiredResult:
+        return self._advance(self._run(request))
+
+    def _advance(
+        self, loop: Generator[DiscoveryPause, int, DiscoveryResult], version: int | None = None
+    ) -> DiscoveryResult | InterventionRequiredResult:
+        try:
+            pause = next(loop) if version is None else loop.send(version)
+        except StopIteration as completed:
+            return cast(DiscoveryResult, completed.value)
+        if self.intervention_router is None:
+            loop.close()
+            return self._failure(pause.request, pause.code, "Discovery is blocked.")
+        try:
+            frame = pause.session.capture_sanitized_evidence_frame()
+            self.recorder.attach_sanitized(
+                "discovery-handoff-before",
+                SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+                RetentionClass.HUMAN_AUDIT,
+            )
+            intervention_id = str(new_id(EntityKind.INTERVENTION))
+            self.intervention_router.open(
+                intervention_id=intervention_id,
+                run_id=pause.request.run_id,
+                session_id=pause.session.session_id,
+                expected_lease_version=pause.lease_version,
+                code=pause.code,
+                step_id=pause.step_id,
+                observation=pause.observation,
+                explanation="Discovery is blocked; correct the live state before resuming.",
+                context=InterventionContext(
+                    run_mode=InterventionRunMode.DISCOVERY,
+                    application_family=pause.request.application_family,
+                    tenant=pause.request.tenant,
+                    task_summary=pause.request.goal,
+                    surface_route=pause.observation.route,
+                    step_id=pause.step_id,
+                ),
+            )
+            self._continuations[intervention_id] = DiscoveryContinuation(loop, pause)
+            self.recorder.record(
+                "intervention_required",
+                pause.request.run_id,
+                step_id=pause.step_id,
+                details={"code": pause.code},
+            )
+            return InterventionRequiredResult(
+                status="intervention_required",
+                run_id=pause.request.run_id,
+                intervention_id=intervention_id,
+                code=pause.code,
+                step_id=pause.step_id,
+                session_live=True,
+                control_owner="automation_paused",
+            )
+        except BaseException:
+            loop.close()
+            raise
+
+    def validate_resume(self, intervention_id: str) -> None:
+        pause = self._continuations[intervention_id].pause
+        observation = pause.session.observe()
+        if not self.policy_evaluator.location_allowed(
+            pause.policy, pause.session.origin, observation.route
+        ):
+            raise SurfaceError(
+                "resume_location_not_allowed", "The session is outside its allowed location."
+            )
+        if observation.fingerprint == pause.observation.fingerprint:
+            raise SurfaceError(
+                "resume_state_unchanged", "The blocked discovery state has not changed."
+            )
+        frame = pause.session.capture_sanitized_evidence_frame()
+        self.recorder.attach_sanitized(
+            "discovery-handoff-after",
+            SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+            RetentionClass.HUMAN_AUDIT,
+        )
+        self.recorder.record("resume_checkpoint_verified", pause.request.run_id)
+
+    def resume(
+        self, intervention_id: str, version: int
+    ) -> DiscoveryResult | InterventionRequiredResult:
+        continuation = self._continuations.pop(intervention_id)
+        return self._advance(continuation.loop, version)
+
+    def cancel(self, intervention_id: str) -> FailureResult:
+        continuation = self._continuations.pop(intervention_id)
+        continuation.loop.close()
+        return self._failure(
+            continuation.pause.request,
+            "discovery_terminated",
+            "Discovery was terminated while paused.",
+        )
+
+    def _run(self, request: DiscoveryRequest) -> Generator[DiscoveryPause, int, DiscoveryResult]:
         session: SurfaceSession | None = None
         started_at = self.clock.now()
         try:
@@ -152,6 +277,34 @@ class DiscoveryEngine:
             repeated_action = 0
             previous_action: str | None = None
 
+            def handoff(
+                code: str, current: NormalizedObservation
+            ) -> Generator[DiscoveryPause, int, None]:
+                nonlocal started_at, lease, previous_fingerprint, previous_action
+                nonlocal repeated_state, repeated_action
+                assert session is not None
+                paused_at = self.clock.now()
+                version = yield DiscoveryPause(
+                    request,
+                    session,
+                    effective_policy,
+                    current,
+                    lease.version,
+                    code,
+                    f"discovery_step_{_step_number}",
+                )
+                # Human wait is excluded; used model calls and automation steps are not reset.
+                started_at += self.clock.now() - paused_at
+                lease = self.lease_service.heartbeat(session.session_id, version, AUTOMATION_OWNER)
+                previous_fingerprint = previous_action = None
+                repeated_state = repeated_action = 0
+                outputs.clear()  # Human edits may invalidate previously extracted values.
+                history.append(
+                    "A human corrected the blocked live session. Reobserve and re-extract outputs. "
+                    "Manual actions are audit evidence, not recorded automation steps. "
+                    "The recorded program must still pass fresh deterministic replay."
+                )
+
             for _step_number in range(1, request.max_steps + 1):
                 if self.clock.now() - started_at >= request.timeout:
                     return self._failure(request, "discovery_timeout", "Time budget exhausted.")
@@ -172,12 +325,8 @@ class DiscoveryEngine:
                     repeated_state = 0
                 previous_fingerprint = observation.fingerprint
                 if repeated_state >= request.max_repeated_state:
-                    result = self._stop_blocked(
-                        request,
-                        "repeated_observation",
-                        None,
-                    )
-                    return result
+                    yield from handoff("repeated_observation", observation)
+                    continue
 
                 proposal = self.model_provider.decide(
                     ProviderContext(
@@ -208,12 +357,8 @@ class DiscoveryEngine:
                     details=self._proposal_summary(proposal),
                 )
                 if isinstance(proposal, EscalateProposal):
-                    result = self._stop_blocked(
-                        request,
-                        proposal.reason_code,
-                        None,
-                    )
-                    return result
+                    yield from handoff(proposal.reason_code, observation)
+                    continue
                 if isinstance(proposal, CompleteProposal):
                     try:
                         artifact = self._compile(
@@ -284,19 +429,11 @@ class DiscoveryEngine:
                 )
                 previous_action = action_fingerprint
                 if repeated_action >= request.max_repeated_action:
-                    result = self._stop_blocked(
-                        request,
-                        "repeated_action",
-                        None,
-                    )
-                    return result
+                    yield from handoff("repeated_action", observation)
+                    continue
                 if proposal.confidence < request.minimum_confidence:
-                    result = self._stop_blocked(
-                        request,
-                        "low_model_confidence",
-                        None,
-                    )
-                    return result
+                    yield from handoff("low_model_confidence", observation)
+                    continue
 
                 try:
                     act_result = self._act(
@@ -310,8 +447,14 @@ class DiscoveryEngine:
                         output_contract,
                         draft.inputs if draft is not None else None,
                     )
+                except DiscoveryBlockedError as error:
+                    yield from handoff(error.code, observation)
+                    continue
                 except SurfaceError as error:
                     if not error.recoverable or not error.effect_absent:
+                        if error.intervention_recommended:
+                            yield from handoff(error.code, session.observe())
+                            continue
                         raise
                     self.recorder.record(
                         "proposal_rejected",
@@ -609,11 +752,7 @@ class DiscoveryEngine:
                     recoverable=True,
                     effect_absent=True,
                 )
-            return self._stop_blocked(
-                request,
-                decision.reason_code,
-                None,
-            )
+            raise DiscoveryBlockedError(decision.reason_code)
         self.recorder.record("action_intent", request.run_id)
         if isinstance(proposal.action, ExtractAction):
             if target is None:
@@ -690,17 +829,6 @@ class DiscoveryEngine:
         if isinstance(proposal.action, AssertAction | WaitForAction):
             history += " Condition verified and retained in the recorded trace."
         return recorded, history
-
-    def _stop_blocked(
-        self,
-        request: DiscoveryRequest,
-        code: str,
-        step_id: str | None,
-    ) -> FailureResult:
-        """Discovery is unattended; blockers never create a claimable session."""
-        return self._failure(
-            request, code, "Automated discovery stopped at a safety or progress boundary."
-        ).model_copy(update={"step_id": step_id})
 
     def _failure(
         self,

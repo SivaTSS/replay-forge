@@ -31,8 +31,8 @@ flowchart TB
     P --> E[Replay without a model]
 ```
 
-There is no post-discovery human approval gate. Discovery stops automatically at a blocker.
-A human takes over only a paused replay; publication requires the runtime's verification checks.
+There is no post-discovery human approval gate. A human can correct a blocked discovery or replay
+in its retained session; publication always requires the runtime's fresh replay validation.
 
 ## Registration is a security boundary
 
