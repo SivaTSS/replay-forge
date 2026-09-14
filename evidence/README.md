@@ -31,6 +31,12 @@ Discovery used `6699114`; the complete replay matrix used `7512f5e`. Those valid
 contain the unpublished merged candidate; successful finalization published version `1.0.2`.
 Their exact artifact hashes distinguish that candidate from the original immutable source version.
 
+Card lock has six genuine scenario discoveries and fourteen model-free validation bundles.
+Its three business outcomes, two application failures, and notice recovery all pass on Harbor and
+Summit. Recovery includes scrolling to the exact learned rejoin target, followed by a complete
+lock with fresh identity/status checks. The replay matrix used `9c9d051` and published `1.0.2`;
+each discovery manifest records its own actual recording revision.
+
 ```bash
 uv run python scripts/verify_evidence_bundles.py evidence --require-submission
 ```

@@ -53,7 +53,8 @@ transfer without falsely publishing a special model-discovered handoff capabilit
 
 All three tasks have genuine successful-flow discovery evidence. Payoff `1.0.2` additionally
 declares two negative outcomes, two application failures, and one recovery, with genuine discovery
-and fresh replay on both tenants. Transaction/card exception coverage is still being established.
+and fresh replay on both tenants. Card lock `1.0.2` adds three business outcomes, two application
+failures, and a notice recovery. Transaction exception coverage is still being established.
 Unknown states fail closed; engine tests alone do not prove application-specific branches.
 
 The submission gate also requires independently exported successful and failed model-free replay
@@ -91,6 +92,24 @@ only after this complete matrix passed with model credentials disabled:
 | Restricted member | `failure:member_restricted` | [Evidence](../evidence/replay-payoff-harbor-member-restricted/manifest.json) | [Evidence](../evidence/replay-payoff-summit-member-restricted/manifest.json) |
 | Member notice | `success` + named `recovery_completed` | [Evidence](../evidence/replay-payoff-harbor-acknowledge-member-notice/manifest.json) | [Evidence](../evidence/replay-payoff-summit-acknowledge-member-notice/manifest.json) |
 
+Card lock [version 1.0.2](../capabilities/member.temporary_card_lock/1.0.2.yaml) passed the following
+matrix with model credentials disabled. Each branch has a separate genuine discovery trace:
+
+| Card case | Discovery | Exact result | Harbor replay | Summit replay |
+|---|---|---|---|---|
+| Normal task | [Original](../evidence/discovery-servicing-card-lock/manifest.json) | `success` | [Evidence](../evidence/replay-card-harbor-primary/manifest.json) | [Evidence](../evidence/replay-card-summit-primary/manifest.json) |
+| Missing member | [Trace](../evidence/discovery-card-member-not-found/manifest.json) | `business_outcome:member_not_found` | [Evidence](../evidence/replay-card-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-card-summit-member-not-found/manifest.json) |
+| Already locked | [Trace](../evidence/discovery-card-card-already-locked/manifest.json) | `business_outcome:card_already_locked` | [Evidence](../evidence/replay-card-harbor-card-already-locked/manifest.json) | [Evidence](../evidence/replay-card-summit-card-already-locked/manifest.json) |
+| Expired card | [Trace](../evidence/discovery-card-card-expired/manifest.json) | `business_outcome:card_expired` | [Evidence](../evidence/replay-card-harbor-card-expired/manifest.json) | [Evidence](../evidence/replay-card-summit-card-expired/manifest.json) |
+| Invalid reason | [Trace](../evidence/discovery-card-invalid-maintenance-reason/manifest.json) | `failure:invalid_maintenance_reason` | [Evidence](../evidence/replay-card-harbor-invalid-maintenance-reason/manifest.json) | [Evidence](../evidence/replay-card-summit-invalid-maintenance-reason/manifest.json) |
+| Restricted member | [Trace](../evidence/discovery-card-member-restricted/manifest.json) | `failure:member_restricted` | [Evidence](../evidence/replay-card-harbor-member-restricted/manifest.json) | [Evidence](../evidence/replay-card-summit-member-restricted/manifest.json) |
+| Member notice | [Trace](../evidence/discovery-card-acknowledge-member-notice/manifest.json) | `success` + named `recovery_completed` | [Evidence](../evidence/replay-card-harbor-acknowledge-member-notice/manifest.json) | [Evidence](../evidence/replay-card-summit-acknowledge-member-notice/manifest.json) |
+
+Recovery acknowledges the notice, scrolls to restore the learned target, and rejoins the original
+program. Replay then verifies card identity, applies the lock, re-reads identity/status, and checks
+the confirmation. Normal and terminal cases execute no recovery. An earlier acknowledgement-only
+trace failed at the next target and is not part of this proof.
+
 | Model-free replay bundle | Result | Proof boundary |
 |---|---|---|
 | [Payoff success](../evidence/replay-servicing-payoff/manifest.json) | Verified success | Changed member and date; exact outputs checked before redacted export; no provider credentials |
@@ -102,7 +121,7 @@ allocates the immutable published version. That expected difference is not a for
 
 Other failed or paused attempts stay in private runtime audit storage. They are not relabeled as
 success, and no manual UI action is substituted for model discovery. The replay bundles were
-captured from `a462cdf` (original pair) and `7512f5e` (payoff branch matrix);
+captured from `a462cdf` (original pair), `7512f5e` (payoff branch matrix), and `9c9d051` (card matrix);
 [reproduction instructions](../evidence/README.md) run the actual
 saved capability with synthetic input data, not a scripted navigation substitute.
 

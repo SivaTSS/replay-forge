@@ -168,8 +168,9 @@ deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines th
 Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
 assignment requests. Three genuine discovery bundles preserve the current UI's provenance. Tests exercise model-free
 reuse and real same-session handoff; policy-injection fixtures are explicitly separate from discovery.
-Payoff now includes five genuinely discovered exception/recovery branches with complete replay
-proof. Transaction and card exception branches remain unproven; engine fixtures are not substituted
+Payoff and card lock now include five and six genuinely discovered exception/recovery branches,
+respectively, with complete two-tenant replay proof. Transaction exception branches remain
+unproven; engine fixtures are not substituted
 for their discovery evidence. See the [proof matrix](docs/verification.md#scenario-matrix).
 
 | Deliberate cut | Reason / next condition |

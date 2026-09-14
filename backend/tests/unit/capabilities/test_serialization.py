@@ -27,6 +27,9 @@ _COMMITTED_ARTIFACT_HASHES = {
     "member.temporary_card_lock/1.0.1.yaml": (
         "sha256:b403f5b4de5efb5dcad4c3b0dc67c670f496f3d9f798324c79e9e9bcce3b5de9"
     ),
+    "member.temporary_card_lock/1.0.2.yaml": (
+        "sha256:fe1d31f2f48f4f20cdf4eb18e1af21ca4b2a892cb431fe23f3ead937b796dd16"
+    ),
 }
 
 

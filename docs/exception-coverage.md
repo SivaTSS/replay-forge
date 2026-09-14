@@ -35,8 +35,9 @@ flowchart TD
 
 ## Three-task coverage matrix
 
-Payoff's five cases now have [genuine discovery and two-tenant replay proof](verification.md#scenario-matrix)
-and are published in version `1.0.2`. The transaction and card exception cases remain unproven.
+Payoff's five cases and card lock's six cases have
+[genuine discovery and two-tenant replay proof](verification.md#scenario-matrix), published in
+their respective versions `1.0.2`. The transaction exception cases remain unproven.
 The same verification matrix distinguishes original discoveries from model-free replay evidence.
 
 | Task | Scenario | Required disposition | Invariants |

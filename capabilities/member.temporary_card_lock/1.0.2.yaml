@@ -1,0 +1,899 @@
+schema_version: '1.4'
+capability:
+  id: member.temporary_card_lock
+  version: 1.0.2
+  name: Temporarily lock card
+  description: Verify the supplied member_id and card_id through the card-maintenance
+    workflow, record the supplied maintenance reason, apply a temporary lock to the
+    selected card, and verify the completed result by re-extracting card_id and checking
+    that it matches the supplied card_id and that the final lock status is exactly
+    locked. Return only the completed-result card_id, lock_status, and confirmation_reference.
+    The observed surface does not yet expose an explicit inverse operation, so this
+    capability is classified as sensitive rather than reversible.
+  application_family: northstar_member_service
+  surface: web
+  risk: reversible
+  tags:
+  - member_servicing
+  - card_maintenance
+  - temporary_lock
+  - verified_result
+compatibility:
+  application_family: northstar_member_service
+  base_variant: standard
+  supported_variants:
+  - harbor
+  - summit
+  surface_contract: web.v1
+  entry_point: legacy_servicing
+  rendered_surface: true
+  fingerprint:
+    required_landmarks:
+    - kind: visual_text
+      value: Branch member directory
+    forbidden_landmarks: []
+inputs:
+  type: object
+  additional_properties: false
+  required:
+  - member_id
+  - card_id
+  - reason
+  properties:
+    member_id:
+      type: string
+      description: Invocation value for member id.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    card_id:
+      type: string
+      description: Invocation value for card id.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    reason:
+      type: string
+      description: Invocation value for reason.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+outputs:
+  type: object
+  additional_properties: false
+  required:
+  - card_id
+  - lock_status
+  - confirmation_reference
+  properties:
+    card_id:
+      type: string
+      description: Card identifier re-extracted from the completed result after the
+        state change.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    lock_status:
+      type: string
+      description: Final lock status returned for the card after the temporary lock
+        operation.
+      data_classification: operational
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    confirmation_reference:
+      type: string
+      description: Confirmation reference returned by the completed card-lock operation.
+      data_classification: operational
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+preconditions:
+- kind: route
+  pattern: /servicing
+steps:
+- id: step_01_type_member_id_name_city_search_field
+  name: Member ID / name / city search field
+  action:
+    kind: type
+    value:
+      source: input
+      path: member_id
+    clear: true
+  target:
+    description: Member ID / name / city search field
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Member ID / name / city
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_02_press_keys_press_keys
+  name: press_keys
+  action:
+    kind: press_keys
+    keys:
+    - Enter
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs:
+  - member_not_found
+  failure_refs:
+  - member_restricted
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_03_click_card_maintenance_navigation_control
+  name: Card maintenance navigation control
+  action:
+    kind: click
+  target:
+    description: Card maintenance navigation control
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Card maintenance
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_04_click_open_action_for_the_single_member_inquir
+  name: Open action for the single member inquiry result
+  action:
+    kind: click
+  target:
+    description: Open action for the single member inquiry result
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Open
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs:
+  - acknowledge_member_notice
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_05_click_card_maintenance_control_below_service_r
+  name: Card maintenance control below Service request history
+  action:
+    kind: click
+  target:
+    description: Card maintenance control below Service request history
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: ocr_relative
+      anchor: Service request history
+      anchor_match: exact
+      target_text: Card maintenance
+      relation: below
+      minimum_confidence: 0.95
+      expected_count: 1
+      portability: high
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_06_click_open_action_for_the_supplied_row
+  name: Open action for the supplied card_id row
+  action:
+    kind: click
+  target:
+    description: Open action for the supplied card_id row
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: input_text
+      value:
+        source: input
+        path: card_id
+      target_text: Open
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_07_extract_card_id_value_in_the_card_details_table
+  name: Card ID value in the card details table
+  action:
+    kind: extract
+    output: card_id
+    transform: trim
+  target:
+    description: Card ID value in the card details table
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Card ID
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: identity_matches
+    extracted_output: card_id
+    input_path: card_id
+  - kind: output_valid
+    output: card_id
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs:
+  - card_already_locked
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_08_type_maintenance_reason_text_input
+  name: Maintenance reason text input
+  action:
+    kind: type
+    value:
+      source: input
+      path: reason
+    clear: true
+  target:
+    description: Maintenance reason text input
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Maintenance reason
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_09_click_review_temporary_lock_control
+  name: Review temporary lock control
+  action:
+    kind: click
+  target:
+    description: Review temporary lock control
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Review temporary lock
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs:
+  - card_expired
+  failure_refs:
+  - invalid_maintenance_reason
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_10_click_confirm_operation_control
+  name: Confirm operation control
+  action:
+    kind: click
+  target:
+    description: Confirm operation control
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Confirm operation
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: reversible
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_11_extract_card_id_value_in_the_completed_result
+  name: Card ID value in the completed result
+  action:
+    kind: extract
+    output: card_id
+    transform: trim
+  target:
+    description: Card ID value in the completed result
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Card ID
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: identity_matches
+    extracted_output: card_id
+    input_path: card_id
+  - kind: output_valid
+    output: card_id
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_12_extract_lock_status_value_in_the_completed_resul
+  name: Lock status value in the completed result
+  action:
+    kind: extract
+    output: lock_status
+    transform: trim
+  target:
+    description: Lock status value in the completed result
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Lock status
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_equals
+    output: lock_status
+    value: Temporarily locked
+  - kind: output_valid
+    output: lock_status
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_13_extract_confirmation_reference_value_in_the_comp
+  name: Confirmation reference value in the completed result
+  action:
+    kind: extract
+    output: confirmation_reference
+    transform: trim
+  target:
+    description: Confirmation reference value in the completed result
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Confirmation reference
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: confirmation_reference
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+recoveries:
+- id: acknowledge_member_notice
+  trigger:
+    kind: rendered_text
+    value: Address review outstanding. Confirm the member record before proceeding.
+    match: exact
+  max_uses: 1
+  steps:
+  - id: recovery_acknowledge_member_notice_1
+    name: Acknowledge notice control
+    action:
+      kind: click
+    target:
+      description: Acknowledge notice control
+      registered_risk: read_only
+      scope:
+        window: primary
+        frame_path: []
+      visual_candidates:
+      - strategy: rendered_text
+        value: Acknowledge notice
+        match: exact
+      candidates: []
+      state:
+        visible: true
+      tenant_overrides_allowed: false
+    preconditions: []
+    postconditions:
+    - kind: rendered_text
+      value: Relationship summary
+      match: exact
+    timeout_ms: 10000
+    retry:
+      max_attempts: 2
+      backoff_ms:
+      - 500
+      retry_on:
+      - target_temporarily_absent
+      require_effect_absent: true
+    recovery_refs: []
+    outcome_refs: []
+    failure_refs: []
+    risk: read_only
+    evidence:
+      before: false
+      after: true
+      on_failure: true
+  - id: recovery_acknowledge_member_notice_2
+    name: assert
+    action:
+      kind: assert
+      condition:
+        kind: rendered_text
+        value: Notice acknowledged for this session.
+        match: exact
+    preconditions: []
+    postconditions:
+    - kind: rendered_text
+      value: Notice acknowledged for this session.
+      match: exact
+    timeout_ms: 10000
+    retry:
+      max_attempts: 2
+      backoff_ms:
+      - 500
+      retry_on:
+      - target_temporarily_absent
+      require_effect_absent: true
+    recovery_refs: []
+    outcome_refs: []
+    failure_refs: []
+    risk: read_only
+    evidence:
+      before: false
+      after: true
+      on_failure: true
+  - id: recovery_acknowledge_member_notice_3
+    name: scroll
+    action:
+      kind: scroll
+      direction: down
+      amount: 579
+    preconditions: []
+    postconditions: []
+    timeout_ms: 10000
+    retry:
+      max_attempts: 2
+      backoff_ms:
+      - 500
+      retry_on:
+      - target_temporarily_absent
+      require_effect_absent: true
+    recovery_refs: []
+    outcome_refs: []
+    failure_refs: []
+    risk: read_only
+    evidence:
+      before: false
+      after: true
+      on_failure: true
+  - id: recovery_acknowledge_member_notice_4
+    name: assert
+    action:
+      kind: assert
+      condition:
+        kind: rendered_text
+        value: Notice acknowledged for this session.
+        match: exact
+    preconditions: []
+    postconditions:
+    - kind: rendered_text
+      value: Notice acknowledged for this session.
+      match: exact
+    timeout_ms: 10000
+    retry:
+      max_attempts: 2
+      backoff_ms:
+      - 500
+      retry_on:
+      - target_temporarily_absent
+      require_effect_absent: true
+    recovery_refs: []
+    outcome_refs: []
+    failure_refs: []
+    risk: read_only
+    evidence:
+      before: false
+      after: true
+      on_failure: true
+  - id: recovery_acknowledge_member_notice_5
+    name: assert
+    action:
+      kind: assert
+      condition:
+        kind: rendered_text
+        value: Card maintenance
+        match: exact
+    preconditions: []
+    postconditions:
+    - kind: rendered_text
+      value: Card maintenance
+      match: exact
+    timeout_ms: 10000
+    retry:
+      max_attempts: 2
+      backoff_ms:
+      - 500
+      retry_on:
+      - target_temporarily_absent
+      require_effect_absent: true
+    recovery_refs: []
+    outcome_refs: []
+    failure_refs: []
+    risk: read_only
+    evidence:
+      before: false
+      after: true
+      on_failure: true
+  resume_at: step_05_click_card_maintenance_control_below_service_r
+outcomes:
+- code: member_not_found
+  description: Observe and verify that the supplied member does not exist. Stop without
+    choosing another member or card.
+  detect:
+    kind: rendered_text
+    value: No matching members. Refine the inquiry; no record was selected.
+    match: exact
+  allowed_after_steps:
+  - step_02_press_keys_press_keys
+  result:
+    status: business_outcome
+    details: {}
+- code: card_already_locked
+  description: Verify the selected card identity and that it is already temporarily
+    locked. Stop without unlocking it, changing its state, or inventing a new confirmation
+    reference.
+  detect:
+    kind: rendered_text
+    value: Temporarily locked
+    match: exact
+  allowed_after_steps:
+  - step_07_extract_card_id_value_in_the_card_details_table
+  result:
+    status: business_outcome
+    details: {}
+- code: card_expired
+  description: Verify the selected card identity and that the card is expired and
+    ineligible for a temporary lock. Stop without changing its state or substituting
+    another card.
+  detect:
+    kind: rendered_text
+    value: 'card_expired: Expired cards cannot be locked or unlocked.'
+    match: exact
+  allowed_after_steps:
+  - step_09_click_review_temporary_lock_control
+  result:
+    status: business_outcome
+    details: {}
+failures:
+- code: invalid_maintenance_reason
+  description: Observe the application's rejection of the supplied maintenance reason.
+    Keep the caller's reason unchanged and do not apply a card status change.
+  detect:
+    kind: rendered_text
+    value: 'reason_required: Enter a meaningful reason of 8–160 characters.'
+    match: exact
+  allowed_after_steps:
+  - step_09_click_review_temporary_lock_control
+  expected_state: the requested operation is unavailable
+  observed_state: Observe the application's rejection of the supplied maintenance
+    reason. Keep the caller's reason unchanged and do not apply a card status change.
+  recoverable: false
+- code: member_restricted
+  description: Verify that servicing is restricted for the selected member. Stop without
+    changing roles, acknowledging away the restriction, or applying a card status
+    change.
+  detect:
+    kind: rendered_text
+    value: Restricted
+    match: exact
+  allowed_after_steps:
+  - step_02_press_keys_press_keys
+  expected_state: the requested operation is unavailable
+  observed_state: Verify that servicing is restricted for the selected member. Stop
+    without changing roles, acknowledging away the restriction, or applying a card
+    status change.
+  recoverable: false
+checkpoint:
+  id: temporarily_lock_card_verified
+  condition:
+    kind: all
+    conditions:
+    - kind: route
+      pattern: /servicing
+    - kind: all
+      conditions:
+      - kind: rendered_text
+        value: Card ID
+        match: exact
+      - kind: rendered_text
+        value: Lock status
+        match: exact
+      - kind: rendered_text
+        value: Confirmation reference
+        match: exact
+    - kind: output_valid
+      output: card_id
+    - kind: output_valid
+      output: lock_status
+    - kind: output_valid
+      output: confirmation_reference
+policy:
+  allowed_action_types:
+  - click
+  - extract
+  - press_keys
+  - assert
+  - scroll
+  - type
+  allowed_entry_points:
+  - legacy_servicing
+  maximum_risk: reversible
+  allowed_route_patterns:
+  - /servicing
+  forbidden_text_inputs: []
+  output_redaction:
+    card_id: last4
+    lock_status: last4
+    confirmation_reference: last4
+provenance:
+  discovery_run_id: run_10a4d5f021a840458d41e0b96498bcf2
+  provider: openai
+  model: gpt-5.6-luna
+  prompt_policy_version: 2.0.0
+  surface_adapter_version: web.v1
+  compiler_version: 2.0.0
+  created_at: '2026-09-14T14:24:20.732413Z'
+  target_fingerprint: ccfcffb0365b65fb562304325f102e6a0fa85b6793ffc45655f0d2f046a57ea4
+  evidence_manifest_key: evidence://run_10a4d5f021a840458d41e0b96498bcf2/manifest-evd_d3fb9e0966e041748929bd1b8cbebb17.bin
+  artifact_content_hash: sha256:fe1d31f2f48f4f20cdf4eb18e1af21ca4b2a892cb431fe23f3ead937b796dd16
