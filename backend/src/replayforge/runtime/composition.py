@@ -66,7 +66,7 @@ from replayforge.replay.engine import (
     ResumeValidationError,
 )
 from replayforge.runs.discovery_service import DiscoveryApplicationService, DiscoveryExecutor
-from replayforge.runs.discovery_suite import DiscoverySuiteService
+from replayforge.runs.discovery_suite import DiscoverySuiteService, ReplayValidation
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.runs.results import (
     FailureResult,
@@ -920,7 +920,7 @@ def build_runtime(settings: object) -> LocalRuntime:
 
     def validate_artifact(
         artifact: CapabilityArtifact, tenant: str, inputs: dict[str, object]
-    ) -> bool:
+    ) -> ReplayValidation:
         result = service.validate_artifact(artifact, tenant, inputs)
         if isinstance(result, InterventionRequiredResult):
             with lock:
@@ -934,8 +934,13 @@ def build_runtime(settings: object) -> LocalRuntime:
                     "deterministic_validation_interrupted",
                 )
             except Exception:
-                return False
-        return result.status == "success"
+                return ReplayValidation(result)
+        recovered = tuple(
+            str(event.details["recovery_id"])
+            for event in journals[result.run_id].events()
+            if event.event_type == "recovery_completed" and "recovery_id" in event.details
+        )
+        return ReplayValidation(result, recovered)
 
     discovery_suite_service = DiscoverySuiteService(
         discovery_service,

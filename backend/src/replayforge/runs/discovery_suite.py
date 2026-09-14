@@ -31,10 +31,28 @@ from replayforge.capabilities.serialization import artifact_content_hash
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import RISK_RANK, Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
-from replayforge.runs.results import FailureResult, InterventionRequiredResult
+from replayforge.runs.results import FailureResult, InterventionRequiredResult, RunResult
 from replayforge.shared.ids import EntityKind, new_id, parse_id
 
 ScenarioKind = Literal["business_outcome", "application_failure", "recovery"]
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayValidation:
+    """Actual replay disposition plus observed, completed recovery identities."""
+
+    result: RunResult
+    completed_recoveries: tuple[str, ...] = ()
+
+    def verifies(self, scenario: DiscoveryScenario | None = None) -> bool:
+        if scenario is None:
+            return self.result.status == "success"
+        if scenario.kind == "recovery":
+            return self.result.status == "success" and scenario.code in self.completed_recoveries
+        expected = "business_outcome" if scenario.kind == "business_outcome" else "failure"
+        return (
+            self.result.status == expected and getattr(self.result, "code", None) == scenario.code
+        )
 
 
 class DiscoverySuiteStatus(StrEnum):
@@ -63,6 +81,7 @@ class DiscoveryScenario:
     code: str
     description: str
     result: DiscoveryResult
+    inputs: dict[str, Any] = field(repr=False)
 
     def __post_init__(self) -> None:
         if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.code) is None:
@@ -200,7 +219,7 @@ class InMemoryDiscoverySuiteRepository:
 class DiscoverySuiteService:
     discovery: DiscoveryApplicationService
     registry: CapabilityRegistry
-    validator: Callable[[CapabilityArtifact, str, dict[str, Any]], bool] | None = None
+    validator: Callable[[CapabilityArtifact, str, dict[str, Any]], ReplayValidation] | None = None
     application_registry: ApplicationRegistry | None = None
     repository: DiscoverySuiteRepository | None = None
 
@@ -285,6 +304,9 @@ class DiscoverySuiteService:
             DiscoverySuiteStatus.VALIDATED,
         }:
             raise DiscoverySuiteError("suite is no longer collecting scenarios")
+        scenario_code = code or f"scenario_{len(suite.scenarios) + 1}"
+        if any(existing.code == scenario_code for existing in suite.scenarios):
+            raise DiscoverySuiteError("scenario codes must be unique within a suite")
         result = self.discovery.discover(
             goal=goal,
             application_family=suite.application_family,
@@ -297,9 +319,10 @@ class DiscoverySuiteService:
         scenario = DiscoveryScenario(
             kind=kind,
             goal=goal,
-            code=code or f"scenario_{len(suite.scenarios) + 1}",
+            code=scenario_code,
             description=description or goal,
             result=result,
+            inputs=deepcopy(inputs),
         )
         if any(existing.code == scenario.code for existing in suite.scenarios):
             raise DiscoverySuiteError("scenario codes must be unique within a suite")
@@ -333,9 +356,10 @@ class DiscoverySuiteService:
             )
         if self.validator is None:
             raise DiscoverySuiteError("final deterministic replay validation is unavailable")
-        if not self.validator(artifact, suite.tenant, suite.primary_inputs):
+        if not self.validator(artifact, suite.tenant, suite.primary_inputs).verifies():
             self._record_validation_failure(suite, suite.tenant, "primary_replay_failed")
             raise DiscoverySuiteError("final deterministic replay did not pass")
+        self._validate_scenarios(suite, artifact, suite.tenant)
         try:
             published = self.registry.publish_next(artifact)
         except (
@@ -376,9 +400,10 @@ class DiscoverySuiteService:
             raise DiscoverySuiteError("scenario evidence could not be merged safely") from error
         if self.validator is None:
             raise DiscoverySuiteError("deterministic compatibility validation is unavailable")
-        if not self.validator(artifact, tenant, inputs):
+        if not self.validator(artifact, tenant, inputs).verifies():
             self._record_validation_failure(suite, tenant, "compatibility_replay_failed")
             raise DiscoverySuiteError("compatibility replay did not pass")
+        self._validate_scenarios(suite, artifact, tenant)
         if tenant not in artifact.compatibility.supported_variants:
             compatibility = artifact.compatibility.model_copy(
                 update={
@@ -400,6 +425,16 @@ class DiscoverySuiteService:
         updated = replace(suite, artifact=artifact, status=DiscoverySuiteStatus.VALIDATED)
         self._store.save(updated)
         return updated
+
+    def _validate_scenarios(
+        self, suite: DiscoverySuite, artifact: CapabilityArtifact, tenant: str
+    ) -> None:
+        assert self.validator is not None
+        for scenario in suite.scenarios:
+            proof = self.validator(artifact, tenant, deepcopy(scenario.inputs))
+            if not proof.verifies(scenario):
+                self._record_validation_failure(suite, tenant, "scenario_replay_failed")
+                raise DiscoverySuiteError("scenario replay did not verify its declared disposition")
 
     def _assert_application_target(
         self, application_family: str, tenant: str, entry_point: str
@@ -552,6 +587,20 @@ def _shared_prefix_length(primary: CapabilityArtifact, scenario: CapabilityArtif
         if primary_step.action.model_dump(mode="json") != scenario_step.action.model_dump(
             mode="json"
         ):
+            break
+        # Two clicks are not the same operation when they address different controls.
+        # Descriptive prose is not identity; scope, candidate order and state constraints are.
+        primary_target = (
+            primary_step.target.model_dump(mode="json", exclude={"description"})
+            if primary_step.target is not None
+            else None
+        )
+        scenario_target = (
+            scenario_step.target.model_dump(mode="json", exclude={"description"})
+            if scenario_step.target is not None
+            else None
+        )
+        if primary_target != scenario_target or primary_step.risk != scenario_step.risk:
             break
         length += 1
     return length

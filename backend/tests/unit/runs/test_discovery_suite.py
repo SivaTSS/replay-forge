@@ -15,13 +15,36 @@ from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import Risk
 from replayforge.runs.discovery_service import DiscoveryApplicationService
 from replayforge.runs.discovery_suite import (
+    DiscoveryScenario,
     DiscoverySuite,
     DiscoverySuiteService,
     DiscoverySuiteStatus,
+    ReplayValidation,
+    _shared_prefix_length,
 )
-from replayforge.runs.results import ArtifactPrivacyDiagnostic, FailureResult
+from replayforge.runs.results import (
+    ArtifactPrivacyDiagnostic,
+    BusinessOutcomeResult,
+    CapabilityReference,
+    FailureResult,
+    SuccessResult,
+    VerifiedCheckpoint,
+)
 from replayforge.shared.clock import FrozenClock
 from tests.artifacts import sample_artifact
+
+
+def successful_validation(*_args: object) -> ReplayValidation:
+    return ReplayValidation(
+        SuccessResult(
+            status="success",
+            run_id="run_" + "a" * 32,
+            evidence_manifest="evidence://run_" + "a" * 32 + "/manifest.json",
+            capability=CapabilityReference(id="member.test", version="1.0.0"),
+            outputs={},
+            checkpoint=VerifiedCheckpoint(id="verified", verified=True),
+        )
+    )
 
 
 class Executor:
@@ -51,7 +74,7 @@ def service_for(
         return Executor(selected)
 
     discovery = DiscoveryApplicationService(registry, executor_factory, lambda: True)
-    return DiscoverySuiteService(discovery, registry, validator=lambda *_args: True)
+    return DiscoverySuiteService(discovery, registry, validator=successful_validation)
 
 
 def test_read_only_suite_publishes_only_at_finalize() -> None:
@@ -179,7 +202,7 @@ def test_reversible_suite_publishes_after_validation() -> None:
     )
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime(2026, 9, 10, tzinfo=UTC)))
     discovery = DiscoveryApplicationService(registry, lambda _run: Executor(artifact), lambda: True)
-    service = DiscoverySuiteService(discovery, registry, validator=lambda *_args: True)
+    service = DiscoverySuiteService(discovery, registry, validator=successful_validation)
     suite = service.create(
         goal="Temporarily lock a synthetic card",
         application_family="northstar_member_service",
@@ -267,6 +290,109 @@ def test_scenario_is_bound_to_a_verified_primary_prefix() -> None:
     )
 
     assert len(with_scenario.scenarios) == 1
+    assert with_scenario.scenarios[0].inputs == {"member_id": "00000"}
+    assert "00000" not in str(with_scenario.snapshot())
+    # Happy-path success is not evidence that a negative branch ran.
+    with pytest.raises(ValueError, match="scenario replay did not verify"):
+        service.finalize(suite.suite_id)
+    assert service.get(suite.suite_id).published_version is None
+
+    def validate(
+        _artifact: CapabilityArtifact, _tenant: str, inputs: dict[str, object]
+    ) -> ReplayValidation:
+        if inputs["member_id"] == "00000":
+            return ReplayValidation(
+                BusinessOutcomeResult(
+                    status="business_outcome",
+                    code="member_not_found_again",
+                    details={},
+                    run_id="run_" + "b" * 32,
+                    evidence_manifest="evidence://run_" + "b" * 32 + "/manifest.json",
+                )
+            )
+        return successful_validation()
+
+    service.validator = validate
     finalized = service.finalize(suite.suite_id)
     assert finalized.artifact is not None
     assert finalized.artifact.steps[-1].outcome_refs == ("member_not_found_again",)
+
+
+def test_prefix_identity_includes_target_and_scope_not_just_action() -> None:
+    primary = sample_artifact()
+    original = primary.steps[0]
+    assert original.target is not None
+    described = original.model_copy(
+        update={
+            "target": original.target.model_copy(
+                update={"description": "Same target, different descriptive prose"}
+            )
+        }
+    )
+    alternate = primary.model_copy(update={"steps": (described, *primary.steps[1:])})
+    assert _shared_prefix_length(primary, alternate) == len(primary.steps)
+    changed = original.model_copy(
+        update={
+            "target": original.target.model_copy(
+                update={"state": original.target.state.model_copy(update={"enabled": True})}
+            )
+        }
+    )
+    alternate = primary.model_copy(update={"steps": (changed, *primary.steps[1:])})
+    assert _shared_prefix_length(primary, alternate) == 0
+
+
+def test_recovery_validation_requires_completed_named_recovery() -> None:
+    result = Executor(sample_artifact()).execute(
+        DiscoveryRequest(
+            run_id="run_" + "c" * 32,
+            goal="Verify a generic recovery",
+            application_family="example_app",
+            tenant="tenant_a",
+            entry_point="start",
+            inputs={},
+        )
+    )
+    scenario = DiscoveryScenario(
+        "recovery",
+        "Recover a transient notice",
+        "dismiss_notice",
+        "Restore the original workflow",
+        result,
+        {},
+    )
+    happy = successful_validation()
+    assert not happy.verifies(scenario)
+    assert not ReplayValidation(happy.result, ("different_recovery",)).verifies(scenario)
+    assert ReplayValidation(happy.result, ("dismiss_notice",)).verifies(scenario)
+
+
+def test_negative_validation_requires_exact_disposition_and_code() -> None:
+    artifact = sample_artifact()
+    discovered = DiscoverySuccess(
+        status="success",
+        run_id="run_" + "d" * 32,
+        artifact=artifact,
+        evidence_manifest="evidence://run_" + "d" * 32 + "/manifest.json",
+    )
+    scenario = DiscoveryScenario(
+        "application_failure",
+        "Observe unavailable operation",
+        "access_denied",
+        "Operation unavailable",
+        discovered,
+        {},
+    )
+    failure = FailureResult(
+        status="failure",
+        run_id="run_" + "e" * 32,
+        evidence_manifest="evidence://run_" + "e" * 32 + "/manifest.json",
+        code="access_denied",
+        message="Operation unavailable",
+        recoverable=False,
+    )
+    assert ReplayValidation(failure).verifies(scenario)
+    assert not ReplayValidation(failure.model_copy(update={"code": "target_absent"})).verifies(
+        scenario
+    )
+    assert not successful_validation().verifies(scenario)
