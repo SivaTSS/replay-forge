@@ -13,7 +13,7 @@ Start the demo using the [quickstart](../README.md#run-the-core-replay), then op
 
 | Entry | Purpose |
 |---|---|
-| `http://127.0.0.1:3001/` | Redirects to Harbor's new servicing workstation |
+| `http://127.0.0.1:3001/` | Redirects to Harbor's servicing workstation |
 | `http://127.0.0.1:3001/harbor/servicing` | Harbor Credit Union; navy/gray terminal |
 | `http://127.0.0.1:3001/summit/servicing` | Summit Community Bank; green/beige terminal, different record order |
 
@@ -172,7 +172,7 @@ list summaries. Data lives only in that tab's React state; bundled source is not
 | Integer money and fixed business date | Floating-point balances and wall-clock fixtures | Repeatable, auditable results; no claim of live accrual or market realism |
 | Session-local synthetic ledger | Database-backed multi-user bank simulator | Functional workflows without new operational infrastructure; reload discards changes |
 | Explicit training roles | Fake login or production authorization integration | Reproducible permission errors; role selection is not security |
-| Preserve historical fixture routes | Restyle existing artifact targets in place | Keeps evidence and regression contracts honest; new UI needs its own discovery validation |
+| One deployed workstation | Preserve older showcase routes | Avoids several incompatible targets and makes every new discovery exercise the same realistic UI; retired routes return 404 |
 
 ## Verification and evidence status
 
@@ -219,9 +219,11 @@ amount/reason boundaries, and stale-review rejection.
 The supported verification surface is desktop Chromium. Passing these checks is bounded evidence,
 not a claim of zero defects across every browser, input method, or future dataset.
 
-The new registered entry point is `legacy_servicing`, with route `/servicing`. Existing
-`member_search`, `visual_member_search`, and `visual_member_workbench` routes remain unchanged
-regression fixtures. A [genuine model run](../evidence/discovery-servicing-loan-payoff/manifest.json)
+The workstation entry point is `legacy_servicing`, with route `/servicing`. Root and tenant links
+reach this sole UI; the old member-search, account-detail, visual-terminal, and visual-workbench
+pages have been removed. Historical artifacts/evidence are being retired as their current-UI
+replacements are validated; they do not prove compatibility with the workstation.
+A [genuine model run](../evidence/discovery-servicing-loan-payoff/manifest.json)
 produced `member.servicing_loan_payoff_quote/1.0.1`: an 11-step, three-output artifact for this
 workstation. It binds both supplied inputs, issues a non-binding quote, extracts receipt fields
 through stable labels, and asserts that its good-through date equals the requested date.

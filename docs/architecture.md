@@ -7,8 +7,8 @@
 ReplayForge is a modular monolith with two separate Next.js applications: one is the synthetic target, the other is the operator console.
 
 The target's [servicing workstation](demo-bank.md) now provides a connected synthetic ledger and
-multiple staff workflows. Historical replay artifacts continue to use the preserved fixture routes;
-the new UI is not retroactively credited with their discovery evidence.
+multiple staff workflows. It is the sole deployed target UI; obsolete fixture routes return 404.
+Historical discovery evidence is not retroactively credited to this workstation.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -161,7 +161,7 @@ The production path is rendered-surface first. Playwright is still the browser t
 
 `VisionGrounder` runs RapidOCR locally and resolves four geometry-free strategies: rendered text, a rendered label-to-control relation, a rendered label-to-value relation, and a rendered group label plus content-addressed visual signature. OCR phrases are rebuilt from the current frame; edge components are segmented from that same frame; relations use measured text height rather than saved offsets. Each result must be unique and satisfy the centrally loaded OCR, segmentation, similarity, pixel, and time budgets. Failure returns `target_absent` or `target_ambiguous`; replay never guesses.
 
-The `visual-workbench` route is one canvas-only servicing application, not three showcase apps. It
+The `servicing` route is one canvas-only servicing application, not three showcase apps. It
 supports transaction investigation, a dated loan payoff quote, and a reversible temporary card
 lock. Harbor and Summit vary palette, typography, placement, row order, and layout. The same
 task-independent engine plans each contract, records only actions that actually execute and verify,
