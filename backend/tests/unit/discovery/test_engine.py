@@ -401,6 +401,25 @@ def test_missing_discovery_binding_is_rejected_without_dispatch(
     } in engine.recorder.recorded_details
 
 
+def test_publication_privacy_rejection_is_distinct_and_does_not_expose_raw_reason(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from replayforge.evidence.redaction import EvidenceRejectedError
+
+    def reject(*_args: object) -> None:
+        raise EvidenceRejectedError("private-value-must-not-be-logged")
+
+    monkeypatch.setattr("replayforge.discovery.engine.validate_artifact_privacy", reject)
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    provider = QueueModelProvider([CompleteProposal(kind="complete", rationale="Done")])
+    engine, _ = build_discovery(FakeSurfaceSession(), provider, artifact)
+    result = engine.execute(make_request())
+    assert isinstance(result, FailureResult)
+    assert result.code == "artifact_privacy_rejected"
+    assert "private-value-must-not-be-logged" not in repr(result)
+    assert "private-value-must-not-be-logged" not in repr(engine.recorder)
+
+
 def test_successful_loop_records_action_and_compiles_verified_artifact(
     valid_artifact_data: dict[str, Any],
 ) -> None:

@@ -39,6 +39,7 @@ the repository—not approving a discovery publication.
 | How does one capability span tenants and application versions? | [Compatibility](heterogeneity-and-compatibility.md) |
 | What exactly is recorded and replayed? | [Capability and replay](capability-and-replay.md) |
 | What does the model see and decide? | [Discovery](discovery.md) |
+| How do I discover a task in another application without a task adapter? | [Application onboarding](application-onboarding.md) |
 | How are unsafe actions, data, and handoff handled? | [Safety and handoff](safety-and-handoff.md) |
 | Which limits apply, and who may change them? | [Constraints and policy](constraints-and-policy.md) |
 | How do I run it, and what HTTP surface exists? | [Operations](operations.md) |

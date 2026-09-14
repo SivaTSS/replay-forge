@@ -55,7 +55,7 @@ from replayforge.discovery.privacy import (
     target_contains_invocation_literal,
     validate_artifact_privacy,
 )
-from replayforge.evidence.redaction import StructuredRedactor
+from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
     AUTOMATION_OWNER,
@@ -230,6 +230,12 @@ class DiscoveryEngine:
                         )
                         validate_artifact_privacy(
                             artifact, request.inputs, self.privacy_redactor, outputs
+                        )
+                    except EvidenceRejectedError:
+                        return self._failure(
+                            request,
+                            "artifact_privacy_rejected",
+                            "The compiled trace contains private or forbidden data.",
                         )
                     except ValueError:
                         return self._failure(
