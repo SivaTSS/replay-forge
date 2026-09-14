@@ -28,6 +28,14 @@ def test_loads_reviewed_cost_sensitive_policy() -> None:
     assert str(policy.pricing.output_per_unit) == "1.20"
 
 
+def test_duplicate_model_budget_cannot_override_reviewed_configuration(tmp_path: Path) -> None:
+    content = Path("config/model-policy.yaml").read_text()
+    path = tmp_path / "duplicate.yaml"
+    path.write_text(content + "\nmax_model_calls_per_run: 1\n")
+    with pytest.raises(ValueError, match="not valid YAML"):
+        load_model_policy(path)
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [

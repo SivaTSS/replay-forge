@@ -57,6 +57,11 @@ interrupting code mid-operation.
 Malformed origins—including credentials, paths, query strings, fragments, and invalid ports—are
 policy denials rather than runtime errors.
 
+Configuration rejects invalid ports, whitespace, and empty query/fragment delimiters too; the URL
+parser must not silently repair an ambiguous authority. IPv6 hosts retain their authority brackets
+during evaluation. All reviewed YAML policies reject duplicate keys rather than allowing a later
+value to replace an earlier safety budget.
+
 ## Storage and payload bounds
 
 | Object | Bound | Reason |

@@ -63,7 +63,10 @@ intervention_required
   run_id + intervention/session context + reason + paused owner
 ```
 
-Pydantic models forbid unknown request fields. Validation errors contain field locations and types, never submitted values. Every HTTP response receives an accepted or generated correlation ID.
+Pydantic models forbid unknown request fields. Validation errors expose at most 20 error types and
+their transport boundary (`body`, `query`, `path`, or `header`), never submitted values or property
+names. Detailed Pydantic locations were rejected because arbitrary mapping keys may themselves
+contain sensitive data. Every HTTP response receives an accepted or generated correlation ID.
 
 ## Configuration
 

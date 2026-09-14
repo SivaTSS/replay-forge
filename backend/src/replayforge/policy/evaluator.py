@@ -34,6 +34,8 @@ class _DecisionContext(TypedDict):
 
 
 def _canonical_origin(origin: str) -> str | None:
+    if any(character.isspace() for character in origin) or "?" in origin or "#" in origin:
+        return None
     try:
         parsed = urlsplit(origin)
     except ValueError:
@@ -49,6 +51,8 @@ def _canonical_origin(origin: str) -> str | None:
     ):
         return None
     host = parsed.hostname.lower()
+    if ":" in host:
+        host = f"[{host}]"
     try:
         parsed_port = parsed.port
     except ValueError:

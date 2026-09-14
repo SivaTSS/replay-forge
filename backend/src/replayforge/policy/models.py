@@ -41,6 +41,10 @@ class PolicyLayer:
             raise ValueError("policy layer name must be a stable identifier")
         for origin in self.allowed_origins:
             parsed = urlsplit(origin)
+            try:
+                _ = parsed.port
+            except ValueError as error:
+                raise ValueError("policy origin contains an invalid port") from error
             if (
                 parsed.scheme not in {"http", "https"}
                 or not parsed.hostname
@@ -49,6 +53,9 @@ class PolicyLayer:
                 or parsed.path
                 or parsed.query
                 or parsed.fragment
+                or "?" in origin
+                or "#" in origin
+                or any(character.isspace() for character in origin)
             ):
                 raise ValueError("policy origins must be credential-free HTTP origins")
         for pattern in self.allowed_route_patterns:

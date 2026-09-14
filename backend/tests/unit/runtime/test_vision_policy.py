@@ -55,6 +55,16 @@ def test_policy_loads_from_checked_in_yaml() -> None:
     assert policy.image.canonical_width == 64
 
 
+def test_duplicate_vision_budget_cannot_override_reviewed_configuration(tmp_path: Path) -> None:
+    content = Path("config/vision-policy.yaml").read_text()
+    path = tmp_path / "duplicate.yaml"
+    path.write_text(
+        content + "\nbudgets: {maximum_frame_pixels: 1, maximum_grounding_milliseconds: 1}\n"
+    )
+    with pytest.raises(ValueError, match="not valid YAML"):
+        load_vision_policy(path)
+
+
 def test_policy_rejects_unknown_fields() -> None:
     payload = policy_payload()
     payload["unexpected"] = True

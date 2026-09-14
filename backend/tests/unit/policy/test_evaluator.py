@@ -44,6 +44,16 @@ def test_allow_returns_auditable_decision(
     assert result.required_evidence == ("action_intent", "action_result")
 
 
+def test_ipv6_origin_keeps_authority_brackets(
+    evaluator: PolicyEvaluator, policy: EffectivePolicy, context: ActionContext
+) -> None:
+    origin = "http://[::1]:3001"
+    result = evaluator.evaluate(
+        replace(policy, allowed_origins=frozenset({origin})), replace(context, origin=origin)
+    )
+    assert result.decision is Decision.ALLOW
+
+
 def test_known_read_only_field_can_accept_search_input(
     evaluator: PolicyEvaluator, policy: EffectivePolicy, context: ActionContext
 ) -> None:
@@ -65,6 +75,10 @@ def test_known_read_only_field_can_accept_search_input(
         ({"origin": "http://demo.local:3001?tenant=evil"}, "origin_not_allowed"),
         ({"origin": "http://demo.local:3001#other"}, "origin_not_allowed"),
         ({"origin": "http://demo.local:invalid"}, "origin_not_allowed"),
+        ({"origin": "http://demo.local:3001?"}, "origin_not_allowed"),
+        ({"origin": "http://demo.local:3001#"}, "origin_not_allowed"),
+        ({"origin": "http://demo.\tlocal:3001"}, "origin_not_allowed"),
+        ({"origin": "\nhttp://demo.local:3001"}, "origin_not_allowed"),
         ({"route": "/admin"}, "route_not_allowed"),
         ({"route": "/members/search?member=12345"}, "route_not_allowed"),
         ({"action_type": "navigate"}, "action_not_allowed"),

@@ -286,6 +286,19 @@ def test_request_validation_errors_exclude_input_values() -> None:
     assert all("input" not in detail for detail in response.json()["details"])
 
 
+def test_request_validation_never_echoes_unknown_property_names() -> None:
+    marker = "private-customer-value-as-a-key"
+    response = client().post(
+        "/api/v1/capabilities/member.lookup/replays",
+        json={"tenant": "harbor", "inputs": {}, **{f"{marker}-{i}": True for i in range(30)}},
+    )
+    assert response.status_code == 422
+    assert marker not in response.text
+    details = response.json()["details"]
+    assert len(details) == 20
+    assert all(detail == {"location": "body", "type": "extra_forbidden"} for detail in details)
+
+
 def test_unknown_capability_is_a_sanitized_404() -> None:
     class MissingInvoker(FakeReplayInvoker):
         def invoke(

@@ -45,6 +45,21 @@ def test_effective_policy_requires_at_least_one_layer() -> None:
 
 
 @pytest.mark.parametrize(
+    "origin",
+    ["http://host:invalid", "http://host:99999", "http://host?", "http://host#", "http://ho\tst"],
+)
+def test_policy_rejects_ambiguous_or_invalid_origins(origin: str) -> None:
+    with pytest.raises(ValueError, match="policy origin"):
+        PolicyLayer(
+            name="test",
+            allowed_origins=frozenset({origin}),
+            allowed_route_patterns=frozenset({"/"}),
+            allowed_action_types=frozenset({"click"}),
+            maximum_risk=Risk.READ_ONLY,
+        )
+
+
+@pytest.mark.parametrize(
     "change, message",
     [
         ({"name": "Platform Layer"}, "stable identifier"),

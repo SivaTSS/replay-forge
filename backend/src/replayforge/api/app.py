@@ -95,8 +95,16 @@ def create_app(services: ApiServices) -> FastAPI:
         request: Request, error: RequestValidationError
     ) -> JSONResponse:
         details = [
-            {"location": ".".join(str(item) for item in issue["loc"]), "type": issue["type"]}
-            for issue in error.errors()
+            {
+                # Locations may contain arbitrary submitted mapping keys.
+                "location": (
+                    issue["loc"][0]
+                    if issue["loc"] and issue["loc"][0] in {"body", "query", "path", "header"}
+                    else "request"
+                ),
+                "type": issue["type"],
+            }
+            for issue in error.errors()[:20]
         ]
         return _error_response(
             request,

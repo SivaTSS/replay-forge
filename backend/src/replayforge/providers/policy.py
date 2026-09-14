@@ -10,6 +10,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
+from replayforge.shared.yaml import load_unique_yaml
+
 _MAX_POLICY_BYTES = 64 * 1024
 
 
@@ -61,7 +63,7 @@ def load_model_policy(path: Path) -> ModelPolicy:
     if not content or len(content) > _MAX_POLICY_BYTES:
         raise ValueError("model policy file is empty or exceeds 64 KiB")
     try:
-        payload = yaml.safe_load(content)
+        payload = load_unique_yaml(content.decode("utf-8"))
     except yaml.YAMLError as error:
         raise ValueError("model policy is not valid YAML") from error
     if not isinstance(payload, dict):
