@@ -45,6 +45,20 @@ Every runtime ID is a prefix plus 32 lowercase hexadecimal characters.
 IDs are opaque. The prefix prevents cross-entity substitution; code never interprets the random
 component.
 
+### Version and content identity
+
+| Field | Identifies | Does not establish |
+|---|---|---|
+| `schema_version`, e.g. `1.4` | The artifact format and its validation rules | A task release or application vendor version |
+| Capability ID + semantic version | One immutable task program | Support for an unvalidated tenant |
+| `surface_contract`, e.g. `web.v1` | The adapter's observation/action semantics | A particular website's markup or layout |
+| Canonical artifact hash | The normalized artifact content | Author identity or safety by itself |
+| `target_fingerprint` | The observation recorded during discovery | A universal startup equality check or vendor-release detector |
+
+These fields are separate because format evolution, workflow evolution, adapter compatibility,
+and content integrity change independently. Publication preserves the old version; compatibility
+checks decide whether a saved program may run on the current registered surface.
+
 ## Capability artifact
 
 `CapabilityArtifact` is the immutable replay contract. Application registration supplies where

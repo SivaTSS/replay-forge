@@ -153,6 +153,31 @@ remains authoritative; the UI guard prevents misleading context, not a substitut
 
 ## Evidence path
 
+### Data exposure boundaries
+
+Redacted evidence does not mean that live discovery sees redacted pixels. These are deliberately
+different paths, with different recipients and lifetimes.
+
+| Data path | Recipient | Payload and retention boundary |
+|---|---|---|
+| Discovery perception | OpenAI adapter → remote provider | Unmasked screenshot and UI/OCR facts; visible customer values can be present even though input values are omitted from structured input fields |
+| Model-call metrics | Local Langfuse | Model identity, token/cost usage, latency, and bounded outcomes; no prompt, response, or screenshot payload |
+| Live manual control | Current human lease holder | Unmasked viewport; transient and non-cacheable, not a retained evidence image |
+| Successful invocation | API caller | Typed task outputs; evidence redaction does not redact the caller's result |
+| Durable evidence | Confined local files | Sanitized events/results and masked frames; canvas evidence masks the whole canvas |
+| Published capability | Local registry | Symbolic bindings and semantic targets; not the original customer inputs or model transcript |
+
+Provider calls set `store=false`; this is a request setting, not a claim that no data crosses the
+provider boundary or a substitute for deployment data policy. The implemented demo uses synthetic
+data. Operator labels and API callers are trusted locally; institution-level authentication and
+authorization are not implemented.
+
+Payload separation is implemented in the [provider adapter](../backend/src/replayforge/providers/openai.py),
+[metrics adapter](../backend/src/replayforge/observability/model_calls.py), and
+[evidence redactor](../backend/src/replayforge/evidence/redaction.py).
+
+### Persistence pipeline
+
 ```text
 domain event / terminal result
         → structured redaction

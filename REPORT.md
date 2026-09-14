@@ -48,6 +48,10 @@ Every required output must be extracted and referenced by the checkpoint; runtim
 output values before success. Registry snapshots isolate nested mutable mappings, while immutable
 file publication prevents replacing an existing version.
 
+Checks are only as strong as the artifact declares: the card-lock fixture validates string outputs
+and rendered labels, not an exact status value or an executed inverse. The
+[worked example](docs/capability-and-replay.md#worked-example-temporary-card-lock) makes that boundary explicit.
+
 Discovery validates supplied inputs against its planned contract before acting and applies the same
 bound-input classification rules as replay, including forbidden parent-object classifications.
 

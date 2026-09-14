@@ -107,6 +107,22 @@ Starlette emits one upstream AnyIO deprecation warning; no test is skipped to su
 
 ## Evidence bundle anatomy
 
+For a concrete review, open the [card-lock discovery manifest](../evidence/discovery-temporary-card-lock/manifest.json)
+and follow this chain:
+
+| Inspect | Establishes | Does not establish |
+|---|---|---|
+| `manifest.json` | Recorded commit, command, run ID, exact file set, and hashes | Signer authenticity or coverage of later code changes |
+| `events.jsonl` | Ordered, sanitized execution and policy records | A full model transcript or unredacted UI state |
+| `artifact.yaml` | Published task contract for a discovery bundle | Success on every future UI or tenant |
+| `result.json` | The recorded run's sanitized terminal result | A stronger checkpoint than the artifact actually declares |
+| Bundle verifier + current tests | Byte integrity plus current behavior against saved contracts | A new genuine discovery run |
+
+A discovery-suite result can contain the pre-publication draft. The bundle's `artifact` record and
+`artifact.yaml` identify the published contract; finalization and tenant validation can change its
+hash from the draft recorded in `result.json`. Those are different lifecycle objects, not two
+interchangeable copies of one artifact.
+
 ```text
 evidence/<scenario>/
 ├── manifest.json       command, commit, source manifest, hashes, redaction
@@ -143,16 +159,16 @@ not delete evidence automatically.
 
 | Directory | Version | Tenant | Terminal state | Specific proof |
 |---|---:|---|---|---|
-| `discovery-success` | compiled | Harbor | success | A real OpenAI/Luna loop produced an eight-step artifact |
-| `discovery-transaction-investigation` | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a 15-step, six-output artifact |
-| `discovery-loan-payoff` | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced an 11-step, five-output artifact |
-| `discovery-temporary-card-lock` | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a reversible 12-step, four-output artifact |
-| `replay-success` | `1.0.0` | Harbor | success | Model-free outputs and final checkpoint |
-| `replay-member-not-found` | `1.0.0` | Harbor | business outcome | “No member” is not reported as a crash |
-| `replay-recovery` | `1.0.1` | Harbor | success | Known notice dismissed once, then resumed |
-| `replay-hard-failure` | `1.0.2` | Harbor | failure | Permission denial plus masked failure frame |
-| `human-handoff` | `2.0.0` | Harbor | success | Pause, claim, input, fresh-state validation, continuation |
-| `tenant-reuse` | `1.0.0` | Summit | success | Same artifact version and hash on a second tenant |
+| [discovery-success](../evidence/discovery-success/manifest.json) | compiled | Harbor | success | A real OpenAI/Luna loop produced an eight-step artifact |
+| [discovery-transaction-investigation](../evidence/discovery-transaction-investigation/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a 15-step, six-output artifact |
+| [discovery-loan-payoff](../evidence/discovery-loan-payoff/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced an 11-step, five-output artifact |
+| [discovery-temporary-card-lock](../evidence/discovery-temporary-card-lock/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a reversible 12-step, four-output artifact |
+| [replay-success](../evidence/replay-success/manifest.json) | `1.0.0` | Harbor | success | Model-free outputs and final checkpoint |
+| [replay-member-not-found](../evidence/replay-member-not-found/manifest.json) | `1.0.0` | Harbor | business outcome | “No member” is not reported as a crash |
+| [replay-recovery](../evidence/replay-recovery/manifest.json) | `1.0.1` | Harbor | success | Known notice dismissed once, then resumed |
+| [replay-hard-failure](../evidence/replay-hard-failure/manifest.json) | `1.0.2` | Harbor | failure | Permission denial plus masked failure frame |
+| [human-handoff](../evidence/human-handoff/manifest.json) | `2.0.0` | Harbor | success | Pause, claim, input, fresh-state validation, continuation |
+| [tenant-reuse](../evidence/tenant-reuse/manifest.json) | `1.0.0` | Summit | success | Same artifact version and hash on a second tenant |
 
 ### Visual workbench matrix
 

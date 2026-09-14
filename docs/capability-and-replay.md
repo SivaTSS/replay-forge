@@ -14,8 +14,8 @@ An artifact contains no Python, JavaScript, selector callback, or model transcri
 targets also reject persisted coordinates and relative geometry. The task-independent discovery examples are
 [`member.transaction_investigation`](../capabilities/member.transaction_investigation/1.0.0.yaml),
 [`member.loan_payoff_quote`](../capabilities/member.loan_payoff_quote/1.0.0.yaml), and
-[`member.temporary_card_lock`](../capabilities/member.temporary_card_lock/1.0.0.yaml). The last,
-including its verified inverse state, demonstrates reversible compilation. The earlier
+[`member.temporary_card_lock`](../capabilities/member.temporary_card_lock/1.0.0.yaml). The last
+demonstrates a task classified as reversible; its exact proof boundary is described below. The earlier
 [`member.lookup_savings_balance/3.2.0`](../capabilities/member.lookup_savings_balance/3.2.0.yaml)
 remains the visual portability and failure fixture. All use the same Pydantic definition in
 [`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py).
@@ -76,6 +76,33 @@ report declared paths and stable codes; unknown caller-supplied keys are never e
 Schema `1.4` carries the compiled route allowlist and registered rendered-surface flag.
 Only observed routes, narrowed to application patterns, enter the artifact; replay intersects
 them again with application policy.
+
+## Worked example: temporary card lock
+
+This is a reading guide to the committed
+[`member.temporary_card_lock/1.0.0`](../capabilities/member.temporary_card_lock/1.0.0.yaml), not
+pseudocode or a newly generated run. Its [discovery manifest](../evidence/discovery-temporary-card-lock/manifest.json)
+links the recording commit, command, run identity, and file hashes.
+
+| Stage | Actual artifact | Why it matters |
+|---|---|---|
+| Admit | Schema `1.4`; `web.v1`; `visual_member_workbench`; Harbor and Summit | Task semantics are separate from registered application facts |
+| Bind input | `member_id` and `card_last4`, both required strings | Steps reference input paths; discovery values are not recorded literals |
+| Find the card | Steps 1–6: member search → Checking → Card controls → card search | The repeated `Open` target is bound to the rendered Checking row, not a row index |
+| Mutate | Steps 7–8: `Review temporary lock` → `Confirm temporary lock` | The confirm step declares `reversible` risk and still passes independent policy evaluation |
+| Extract | Steps 9–12: `card_last4`, `lock_status`, `effective_at`, `confirmation_reference` | Label-to-value targets resolve from the current frame; each extraction checks its output contract |
+| Complete | `temporary_card_lock_verified`: route, four rendered labels, and four valid outputs | Success requires the recorded checkpoint, not merely dispatching the confirm click |
+
+The labels “Review temporary lock” and “Confirm temporary lock” belong to the target application's
+workflow; they do not introduce a human reviewer into discovery.
+
+**Proof boundary:** this version's outputs are strings without semantic enums or constants. Its
+checkpoint does not assert `lock_status == Locked`, match the returned suffix to the input, or
+execute an unlock-and-restore cycle. The UI exposes an inverse operation, but that is not proof
+of transactional rollback. The artifact also declares no recovery, business-outcome, or failure
+branches; those mechanisms are demonstrated by the separate savings-balance fixtures. A stronger
+task-specific completion contract would require a new validated artifact version, not a rewritten
+historical evidence bundle.
 
 ## Targeting
 

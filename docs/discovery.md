@@ -162,3 +162,9 @@ Replay re-resolves every action from a fresh frame and never calls the model.
 | Provider-neutral port + one OpenAI adapter | **Chosen** | Real discovery evidence with replaceable domain boundaries |
 | Remote observability service | Rejected | Would send operational telemetry outside the local environment |
 | Local Langfuse | **Chosen** | Authenticated call metrics remain local; provider credentials never enter it |
+
+The selected model and reasoning profile are pinned in the [model policy](../config/model-policy.yaml),
+not chosen by each request. This keeps discovery cost and behavior attributable to a versioned
+configuration. The committed runs establish that the selected profile completed these workflows;
+the repository does not contain a comparative model benchmark. A different model or reasoning
+profile needs fresh validation before making a stronger quality or cost claim.

@@ -168,8 +168,33 @@ and horizontal layouts. New artifact targets store no coordinates or target-spec
 
 ## Decisions
 
+### Critical decision index
+
+Use this index to locate the full alternatives and rationale. The cost column is the limitation
+accepted with each choice, not an unimplemented feature presented as delivered.
+
+| Decision | Rationale and alternatives | Accepted cost |
+|---|---|---|
+| Modular monolith and owner-thread sessions | [Architecture decisions](#architecture-decisions) | Single-process coordination; no fleet scheduling |
+| Generic compiler and immutable typed artifacts | [Artifact decisions](capability-and-replay.md#schema-and-version-decisions) | New workflow semantics need fresh discovery and publication |
+| Current-frame visual grounding before DOM | [Targeting decisions](capability-and-replay.md#targeting-decision) | OCR and segmentation have bounded applicability; ambiguous targets stop |
+| Separate model planning from replay | [Discovery decisions](discovery.md#provider-decision) | No model fallback to repair unseen production drift |
+| Explicit checkpoints and effect-absent retries | [Replay semantics](capability-and-replay.md#error-semantics) | Correctness is limited to declared checks; uncertain effects cannot be retried |
+| Strict models and detached repository snapshots | [Model decisions](data-models.md#decisions) | Nested mappings require copying; frozen objects alone are insufficient |
+| Registration plus measured tenant validation | [Compatibility choices](heterogeneity-and-compatibility.md#version-changes-and-specialization) | New apps need registration; unseen vendor releases are not automatically certified |
+| Layered authority and centrally bounded work | [Constraint decisions](constraints-and-policy.md#decisions) | Callers cannot expand budgets or permissions for convenience |
+| Exclusive lease and same-session HTTP handoff | [Handoff decisions](safety-and-handoff.md#decisions) | Polling, narrow input commands, and no crash-resumable sessions |
+| Redaction before storage and local metrics | [Data exposure](safety-and-handoff.md#data-exposure-boundaries) | Masked evidence intentionally loses visual detail |
+| Files for durable objects; memory for live state | [Durability](data-models.md#durability) | Published artifacts survive restart; active work does not |
+| Unit fakes, real browsers, historical live evidence | [Testing decisions](verification.md#testing-decisions) | Historical model runs prove their recorded execution, not every later commit |
+
+### Architecture decisions
+
 | Decision | Alternatives | Choice | Reason |
 |---|---|---|---|
+| Runtime stack | Python/FastAPI, TypeScript server, bare HTTP | Python + FastAPI + Pydantic | Keeps OCR, provider integration, and strict artifact validation in one runtime; HTTP remains an outer adapter |
+| UI stack | Static pages, one combined UI, separate Next.js apps | Two TypeScript/Next.js apps | Isolates target behavior from operator control while sharing frontend tooling; two builds are the accepted cost |
+| Browser transport | Playwright, Selenium, direct CDP, OS input | Playwright behind surface ports | Supplies isolated contexts, screenshots, frame handling, and input; rendered targeting remains a separate layer |
 | Process topology | Microservices, queued workers, monolith | Modular monolith | Preserves explicit boundaries without adding deployment failure modes |
 | Browser concurrency | Shared browser thread, async Playwright, worker per run | Worker per run | Keeps the synchronous Playwright session on one thread, including handoff |
 | Target | Public sandbox, real bank, local synthetic app | Local synthetic app | Legal, deterministic, credential-free, and able to inject failures |

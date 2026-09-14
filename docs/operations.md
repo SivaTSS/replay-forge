@@ -105,8 +105,10 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 
 The `visual_member_workbench` entry point is one canvas-only application with three substantial
 tasks: transaction investigation, loan payoff calculation, and temporary card locking. The first
-two are read-only; card locking is reversible because the same session exposes and verifies its
-inverse, `Unlock card`. The suite runner discovers each task independently, validates it on Harbor
+two are read-only; card locking is classified as reversible and the target exposes `Unlock card`.
+The committed artifact does not execute that inverse or prove rollback; see its
+[checkpoint boundary](capability-and-replay.md#worked-example-temporary-card-lock).
+The suite runner discovers each task independently, validates it on Harbor
 and Summit, and writes its own immutable artifact. No post-discovery reviewer exists.
 
 The runtime publishes each new capability version to its configured registry. The capture command

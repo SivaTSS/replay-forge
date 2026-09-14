@@ -3,6 +3,9 @@
 [Documentation index](README.md)
 
 This matrix distinguishes implementation from design. It does not credit planned behavior as complete.
+The assignment prioritizes system design, core-loop correctness, runtime error handling, and real
+control transfer. The [decision index](architecture.md#critical-decision-index) explains the choices;
+the [challenge table](#how-to-challenge-the-claims) links directly to their proof boundaries.
 
 | Requirement | Status | Concrete implementation | Proof / limit |
 |---|---|---|---|
@@ -34,19 +37,16 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Human operator surface | Implemented | Next.js intervention console | No run list, auth, or WebSocket |
 | Agent-facing invocation | Implemented | `/invoke` with typed arguments and discriminated result | Capability catalog endpoint is not implemented |
 
-## End-to-end thread
+## How to challenge the claims
 
-```text
-goal
- → real OpenAI decision loop
- → real Chromium UI interaction
- → verified trace
- → strict YAML capability
- → immutable registry version
- → model-free replay with new input
- → typed outcome and hash-linked evidence
- → optional same-session human pause/claim/resume
-```
+| Evaluation question | Inspect | Boundary to keep in mind |
+|---|---|---|
+| Was discovery genuine? | [Four recorded discovery bundles](verification.md#scenario-matrix) | They are historical executions, not recordings regenerated for the current docs |
+| Does replay avoid model decisions? | [Dependency test](../backend/tests/unit/replay/test_dependency_rule.py) and [browser matrix](../backend/tests/integration/test_visual_portability.py) | The target and local OCR are still required |
+| Is the compiler task-independent? | [Generic compiler tests](../backend/tests/unit/discovery/test_generic_compiler.py) and [runtime import rules](../backend/tests/unit/runtime/test_dependency_rules.py) | New applications still require registration |
+| What does task success actually prove? | [Annotated real artifact](capability-and-replay.md#worked-example-temporary-card-lock) | Typed output validity is not automatically a business-value assertion |
+| Is handoff real control transfer? | [Handoff evidence](../evidence/human-handoff/manifest.json) and [console integration](../backend/tests/integration/test_operator_console.py) | Same live context, but no authentication or crash recovery |
+| Can the saved program survive restart? | [Durability model](data-models.md#durability) and [registry tests](../backend/tests/unit/capabilities/test_registry.py) | Durable artifacts are separate from transient run and lease state |
 
 ## Deliberate interpretation choices
 
