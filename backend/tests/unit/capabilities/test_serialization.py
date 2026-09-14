@@ -15,6 +15,9 @@ from replayforge.capabilities.serialization import (
 )
 
 _COMMITTED_ARTIFACT_HASHES = {
+    "member.transaction_investigation/1.0.1.yaml": (
+        "sha256:354824ebbd3ba6b77a126537b3c1d442e09a62235d275b9077ef1805024e7a03"
+    ),
     "member.loan_payoff_quote/1.0.0.yaml": (
         "sha256:a85fd3518f15f3a4d643792d4b4124d7bf622d26d9dd84aa912d3b3340e02d12"
     ),
