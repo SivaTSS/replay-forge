@@ -23,7 +23,9 @@ flowchart TD
     O --> N[Negative outcome or rejection]
     O --> R[Bounded correction]
     N --> V[Fresh replay checks exact disposition]
-    R --> J[Rejoin next primary step]
+    R --> T{Rejoin target ready}
+    T -->|No| R
+    T -->|Yes| J[Rejoin next primary step]
     J --> C[Complete task and verify recovery event]
     V --> G{All required proofs pass}
     C --> G
@@ -80,6 +82,7 @@ be claimed; they are not fabricated by changing replay results.
 | Phase-specific scenario proposal schema | Expose every action type before divergence | Only recorded actions, a branch marker, or escalation can extend a mergeable prefix; recovery permits newly discovered corrections |
 | Explicit unexecuted recovery boundary | Ask vaguely to restore the workflow | The model sees the next primary action but cannot invoke reference actions during correction; fields not yet entered are not restoration work |
 | Verify rejoin readiness during discovery | Accept an acknowledgement message as restoration | The exact next target/preconditions must resolve; otherwise the model gets bounded corrective feedback. Informational warning text may legitimately remain after acknowledgement |
+| Restoration asserted in the corrective trace | Reuse the checkpoint's generic route or original blocker | A marker without correction cannot be recovery; unrelated checkpoint boilerplate cannot supply missing restored-state evidence |
 | Explicit positive branch marker | Infer a branch from the last visible text | Preserve the actual divergence point and reject speculation |
 | Optional negative-trace outputs | Require normal success outputs on every path | A rejected request has no legitimate success receipt to extract |
 | Exact replay disposition and recovery-event gate | Accept any successful validation run | Prevent unexecuted or misclassified branches from passing publication |
@@ -133,6 +136,8 @@ guards retain their original boolean semantics.
 Suite proof also checks isolation: primary and terminal cases must not execute a recovery;
 a recovery case must complete exactly its named correction once. Success with an unrelated,
 repeated, or spuriously triggered recovery does not pass publication.
+The restoration validator honors the order of its `--scenario` arguments so a previously failing
+case can be checked first. It still requires every configured scenario and tenant before publication.
 
 Discovery also renews between model inference, grounding, execution, and condition checks.
 Each renewal checks the same owner and exact lease version. A single stage that outlasts the

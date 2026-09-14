@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, cast
 
+from replayforge.capabilities.conditions import surface_conditions
 from replayforge.capabilities.models import (
     AssertAction,
     CapabilityArtifact,
@@ -408,8 +409,16 @@ class DiscoveryEngine:
                         request.scenario is not None
                         and request.scenario.kind == "recovery"
                         and observed_branch is not None
-                        and not self._rejoin_ready(
-                            request, session, observed_branch, outputs, effective_policy
+                        and (
+                            not any(
+                                item != observed_branch.condition
+                                for recorded in recordings[observed_branch.after_step_count + 1 :]
+                                for condition in recorded.verified_postconditions
+                                for item in surface_conditions(condition)
+                            )
+                            or not self._rejoin_ready(
+                                request, session, observed_branch, outputs, effective_policy
+                            )
                         )
                     ):
                         renew_control()
@@ -419,8 +428,10 @@ class DiscoveryEngine:
                             details={"code": "recovery_rejoin_not_ready", "effect_absent": True},
                         )
                         history.append(
-                            "Completion rejected: the exact next primary target or preconditions "
-                            "are not ready. Acknowledging the blocker alone is insufficient. "
+                            "Completion rejected: recovery requires executed corrective steps, "
+                            "a distinct verified restored-state condition, and readiness of the "
+                            "exact next primary target/preconditions. A branch marker or "
+                            "acknowledgement alone is insufficient. "
                             "Restore the original surface, including scrolling when necessary; "
                             "do not click the rejoin target. Assert a distinctive condition on the "
                             "currently visible restored surface before completing again."

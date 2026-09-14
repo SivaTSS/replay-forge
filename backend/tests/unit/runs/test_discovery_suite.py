@@ -477,6 +477,37 @@ def test_recovery_validation_requires_completed_named_recovery() -> None:
     assert not ReplayValidation(happy.result, ("dismiss_notice",)).verifies()
 
 
+def test_recovery_cannot_use_checkpoint_boilerplate_as_restoration_evidence() -> None:
+    primary = sample_artifact()
+    condition = TextCondition(kind="text", value="A blocking notice")
+    marker = primary.steps[0].model_copy(
+        update={
+            "id": "marker",
+            "action": AssertAction(kind="assert", condition=condition),
+            "target": None,
+            "postconditions": (condition,),
+        }
+    )
+    correction = marker.model_copy(update={"id": "still_the_same_notice"})
+    trace = primary.model_copy(update={"steps": (primary.steps[0], marker, correction)})
+    scenario = DiscoveryScenario(
+        "recovery",
+        "Correct a notice",
+        "dismiss_notice",
+        "Restore",
+        DiscoverySuccess(
+            status="success",
+            run_id=primary.provenance.discovery_run_id,
+            artifact=trace,
+            evidence_manifest=primary.provenance.evidence_manifest_key,
+            branch=ObservedBranch(1, condition),
+        ),
+        {"member_id": "12345"},
+    )
+    with pytest.raises(ValueError, match="distinct verified restored state"):
+        _merge_scenarios(primary, (scenario,))
+
+
 def test_negative_validation_requires_exact_disposition_and_code() -> None:
     artifact = sample_artifact()
     discovered = DiscoverySuccess(

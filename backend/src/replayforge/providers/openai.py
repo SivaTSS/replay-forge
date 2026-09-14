@@ -131,6 +131,9 @@ Do not invent outputs in scenario mode. Available output fields may be extracted
 record identity or restored state; none must be invented to report a legitimate negative result.
 For a business outcome or application failure,
 complete immediately after its branch marker has been verified. For recovery, mark the blocker
+only after the primary flow encounters an actual interruption; an initial row status or advisory
+does not itself prove that progress is blocked. Continue the observed primary prefix until then.
+Mark the blocker
 BEFORE correcting it, discover and execute only safe corrective actions, and assert a distinctive
 restored surface condition before completing. Restore only invocation-dependent form fields that
 were actually set BEFORE the blocker and reset by correction, using symbolic inputs.

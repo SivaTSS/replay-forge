@@ -43,8 +43,10 @@ def main() -> None:
         paths[code] = Path(path)
     if set(paths) != {scenario.code for scenario in request.scenarios}:
         parser.error("provide exactly the scenarios declared by the workflow")
-    # Verify all files before running any browser action.
-    scenarios = tuple(restore_scenario(paths[item.code], item) for item in request.scenarios)
+    # Verify all files before running any browser action. Honor the caller's case order
+    # so a previously failing case can run first without skipping the complete matrix.
+    by_code = {item.code: item for item in request.scenarios}
+    scenarios = tuple(restore_scenario(path, by_code[code]) for code, path in paths.items())
     if args.output_root and (args.output_root.exists() or not args.commit_sha):
         parser.error("export requires a new output root and actual --commit-sha")
     settings = RuntimeSettings(

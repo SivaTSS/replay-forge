@@ -12,6 +12,7 @@ from threading import Lock
 from typing import Any, Literal, Protocol
 
 from replayforge.applications.registry import ApplicationRegistry
+from replayforge.capabilities.conditions import surface_conditions as _surface_conditions
 from replayforge.capabilities.models import (
     ApplicationFailure,
     AssertAction,
@@ -625,7 +626,9 @@ def _merge_scenarios(
                 raise ValueError("recovery traces must remain read-only or reversible")
             recovered_surface_keys = {
                 _condition_key(observed)
-                for observed in _surface_conditions(scenario_artifact.checkpoint.condition)
+                for corrective in recovery_source_steps
+                for postcondition in corrective.postconditions
+                for observed in _surface_conditions(postcondition)
             }
             if not recovered_surface_keys - {_condition_key(condition)}:
                 raise ValueError("recovery trace lacks a distinct verified restored state")
@@ -704,24 +707,6 @@ def _shared_prefix_length(primary: CapabilityArtifact, scenario: CapabilityArtif
             break
         length += 1
     return length
-
-
-def _surface_conditions(condition: Condition) -> tuple[Condition, ...]:
-    if getattr(condition, "kind", None) in {
-        "route",
-        "text",
-        "rendered_text",
-        "visual_text",
-        "element",
-    }:
-        return (condition,)
-    nested = getattr(condition, "conditions", None)
-    if nested is not None:
-        return tuple(observed for item in nested for observed in _surface_conditions(item))
-    child = getattr(condition, "condition", None)
-    if child is not None and _surface_conditions(child):
-        return (condition,)
-    return ()
 
 
 def _condition_key(condition: Condition) -> str:

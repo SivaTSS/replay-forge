@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from replayforge.capabilities.conditions import surface_conditions as _surface_conditions
 from replayforge.capabilities.models import (
     AllCondition,
-    AnyCondition,
     CapabilityArtifact,
     CapabilityMetadata,
     CapabilityPolicy,
@@ -18,7 +18,6 @@ from replayforge.capabilities.models import (
     Landmark,
     LocatorStrategy,
     MatchMode,
-    NotCondition,
     ObjectContract,
     OutputValidCondition,
     PersistenceMode,
@@ -335,19 +334,6 @@ def _route_specificity(pattern: str) -> tuple[int, int]:
     parts = pattern.strip("/").split("/") if pattern != "/" else []
     static = sum(not (part == "*" or part.startswith(":")) for part in parts)
     return static, len(parts)
-
-
-def _surface_conditions(condition: Condition) -> tuple[Condition, ...]:
-    if condition.kind in {"route", "text", "rendered_text", "visual_text", "element"}:
-        return (condition,)
-    if isinstance(condition, AllCondition | AnyCondition):
-        return tuple(
-            nested for item in condition.conditions for nested in _surface_conditions(item)
-        )
-    if isinstance(condition, NotCondition):
-        nested = _surface_conditions(condition.condition)
-        return (condition,) if nested else ()
-    return ()
 
 
 def _latest_surface_condition(
