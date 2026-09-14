@@ -666,7 +666,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         settings.capability_asset_directory,
         capture_enabled=settings.allow_synthetic_asset_capture,
     )
-    text_recognizer = RapidOcrTextRecognizer()
+    text_recognizer = RapidOcrTextRecognizer(settings.vision_policy.ocr.inference_threads)
     evidence_store = LocalEvidenceStore(settings.evidence_directory, clock)
     configured_secrets = tuple(
         secret.get_secret_value()

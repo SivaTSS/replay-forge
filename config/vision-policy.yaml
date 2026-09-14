@@ -2,6 +2,7 @@ schema_version: "1.0"
 ocr:
   minimum_confidence: 0.80
   maximum_tokens: 500
+  inference_threads: 2
 phrases:
   maximum_line_gap_in_text_heights: 1.5
 segmentation:

@@ -20,6 +20,7 @@ class _VisionPolicyModel(BaseModel):
 class VisionOcrPolicy(_VisionPolicyModel):
     minimum_confidence: float = Field(ge=0, le=1)
     maximum_tokens: int = Field(gt=0, le=5000)
+    inference_threads: int = Field(default=2, ge=1, le=4, strict=True)
 
 
 class VisionPhrasePolicy(_VisionPolicyModel):

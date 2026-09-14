@@ -76,8 +76,13 @@ class VisualLayoutGraph:
 class RapidOcrTextRecognizer:
     """Lazy local OCR adapter; model files must be provisioned for offline startup."""
 
+    inference_threads: int = 2
     _engine: RapidOCR | None = field(default=None, init=False, repr=False)
     _lock: Lock = field(default_factory=Lock, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if type(self.inference_threads) is not int or not 1 <= self.inference_threads <= 4:
+            raise ValueError("OCR inference threads must be between one and four")
 
     def recognize(self, png: bytes) -> tuple[VisualToken, ...]:
         # RapidOCR mutates its runtime parameters during calls; the recognizer is
@@ -86,7 +91,7 @@ class RapidOcrTextRecognizer:
             if self._engine is None:
                 self._engine = RapidOCR(
                     params={
-                        "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+                        "EngineConfig.onnxruntime.intra_op_num_threads": self.inference_threads,
                         "EngineConfig.onnxruntime.inter_op_num_threads": 1,
                     }
                 )

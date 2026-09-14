@@ -771,6 +771,34 @@ def test_rapidocr_adapter_normalizes_polygons() -> None:
     )
 
 
+@pytest.mark.parametrize("threads", [0, 5, True])
+def test_ocr_thread_budget_rejects_unbounded_or_invalid_configuration(threads: int) -> None:
+    with pytest.raises(ValueError, match="between one and four"):
+        RapidOcrTextRecognizer(threads)
+
+
+def test_ocr_inference_uses_configured_bounded_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    parameters: list[dict[str, int]] = []
+
+    class Engine:
+        def __init__(self, *, params: dict[str, int]) -> None:
+            parameters.append(params)
+
+        def __call__(self, png: bytes) -> object:
+            return object()
+
+    monkeypatch.setattr("replayforge.surfaces.vision.RapidOCR", Engine)
+    reader = RapidOcrTextRecognizer(2)
+    assert reader.recognize(b"fixture") == ()
+    assert reader.recognize(b"fixture") == ()
+    assert parameters == [
+        {
+            "EngineConfig.onnxruntime.intra_op_num_threads": 2,
+            "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+        }
+    ]
+
+
 def test_edge_template_moves_without_persisting_target_coordinates(tmp_path: Path) -> None:
     vision = VisionGrounder(StubRecognizer(()), LocalCapabilityAssetStore(tmp_path))
     key, digest = vision.create_edge_template(png_with_icon(40, 70), ScreenRegion(40, 70, 61, 51))

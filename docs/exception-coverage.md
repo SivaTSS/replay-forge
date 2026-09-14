@@ -83,6 +83,7 @@ be claimed; they are not fabricated by changing replay results.
 | Exact replay disposition and recovery-event gate | Accept any successful validation run | Prevent unexecuted or misclassified branches from passing publication |
 | Retain composite identity guards and new assertions | Replace all postconditions for scenario convenience | Exception discovery must not weaken record selection checks |
 | Current-frame bounded-control disambiguation | Fixed offsets or first matching label | Distinguish an action from repeated status text while retaining ambiguity when multiple controls match |
+| Bounded OCR inference pool | Raise grounding deadlines or reduce screenshot fidelity | Default two intra-operation threads, one inter-operation thread; serialized inference retains current recognition and timing bounds |
 
 ## Reproduce
 
@@ -117,6 +118,12 @@ Recovery renews its automation lease between corrective actions and passes the n
 version back to the primary loop. Matching multiple outcomes, failures, or recoveries within one
 category is `branch_ambiguous`, not permission to choose the first declaration. Existing failure
 precedence over outcomes remains unchanged.
+
+The resource choice was measured on one identical 76-token frame: one OCR inference thread took
+7.0–7.6 seconds; two took 5.2–5.3 seconds with identical recognized text and boxes. This is a local
+measurement, not a cross-hardware guarantee. `ocr.inference_threads` in the shared vision policy
+is bounded to 1–4; the default is 2. Screenshot resolution, confidence thresholds, and the
+10-second grounding deadline were not relaxed.
 
 After a runtime restart, `scripts/validate_scenario_evidence.py` can restore a suite from an exact
 published primary and verified local scenario bundles. It checks original run identity, successful
