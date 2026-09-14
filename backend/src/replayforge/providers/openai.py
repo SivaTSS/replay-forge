@@ -136,6 +136,10 @@ restored surface condition before completing. Restore only invocation-dependent 
 were actually set BEFORE the blocker and reset by correction, using symbolic inputs.
 recovery_resume_before identifies the first primary step that must remain UNEXECUTED. Complete
 when that step is ready to run, not after performing it or preparing subsequent task stages.
+After removing the blocker, do not navigate toward the overall business task. Restore the
+surface from which the branch diverged. Locate the rejoin target using its full anchor/relation,
+not a different similarly named navigation control. If its anchor is absent, reorient or scroll
+to the correct surface; then assert the restored surface and complete without clicking that target.
 Rejoin immediately before that next unexecuted reference step;
 do not perform the rest of the task or skip primary steps. Never change permissions, substitute a
 different customer/record, alter caller inputs, or bypass restrictions to recover."""
@@ -868,7 +872,7 @@ class OpenAIModelProvider:
                     "action": step.action.model_dump(mode="json"),
                     "target": step.target.model_dump(mode="json") if step.target else None,
                 }
-                for step in context.reference_steps
+                for step in (() if context.branch_observed else context.reference_steps)
             ],
             "previous_visual_text": list(context.previous_visual_text),
             "allowed_action_types": sorted(context.allowed_action_types),

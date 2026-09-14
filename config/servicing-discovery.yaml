@@ -119,5 +119,5 @@ workflows:
         inputs: {member_id: "34567", card_id: "34567-D1", reason: "Synthetic precautionary lock"}
       - code: acknowledge_member_notice
         kind: recovery
-        goal: Observe the non-restrictive member review notice that blocks card maintenance. After marking the blocker, verify the member record, acknowledge only that notice, and restore the original card workflow and supplied reason. Do not change permissions or apply the lock within the recovery trace.
+        goal: Observe the non-restrictive member review notice that blocks card maintenance. After marking the blocker, verify the member record and acknowledge only that notice. Restore the exact pre-divergence surface at the runtime-supplied rejoin boundary, then stop. Preserve values entered before the notice; do not prefill later task fields, change permissions, or apply a lock within the correction.
         inputs: {member_id: "23456", card_id: "23456-D1", reason: "Synthetic precautionary lock"}

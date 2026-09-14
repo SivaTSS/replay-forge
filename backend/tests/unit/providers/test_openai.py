@@ -242,6 +242,7 @@ def test_recovery_schema_and_context_preserve_the_unexecuted_rejoin_boundary() -
     sent = json.loads(responses.request["input"][0]["content"][0]["text"])
     assert sent["recovery_resume_before"]["id"] == next_step.id
     assert sent["recovery_resume_before"]["action"] == next_step.action.model_dump(mode="json")
+    assert sent["reference_steps"] == []
 
 
 def test_provider_requests_bounded_non_stored_structured_output() -> None:
