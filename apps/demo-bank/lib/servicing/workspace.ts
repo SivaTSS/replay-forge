@@ -421,7 +421,7 @@ export function buildView(state: Workspace): {
     blocks.push(
       heading("Account relationships"),
       accountTable(state),
-      heading("Open service requests"),
+      heading("Service request history"),
       caseTable(state),
       actions(
         { id: "nav:cards", label: "Card maintenance" },

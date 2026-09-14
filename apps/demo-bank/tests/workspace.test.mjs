@@ -91,3 +91,21 @@ test("role switching is explicit training configuration and affects business val
     /permission_denied/,
   );
 });
+test("relationship history includes resolved cases without labeling them open", () => {
+  let state = act(member(), "case:CASE-2104");
+  state = {
+    ...state,
+    fields: { resolution: "Explained distinct merchant posting dates" },
+  };
+  state = act(act(state, "resolve"), "confirm");
+  const view = buildView(act(state, "nav:member"));
+  assert.ok(
+    view.blocks.some(
+      (b) => b.kind === "heading" && b.text === "Service request history",
+    ),
+  );
+  const cases = view.blocks.find(
+    (b) => b.kind === "table" && b.columns[0] === "Case ID",
+  );
+  assert.equal(cases.rows[0].cells[3], "Resolved");
+});
