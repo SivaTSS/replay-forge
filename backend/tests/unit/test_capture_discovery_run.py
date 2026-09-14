@@ -16,6 +16,7 @@ import pytest
 from replayforge.capabilities import artifact_content_hash, load_artifact_yaml
 from replayforge.evidence import discovery_capture
 from replayforge.evidence.discovery_capture import (
+    ScenarioCaptureRequest,
     SuiteCaptureRequest,
     _request_json,
     capture_suite,
@@ -271,6 +272,63 @@ def test_verified_scenario_is_retained_if_a_later_scenario_fails(
     assert "artifact" not in proof
     assert stat.S_IMODE(proof_file.stat().st_mode) == 0o600
     assert not output.exists()
+
+
+def test_collection_only_retains_evidence_without_publication(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    result = discovery_result()
+    artifact: dict[str, Any] = result["artifact"]
+    calls: list[str] = []
+    suite = {
+        "suite_id": "sui_" + "a" * 32,
+        "primary": {key: result[key] for key in ("status", "run_id", "evidence_manifest")},
+        "primary_source": "published_capability",
+        "artifact": {
+            "capability_id": artifact["capability"]["id"],
+            "risk": "read_only",
+            "input_contract": {"required": artifact["inputs"]["required"]},
+            "output_fields": artifact["outputs"]["required"],
+        },
+        "scenarios": [],
+    }
+
+    def respond(_base: str, path: str, _timeout: int, **kwargs: Any) -> dict[str, Any]:
+        calls.append(path)
+        assert not path.endswith(("/validations", "/finalize"))
+        if path.endswith("/artifact"):
+            return artifact
+        if path.endswith("/scenarios"):
+            return {**suite, "scenarios": [{"code": "missing_record", "result": result}]}
+        assert path.endswith("/from-published")
+        assert kwargs["payload"]["version"] == "1.0.1"
+        return suite
+
+    monkeypatch.setattr(discovery_capture, "_request_json", respond)
+    request = SuiteCaptureRequest(
+        goal="Observe a missing record",
+        application_family="warehouse",
+        tenant="example",
+        entry_point="home",
+        inputs={},
+        validation_tenants=("second",),
+        expected_capability_id=artifact["capability"]["id"],
+        expected_risk="read_only",
+        expected_inputs=tuple(artifact["inputs"]["required"]),
+        expected_outputs=tuple(artifact["outputs"]["required"]),
+        scenarios=(
+            ScenarioCaptureRequest("missing_record", "business_outcome", "Observe no match", {}),
+        ),
+        primary_version="1.0.1",
+        publish=False,
+    )
+    output = tmp_path / "collected.yaml"
+    summary = capture_suite("http://localhost:8000", 120, output, request)
+    assert summary["status"] == "collected"
+    assert not output.exists()
+    assert output.with_name("collected.missing_record.yaml").is_file()
+    assert output.with_name("collected.missing_record.proof.json").is_file()
+    assert len(calls) == 3
 
 
 @pytest.mark.parametrize(

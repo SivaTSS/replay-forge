@@ -44,6 +44,7 @@ def _workflow_request(raw: dict[str, Any]) -> SuiteCaptureRequest:
             for index, item in enumerate(scenarios, start=1)
         ),
         primary_version=raw.get("primary_version"),
+        publish=not raw.get("collect_only", False),
     )
 
 
@@ -60,6 +61,9 @@ def main() -> None:
         "--primary-version", help="Extend this published version after fresh replay"
     )
     parser.add_argument("--output-directory", type=Path, default=Path(".local/discovery-captures"))
+    parser.add_argument(
+        "--collect-only", action="store_true", help="Retain scenario evidence without publication"
+    )
     arguments = parser.parse_args()
     if not 10 <= arguments.timeout_seconds <= 600:
         parser.error("timeout must be between 10 and 600 seconds")
@@ -100,6 +104,7 @@ def main() -> None:
             _workflow_request(
                 {
                     **item,
+                    "collect_only": arguments.collect_only,
                     **(
                         {"primary_version": arguments.primary_version}
                         if arguments.primary_version

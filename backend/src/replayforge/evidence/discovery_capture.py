@@ -45,6 +45,7 @@ class SuiteCaptureRequest:
     max_steps: int = 40
     scenarios: tuple[ScenarioCaptureRequest, ...] = ()
     primary_version: str | None = None
+    publish: bool = True
 
 
 def _request_json(
@@ -195,6 +196,9 @@ def invoke_suite(
         if on_scenario is not None:
             on_scenario(scenario.code, scenario_results[scenario.code])
 
+    if not request.publish:
+        return {"suite": suite, "primary": primary, "scenarios": scenario_results}
+
     for tenant in request.validation_tenants:
         suite = _request_json(
             base_url,
@@ -300,6 +304,13 @@ def capture_suite(
 
     response = invoke_suite(base_url, timeout_seconds, request, suite_id, retain_scenario)
     primary = response["primary"]
+    if not request.publish:
+        return {
+            "status": "collected",
+            "suite_id": str(response["suite"]["suite_id"]),
+            "primary_source": str(response["suite"].get("primary_source", "new_discovery")),
+            "scenario_count": str(len(response["scenarios"])),
+        }
     result = {
         "status": primary.get("status"),
         "run_id": primary.get("run_id"),

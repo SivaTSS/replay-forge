@@ -41,7 +41,7 @@ The same verification matrix distinguishes original discoveries from model-free 
 | Task | Scenario | Required disposition | Invariants |
 |---|---|---|---|
 | Transaction investigation | Member does not exist | `business_outcome:member_not_found` | No substitute member or fabricated transaction |
-| Transaction investigation | Reference has no match in requested account | `business_outcome:transaction_not_found` | Select the supplied account; retain reference filter |
+| Transaction investigation | Reference exists in another account, not the requested one | `business_outcome:transaction_not_found` | Select the supplied account; retain reference filter; the default account must not yield a false success |
 | Loan payoff | Member does not exist | `business_outcome:member_not_found` | No quote or fabricated receipt |
 | Loan payoff | Date outside quote window | `business_outcome:quote_date_unavailable` | Do not move the requested date into the allowed window |
 | Loan payoff | Invalid calendar date | `failure:invalid_payoff_date` | Preserve supplied date; no quote issuance |
@@ -108,6 +108,9 @@ evidence: export and verify sanitized bundles using the
 To extend a committed example without rediscovering its successful path, add
 `--primary-version 1.0.1`. The exact version must first pass fresh replay. Its original discovery
 provenance remains intact; only the new scenario runs are new discovery evidence.
+For staged evidence work, `--collect-only` saves the verified scenario traces without publication
+and reports `collected`, never `published`. Then run the model-free restoration/validation tool.
+Normal capture still validates and publishes automatically; no human approval gate is added.
 
 The model-free replay capture tool accepts `expected_status: business_outcome` with an exact
 `expected_code`. A recovery case uses `expected_status: success` and `expected_recovery`;

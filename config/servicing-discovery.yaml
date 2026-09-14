@@ -7,8 +7,8 @@ workflows:
       description, and posting_status from the actual transaction details. Verify the returned
       transaction reference and account identity against the supplied inputs. Do not change
       any account or transaction state.
-      Submit the member inquiry before opening a matching record. Select account_id explicitly;
-      do not assume the default account is the requested one.
+      Correctness must depend on every supplied identifier, including when it differs from an
+      initially visible or preselected record. Do not assume defaults match the caller's request.
     application_family: northstar_member_service
     tenant: harbor
     validation_tenants: [summit]
@@ -29,7 +29,7 @@ workflows:
       - code: transaction_not_found
         kind: business_outcome
         goal: Observe and verify that no transaction matches the supplied reference in the requested account. Do not substitute another transaction.
-        inputs: {member_id: "12345", account_id: "12345-01", transaction_reference: "NO-SUCH-TRANSACTION"}
+        inputs: {member_id: "12345", account_id: "12345-02", transaction_reference: "POS-80419"}
   servicing_loan_payoff_quote:
     goal: >-
       In the synthetic servicing workstation, find the member identified by member_id,
