@@ -1,0 +1,25 @@
+# Synthetic invocation data only. No navigation instructions or discovered-artifact edits.
+cases:
+  replay-servicing-payoff:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.1
+      tenant: harbor
+      inputs:
+        member_id: "12346"
+        payoff_date: "2026-09-21"
+    expected_status: success
+    expected_outputs:
+      payoff_amount: "$9,035.70"
+      good_through_date: "2026-09-21"
+      confirmation_reference: HBR-000001
+  replay-servicing-missing-record:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.1
+      tenant: harbor
+      inputs:
+        member_id: "00000"
+        payoff_date: "2026-09-21"
+    expected_status: failure
+    expected_code: target_absent

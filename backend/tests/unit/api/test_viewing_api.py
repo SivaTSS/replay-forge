@@ -27,6 +27,11 @@ def test_viewer_catalog_authorization_and_no_cache(tmp_path: Path) -> None:
         assert response.status_code == 200
         assert "no-store" in response.headers["cache-control"]
         assert len(response.json()["capabilities"]) == 3
+        for capability in response.json()["capabilities"]:
+            artifact = controller.registry.get(capability["id"], capability["version"]).artifact
+            assert capability["description"] == artifact.capability.description
+            assert capability["inputs"] == artifact.inputs.model_dump(mode="json")
+            assert capability["outputs"] == artifact.outputs.model_dump(mode="json")
         assert len(response.json()["presets"]) == 3
         assert response.json()["discovery_ready"] is False
 

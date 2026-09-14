@@ -38,7 +38,7 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | `POST` | `/api/v1/interventions/{id}/heartbeat` | Renews ownership and increments lease version |
 | `POST` | `/api/v1/interventions/{id}/input` | Applies one frame-bound click, text, or key action |
 | `POST` | `/api/v1/interventions/{id}/terminate` | Terminates an open or owner-claimed intervention |
-| `GET` | `/api/v1/executions/catalog` | Capability input contracts, registered targets, explicit synthetic presets |
+| `GET` | `/api/v1/executions/catalog` | Capability descriptions and typed input/output contracts, registered targets, explicit synthetic presets |
 | `POST` | `/api/v1/executions` | Starts managed replay or discovery; returns `202`, execution ID and viewer token |
 | `GET` | `/api/v1/executions/{id}?after=N` | Authorized state, frame metadata, incremental sanitized timeline, final result |
 | `GET` | `/api/v1/executions/{id}/frames/{sequence}` | Authorized transient PNG; `410` when a screen has expired |

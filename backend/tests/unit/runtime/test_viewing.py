@@ -85,7 +85,10 @@ def test_discovery_view_uses_real_pipeline_order_without_human_approval(
         state = controller.viewer.snapshot(started["execution_id"], started["viewer_token"])
         assert "private diagnostic" not in str(state)
         if failure is None:
-            assert phases == ["discovery", "validation:harbor", "validation:summit", "publication"]
+            assert phases == ["discovery", "validation:summit", "final-validation:harbor"]
+            mock.validate.assert_called_once_with(suite.suite_id, tenant="summit", inputs={})
+            mock.finalize.assert_called_once_with(suite.suite_id)
+            assert state["phase"] == "publication"
             assert state["state"] == "success"
             assert state["result"]["capability"]["id"] == record.artifact.capability.id
         else:

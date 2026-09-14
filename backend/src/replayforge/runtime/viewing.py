@@ -63,9 +63,11 @@ class ExecutionController:
                     "id": record.artifact.capability.id,
                     "version": record.artifact.capability.version,
                     "name": record.artifact.capability.name,
+                    "description": record.artifact.capability.description,
                     "risk": record.artifact.capability.risk.value,
                     "tenants": list(record.artifact.compatibility.supported_variants),
                     "inputs": record.artifact.inputs.model_dump(mode="json"),
+                    "outputs": record.artifact.outputs.model_dump(mode="json"),
                 }
                 for record in self.registry.all()
             ],
@@ -123,9 +125,12 @@ class ExecutionController:
                 return suite.primary.model_dump(mode="json")
             try:
                 for tenant in tenants:
+                    if tenant == launch.tenant:
+                        # Finalization owns primary validation immediately before publication.
+                        continue
                     feed.phase(f"validation:{tenant}")
                     self.suites.validate(suite.suite_id, tenant=tenant, inputs=launch.inputs)
-                feed.phase("publication")
+                feed.phase(f"final-validation:{launch.tenant}")
                 suite = self.suites.finalize(suite.suite_id)
             except DiscoverySuiteError:
                 return {
@@ -135,6 +140,7 @@ class ExecutionController:
                     "run_id": suite.primary.run_id,
                 }
             artifact = self.suites.published_artifact(suite.suite_id)
+            feed.phase("publication")
             assert isinstance(suite.primary, DiscoverySuccess)
             return {
                 "status": "success",

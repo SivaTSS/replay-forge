@@ -51,6 +51,8 @@ An `exe_` identity groups one user launch. Replay contains one `run_`; discovery
 primary discovery run and several model-free validation runs. Frames and events carry their
 actual run ID and phase. Publication is automatic only after successful validation; a validation
 failure is displayed as failure, not a fabricated published capability.
+Additional tenants validate once each; finalization owns the primary-tenant replay immediately
+before publication. The console labels that phase `final-validation:<tenant>`.
 
 ```text
 POST launch → execution ID + viewer credential → background execution
