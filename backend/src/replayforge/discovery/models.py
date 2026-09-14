@@ -16,7 +16,7 @@ from replayforge.capabilities.models import (
     ObjectContract,
 )
 from replayforge.policy.types import DataClassification, Risk
-from replayforge.runs.results import FailureResult, InterventionRequiredResult
+from replayforge.runs.results import FailureResult
 from replayforge.shared.ids import EntityKind, parse_id
 from replayforge.surfaces.models import NormalizedObservation
 
@@ -169,7 +169,7 @@ class DiscoverySuccess:
             raise ValueError("discovery evidence manifest must belong to its run")
 
 
-DiscoveryResult = DiscoverySuccess | FailureResult | InterventionRequiredResult
+DiscoveryResult = DiscoverySuccess | FailureResult
 
 
 @dataclass(frozen=True, slots=True)

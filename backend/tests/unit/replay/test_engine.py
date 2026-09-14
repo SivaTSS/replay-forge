@@ -613,6 +613,24 @@ def test_unexpected_dialog_preserves_session_for_intervention(
     assert session.closed is False
 
 
+def test_unattended_validation_never_creates_an_intervention(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    from dataclasses import replace
+
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    valid_artifact_data["steps"][1]["risk"] = "sensitive"
+    session = FakeSurfaceSession()
+    engine, recorder, router = build_engine(session, maximum_risk=Risk.SENSITIVE)
+    result = engine.execute(replace(request_for(valid_artifact_data), allow_intervention=False))
+    assert isinstance(result, FailureResult)
+    assert result.code == "sensitive_action_requires_approval"
+    assert router.created == []
+    assert session.closed
+    assert all(kind != "handoff-before" for kind, _, _ in recorder.attachments)
+
+
 def test_replay_continuation_revalidates_and_finishes_without_replaying_human_step(
     valid_artifact_data: dict[str, Any],
 ) -> None:

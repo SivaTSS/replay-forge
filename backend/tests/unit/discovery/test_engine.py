@@ -49,7 +49,6 @@ from replayforge.surfaces.ports import SurfaceDriver
 from tests.unit.replay.test_engine import (
     FakeSurfaceDriver,
     FakeSurfaceSession,
-    MemoryInterventionRouter,
     MemoryRecorder,
 )
 
@@ -137,7 +136,6 @@ def build_discovery(
             effective_policy=policy,
             lease_service=lease_service,
             recorder=MemoryRecorder(),
-            intervention_router=MemoryInterventionRouter(lease_service),
             clock=clock,
         ),
         compiler,

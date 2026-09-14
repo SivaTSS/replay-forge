@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from threading import RLock
+from threading import Event, RLock, Thread
 from time import monotonic
 from typing import Any, Literal
 
@@ -107,6 +107,8 @@ class ExecutionViewer:
             max_workers=self.limits.maximum_active, thread_name_prefix="execution-view"
         )
         self._closed = False
+        self._stop = Event()
+        self._reaper: Thread | None = None
 
     def start(self, mode: Mode, operation: Callable[[], dict[str, Any]]) -> dict[str, str]:
         with self._lock:
@@ -124,8 +126,16 @@ class ExecutionViewer:
             self._items[execution_id] = _Execution(
                 execution_id, mode, hashlib.sha256(token.encode()).digest()
             )
+            if self._reaper is None:
+                self._reaper = Thread(target=self._reap, name="execution-expiry", daemon=True)
+                self._reaper.start()
             self._pool.submit(self._execute, execution_id, operation)
             return {"execution_id": execution_id, "viewer_token": token}
+
+    def _reap(self) -> None:
+        while not self._stop.wait(1):
+            with self._lock:
+                self._expire()
 
     def _execute(self, execution_id: str, operation: Callable[[], dict[str, Any]]) -> None:
         binding = current_execution.set(ExecutionFeed(self, execution_id))
@@ -279,6 +289,9 @@ class ExecutionViewer:
     def close(self) -> None:
         with self._lock:
             self._closed = True
+        self._stop.set()
+        if self._reaper is not None:
+            self._reaper.join()
         self._pool.shutdown(wait=True, cancel_futures=False)
         with self._lock:
             self._items.clear()

@@ -25,17 +25,17 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 | Conservative risk | Evidenced | Sensitive pauses; irreversible denies | Policy and real-session browser tests |
 | No sensitive persistence | Hardened for synthetic demo; bounded | Restricted journal/terminal fields, keyed pseudonyms, artifact leak guard, full-frame masks, image capture disabled by default | Tested boundaries, not a universal PII detector; see [data policy](safety-and-handoff.md#data-exposure-boundaries) |
 | Structured evidence | Evidenced | Ordered events, result, hashes, manifest | Three genuine discovery bundles |
-| Detect and route intervention | Implemented, Tested | Stuck, low confidence, model escalation, surface recommendation, sensitive policy | Session and console tests |
+| Detect and route intervention | Implemented, Tested | Replay safety/progress boundaries route to an operator; blocked discovery fails closed | Session and console tests |
 | Same-session control | Implemented, Tested | Retained context and worker; bounded human input | Live browser tests with explicit policy fixtures |
 | Explicit ownership | Implemented, Tested | TTL lease, owner, version, CAS | Conflict/race tests |
-| Safe resume | Implemented, Tested for replay | Fresh location, postcondition, and changed-fingerprint checks | Discovery continuation is cut |
+| Safe resume | Implemented, Tested for replay | Fresh location, postcondition, and changed-fingerprint checks | Discovery is unattended and does not involve a human |
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
 | Canvas visual control | Implemented, Tested | One canvas-only workstation exposes three discovered tasks using geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
 | Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
 | Multi-tenant reuse | Evidenced | Each current artifact validates Harbor and Summit | Changed-input/viewport tests and genuine tenant validation |
 | Per-tenant/version drift | Implemented checks; extension Designed | Pre-launch registration contract and live entry landmarks; per-step verification | No vendor-release detector or overlay repository; [design](heterogeneity-and-compatibility.md) |
-| Human operator surface | Implemented | Next.js intervention console | No run list, auth, or WebSocket |
-| Agent-facing invocation | Implemented | `/invoke` with typed arguments and discriminated result | Capability catalog endpoint is not implemented |
+| Human operator surface | Implemented | Next.js launcher/viewer, temporary replay history, and same-session control | Local trust boundary, not production authentication or video streaming |
+| Agent-facing invocation | Implemented | `/invoke` with typed arguments and discriminated result; execution catalog exposes input contracts | Durable run-history browser is not implemented |
 
 ## How to challenge the claims
 

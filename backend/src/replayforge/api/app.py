@@ -187,8 +187,7 @@ def create_app(services: ApiServices) -> FastAPI:
                 "evidence_manifest": result.evidence_manifest,
             }
             return JSONResponse(payload, status_code=200)
-        status_code = 202 if result.status == "intervention_required" else 200
-        return JSONResponse(result.model_dump(mode="json"), status_code=status_code)
+        return JSONResponse(result.model_dump(mode="json"), status_code=200)
 
     @app.post("/api/v1/discovery-suites")
     def create_discovery_suite(request: Request, body: DiscoveryInvocation) -> JSONResponse:

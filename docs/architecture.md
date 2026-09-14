@@ -29,7 +29,7 @@ flowchart LR
 | Unit | Responsibility | Does not do |
 |---|---|---|
 | FastAPI runtime | Discovery, replay, policy, sessions, evidence, intervention | Render the target or operator UI |
-| Operator console | Claim and operate a paused live session | Browse runs or edit capabilities |
+| Execution console | Launch and watch discovery/replay; inspect transient replay history; operate paused replay | Persist raw screen recordings or bypass control leases |
 | Demo bank | Synthetic two-tenant target and controlled faults | Expose a task-completion API |
 | Langfuse stack | Local model-call metrics for discovery | Participate in replay |
 
@@ -107,7 +107,8 @@ registry can bootstrap its first discovery without seeding an application-specif
 |---|---|
 | HTTP adapter | Reject malformed contracts and map known failures to stable, value-free errors |
 | Application service | Resolve versions and create one isolated run scope |
-| Discovery/replay engine | Return typed business outcome, failure, or intervention state |
+| Discovery engine | Return a validated draft or failure; never a human intervention |
+| Replay engine | Return typed success, business outcome, failure, or intervention state |
 | Surface/provider adapter | Translate implementation exceptions into bounded domain error codes |
 | Repository/evidence adapter | Reject conflicts, unsafe paths, oversized content, and integrity mismatch |
 | Composition root | Construct concrete adapters and retain only live local-process resources |

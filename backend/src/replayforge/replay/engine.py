@@ -67,6 +67,7 @@ class ReplayRequest:
     artifact: CapabilityArtifact
     tenant: str
     inputs: dict[str, Any]
+    allow_intervention: bool = True
 
 
 class ResumeValidationError(RuntimeError):
@@ -828,9 +829,18 @@ class ReplayEngine:
         observation: NormalizedObservation,
         lease_version: int,
         explanation: str | None = None,
-    ) -> InterventionRequiredResult:
+    ) -> InterventionRequiredResult | FailureResult:
         from replayforge.shared.ids import EntityKind, new_id
 
+        if not request.allow_intervention:
+            return self._failure(
+                request,
+                code,
+                "Unattended validation stopped at an intervention boundary.",
+                False,
+                step_id=step_id,
+                session=session,
+            )
         self._attach_handoff_frame(request.run_id, session, "handoff-before")
         intervention_id = new_id(EntityKind.INTERVENTION)
         routed_id = self.intervention_router.open(

@@ -1,12 +1,15 @@
 """Model-free reuse of the three genuine workstation discoveries."""
 
 from pathlib import Path
+from time import monotonic, sleep
 
 import pytest
+from pydantic import TypeAdapter
 
+from replayforge.api.contracts import LaunchRequest
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.runs.results import SuccessResult
+from replayforge.runs.results import RunResult, SuccessResult
 from replayforge.runtime.composition import build_runtime
 from replayforge.runtime.settings import RuntimeSettings
 from replayforge.shared.clock import SystemClock
@@ -74,8 +77,36 @@ def test_genuine_artifacts_reuse_changed_inputs_without_a_model(
         )
     )
     try:
-        result = runtime.service.invoke(capability_id, version, tenant, inputs)
+        controller = runtime.execution_controller
+        assert controller is not None
+        access = controller.start(
+            LaunchRequest.model_validate(
+                {
+                    "execution": {
+                        "mode": "replay",
+                        "capability_id": capability_id,
+                        "version": version,
+                        "tenant": tenant,
+                        "inputs": inputs,
+                    }
+                }
+            )
+        )
+        deadline = monotonic() + 600
+        observed_live_frame = False
+        while True:
+            snapshot = controller.viewer.snapshot(access["execution_id"], access["viewer_token"])
+            if snapshot["frames"] and snapshot["state"] == "running":
+                observed_live_frame = True
+            if snapshot["state"] != "running":
+                break
+            assert monotonic() < deadline, "managed replay did not finish"
+            sleep(0.05)
+        assert observed_live_frame, "viewer never exposed a frame during actual execution"
+        result: RunResult = TypeAdapter(RunResult).validate_python(snapshot["result"])
         assert isinstance(result, SuccessResult), result
+        assert len(snapshot["frames"]) > 1
+        assert snapshot["events"]
         expected_outputs = dict(expected)
         if capability_id != "member.transaction_investigation":
             expected_outputs["confirmation_reference"] = (

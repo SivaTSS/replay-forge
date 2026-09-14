@@ -4,7 +4,12 @@
 
 ## Contract
 
-Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation inputs, and step/time limits. A contract-planning pass first produces a typed `CapabilityDraftSpec`; the action loop then returns a validated draft, a typed failure, or an intervention request. Direct discovery publishes read-only results; discovery suites keep drafts unpublished until deterministic validation and finalization. The documented three-flow capture uses suites.
+Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation
+inputs, and step/time limits. A contract-planning pass first produces a typed `CapabilityDraftSpec`;
+the action loop returns a validated draft or a typed failure. Discovery is unattended: blockers
+close the session rather than requesting human control. Direct discovery publishes read-only
+results; suites keep drafts unpublished until deterministic validation and finalization. The
+three-flow capture and [visual discovery launcher](live-viewing.md) use suites.
 
 It is available only when all three conditions hold:
 
@@ -47,8 +52,8 @@ sequenceDiagram
         E->>S: execute one action
         E->>S: observe result
         E->>E: record normalized step
-    else sensitive or uncertain
-        E->>E: retain live session for intervention
+    else unresolved risk or uncertainty
+        E->>E: stop with typed blocker and close session
     else denied
         E->>E: fail closed
     end
@@ -166,7 +171,7 @@ Unknown invocation data defaults to personal/redacted regardless of field name. 
 ### Execution limits
 
 The request and engine share domain-defined step and wall-time bounds. Repeated observations,
-equivalent proposals, and low confidence trigger intervention. The
+equivalent proposals, and low confidence stop discovery without human involvement. The
 [model policy](../config/model-policy.yaml) caps calls, tokens, time, frame bytes, and cost;
 requests cannot change the model or enlarge provider budgets. Contract planning consumes one call,
 and the first exhausted request or provider budget stops discovery. Exact values and override

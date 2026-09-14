@@ -72,6 +72,18 @@ def test_invocation_resolves_artifact_and_allocates_run(
     assert executors[0].request is not None
     assert executors[0].request.inputs == {"member_id": "12345"}
     assert executors[0].request.tenant == "harbor_credit_union"
+    assert executors[0].request.allow_intervention is True
+
+
+def test_compatibility_validation_is_unattended(valid_artifact_data: dict[str, Any]) -> None:
+    service, executors = _service(valid_artifact_data)
+    service.validate_artifact(
+        CapabilityArtifact.model_validate(valid_artifact_data),
+        "harbor_credit_union",
+        {"member_id": "12345"},
+    )
+    assert executors[0].request is not None
+    assert executors[0].request.allow_intervention is False
 
 
 def test_each_invocation_gets_a_fresh_execution_scope(valid_artifact_data: dict[str, Any]) -> None:

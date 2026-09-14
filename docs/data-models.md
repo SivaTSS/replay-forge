@@ -34,6 +34,7 @@ Every runtime ID is a prefix plus 32 lowercase hexadecimal characters.
 | Prefix | Entity | Scope |
 |---|---|---|
 | `run_` | Run | One discovery or replay invocation |
+| `exe_` | Execution view | One ephemeral user launch, containing actual discovery/replay/validation run identities |
 | `sui_` | Discovery suite | One draft, its scenarios, and publication outcome |
 | `ses_` | Surface session | One isolated live browser context |
 | `evt_` | Event or observation | One ordered audit event or normalized observation |
@@ -44,6 +45,12 @@ Every runtime ID is a prefix plus 32 lowercase hexadecimal characters.
 
 IDs are opaque. The prefix prevents cross-entity substitution; code never interprets the random
 component.
+
+Execution viewing adds a bounded in-memory state machine: running → paused replay → running,
+or a terminal success/failure/business-outcome/termination. Frame and timeline sequences are
+monotonic within the execution, with actual run and phase metadata. The viewer's access token
+is independent of its public execution ID and never grants an intervention control lease.
+See [viewing lifecycle and limits](live-viewing.md#privacy-and-lifecycle).
 
 ### Version and content identity
 

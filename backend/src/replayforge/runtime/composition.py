@@ -272,23 +272,12 @@ class ManagedDiscoveryExecutor:
     engine: DiscoveryEngine
     driver: PlaywrightSurfaceDriver
     worker: SerialSessionWorker
-    live_sessions: dict[str, LiveBrowserSession]
-    lock: Lock
 
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
         try:
-            result = self.worker.call(lambda: self.engine.execute(request))
-        except BaseException:
+            return self.worker.call(lambda: self.engine.execute(request))
+        finally:
             self.worker.close(self.driver.close)
-            raise
-        if isinstance(result, InterventionRequiredResult):
-            with self.lock:
-                self.live_sessions[result.intervention_id] = LiveBrowserSession(
-                    self.worker, self.driver
-                )
-        else:
-            self.worker.close(self.driver.close)
-        return result
 
 
 @dataclass(slots=True)
@@ -684,9 +673,6 @@ def build_runtime(settings: object) -> LocalRuntime:
 
     def finalize_replay(result: RunResult) -> RunResult:
         if isinstance(result, InterventionRequiredResult):
-            feed = run_feeds.get(result.run_id)
-            if feed is not None:
-                feed.result(result.model_dump(mode="json"))
             return result
         with lock:
             journal = journals[result.run_id]
@@ -783,7 +769,6 @@ def build_runtime(settings: object) -> LocalRuntime:
             None,
             lease_service,
             journal,
-            interventions,
             clock,
             policy_resolver=discovery_policy,
             contract_planner=run_provider.plan,
@@ -792,11 +777,9 @@ def build_runtime(settings: object) -> LocalRuntime:
                 f"{application_registry.get(family).capability_namespace}.{operation}"
             ),
         )
-        return ManagedDiscoveryExecutor(engine, driver, worker, live_sessions, lock)
+        return ManagedDiscoveryExecutor(engine, driver, worker)
 
     def finalize_discovery(result: DiscoveryResult) -> DiscoveryResult:
-        if isinstance(result, InterventionRequiredResult):
-            return result
         with lock:
             journal = journals[result.run_id]
             classifications = result_classifications[result.run_id]

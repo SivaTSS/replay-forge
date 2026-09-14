@@ -96,6 +96,7 @@ class ReplayApplicationService:
                 artifact=validation_artifact,
                 tenant=tenant,
                 inputs=inputs,
+                allow_intervention=False,
             )
         )
         return self.result_finalizer(result) if self.result_finalizer is not None else result

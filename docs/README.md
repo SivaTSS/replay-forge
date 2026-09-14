@@ -16,7 +16,7 @@ flowchart LR
 ```
 
 Discovery suites validate and publish automatically; there is no human approval stage.
-Human intervention belongs to a paused live run.
+Human intervention belongs only to a paused live replay; blocked discovery stops automatically.
 
 ## Choose a review path
 
@@ -43,6 +43,7 @@ the repository—not approving a discovery publication.
 | How are unsafe actions, data, and handoff handled? | [Safety and handoff](safety-and-handoff.md) |
 | Which limits apply, and who may change them? | [Constraints and policy](constraints-and-policy.md) |
 | How do I run it, and what HTTP surface exists? | [Operations](operations.md) |
+| How do I watch a run and inspect earlier replay screens? | [Live execution viewing](live-viewing.md) |
 | What can the synthetic bank do, and how does it challenge automation? | [Demo bank](demo-bank.md) |
 | What do the tests and committed evidence prove? | [Verification](verification.md) |
 | How does the implementation map to the assignment? | [Requirements](requirements.md) |
@@ -58,7 +59,8 @@ Capability and replay. [REPORT.md](../REPORT.md) is the required seven-part desi
 | Discovery suite | A task draft, observed scenarios, deterministic validation, and automatic publication |
 | Capability artifact | The immutable, versioned execution contract; not its evidence bundle |
 | Run | One discovery or replay invocation |
-| Operator console | The intervention UI in `apps/control-plane`; not a general operations dashboard |
+| Execution console | Launch, live viewing, temporary replay history, and paused replay control in `apps/control-plane` |
+| Execution view | One ephemeral `exe_` launch containing actual `run_` identities; not a saved video |
 | Evidence bundle | Sanitized records proving a particular execution; not input to replay |
 
 “Reviewed configuration” means checked-in application or budget policy, not approval of
@@ -87,7 +89,7 @@ Every page uses these labels consistently:
 | Persistence | Implemented for required durable objects | Atomic capability/assets and evidence on disk; live operational state in memory |
 | Canvas/non-DOM browser control | Implemented, Tested | One canvas-only servicing workstation; OCR, frame-local relations, canonical signatures |
 | Native desktop control | Designed | Surface ports exist; no OS adapter executes them |
-| Full operations UI | Cut | The UI is an intervention console only |
+| Execution viewing | Implemented | Launch both modes, watch actual frames, inspect temporary replay history, and operate paused replay |
 | Distributed runtime | Cut | One process; one thread-affine worker per browser run |
 
 ## Documentation conventions

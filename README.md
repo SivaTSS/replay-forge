@@ -92,13 +92,20 @@ Start it after the target and runtime:
 npm_config_cache=/tmp/replayforge-npm-cache npx --yes pnpm@10.15.1 --filter @replayforge/control-plane dev --hostname 127.0.0.1 --port 3000
 ```
 
-Open `http://127.0.0.1:3000`. When a replay pauses, select its inbox entry, claim the
-retained browser, complete the interrupted step, and choose **Resume automation**. Successful
-ordinary replays do not require an operator. The browser regression injects a sensitive boundary
+Open `http://127.0.0.1:3000` to **Run and watch**. Choose Replay or Discovery, supply inputs
+or use explicit demo defaults, and watch actual browser frames and the step timeline.
+Replay's **Back / Next / Live** controls inspect temporary screen history without altering execution.
+When replay pauses, return Live, claim the retained browser, complete the interrupted step, and
+choose **Resume automation**. The standalone operator inbox is at `/interventions`.
+Discovery is unattended: blockers stop it; successful drafts are validated and published automatically.
+See [Live execution viewing](docs/live-viewing.md) for privacy, expiry, and exact behavior.
+The browser regression injects a sensitive boundary
 into a temporary copy of the payoff artifact to test this path; it does not publish a fake
 discovery or keep a special handoff capability in the production registry.
 
-The console polls because this slice needs a minimal real handoff, not continuous co-browsing. Every transition uses an exclusive, expiring, monotonically versioned lease. Heartbeats preserve active ownership; an abandoned expired claim can be reclaimed without allowing an active lease to be stolen. Operator IDs are local caller-supplied labels, not authentication.
+The console polls bounded in-memory frame/event buffers, not a video stream. Every control
+transition uses an exclusive, expiring, monotonically versioned lease. Historical screens are
+read-only and never authorize input. Operator IDs are local labels, not authentication.
 
 ## Run genuine discovery
 
@@ -182,7 +189,7 @@ backend/src/replayforge/
 └── runtime/         settings, composition, session worker
 
 apps/demo-bank/      synthetic target on :3001
-apps/control-plane/  intervention console on :3000
+apps/control-plane/  execution viewer and intervention console on :3000
 capabilities/        published immutable YAML versions
 evidence/            committed reviewer bundles; runtime output is ignored
 docs/                implementation-accurate design documentation
@@ -197,4 +204,9 @@ shared terminology. Start with [Architecture](docs/architecture.md),
 
 ## Deliberate cuts
 
-Published capability artifacts, content-addressed visual assets, and sanitized evidence are durable local files. Run journals, discovery-suite progress, leases, interventions, and live browser sessions remain in memory. The operator console is not a complete run or capability UI. There is no PostgreSQL adapter, WebSocket, distributed queue, authentication layer, native desktop adapter, or discovery continuation after human takeover. The visual adapter is implemented for browser-rendered surfaces; Citrix and native desktop transport remain outside this slice.
+Published capability artifacts, content-addressed visual assets, and sanitized evidence are durable
+local files. Journals, suite progress, leases, browser sessions, and bounded execution views remain
+in memory. Replay screenshots expire; no screen-history files are saved. There is no PostgreSQL
+adapter, WebSocket/video stream, distributed queue, production authentication, or native desktop
+adapter. Discovery never involves human takeover. Citrix and native desktop transport remain
+outside this browser-rendered implementation.

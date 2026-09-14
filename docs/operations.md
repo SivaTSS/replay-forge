@@ -5,7 +5,7 @@
 ## Local topology
 
 ```text
-http://127.0.0.1:3000  operator console
+http://127.0.0.1:3000  run launcher and live viewer; /interventions for operator inbox
 http://127.0.0.1:3001  synthetic bank
 http://127.0.0.1:8000  runtime API and /api/docs
 http://127.0.0.1:3100  optional local Langfuse for discovery
@@ -19,7 +19,7 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 |---|---|---|
 | `GET` | `/health/live` | Process is serving requests |
 | `GET` | `/health/ready` | Capability registry, application catalog, and every registered target are available |
-| `POST` | `/api/v1/discoveries` | Runs discovery synchronously; `202` only if intervention is returned |
+| `POST` | `/api/v1/discoveries` | Runs unattended discovery synchronously; returns success or failure |
 | `POST` | `/api/v1/discovery-suites` | Creates a draft suite and runs its primary discovery trace |
 | `GET` | `/api/v1/discovery-suites/{id}` | Reads sanitized suite status and coverage |
 | `POST` | `/api/v1/discovery-suites/{id}/scenarios` | Adds observed outcome, failure, or recovery evidence |
@@ -38,8 +38,15 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | `POST` | `/api/v1/interventions/{id}/heartbeat` | Renews ownership and increments lease version |
 | `POST` | `/api/v1/interventions/{id}/input` | Applies one frame-bound click, text, or key action |
 | `POST` | `/api/v1/interventions/{id}/terminate` | Terminates an open or owner-claimed intervention |
+| `GET` | `/api/v1/executions/catalog` | Capability input contracts, registered targets, explicit synthetic presets |
+| `POST` | `/api/v1/executions` | Starts managed replay or discovery; returns `202`, execution ID and viewer token |
+| `GET` | `/api/v1/executions/{id}?after=N` | Authorized state, frame metadata, incremental sanitized timeline, final result |
+| `GET` | `/api/v1/executions/{id}/frames/{sequence}` | Authorized transient PNG; `410` when a screen has expired |
 
-There are no implemented capability-list, run-read, event-read, evidence-download, cancellation, WebSocket, authentication, or fault-control endpoints. Evidence is inspected from the filesystem in this local submission.
+Execution status and frame reads require `X-Viewer-Token`; credentials never belong in URLs.
+There is no durable run-history browser, evidence-download API, active-run cancellation endpoint,
+WebSocket, production authentication, or fault-control API. See [live viewing](live-viewing.md)
+for launch semantics, replay history, limits, and privacy. Evidence remains inspectable on disk.
 
 ## Replay request and results
 
@@ -80,6 +87,7 @@ contain sensitive data. Every HTTP response receives an accepted or generated co
 | `REPLAYFORGE_EVIDENCE_DIRECTORY` | `evidence/runtime` | Mutable local evidence |
 | `REPLAYFORGE_DEMO_BASE_URL` | `http://127.0.0.1:3001` | Credential-free target origin |
 | `REPLAYFORGE_BROWSER_HEADLESS` | `true` | Chromium mode |
+| `REPLAYFORGE_VIEWER_PRESETS_FILE` | `config/servicing-discovery.yaml` | Explicit synthetic launch defaults; missing file or `None` in runtime composition means no presets |
 | `REPLAYFORGE_BROWSER_VIEWPORT_WIDTH` / `REPLAYFORGE_BROWSER_VIEWPORT_HEIGHT` | `1280` / `800` | CSS viewport used by the browser surface |
 | `REPLAYFORGE_BROWSER_DEVICE_SCALE_FACTOR` | `1.0` | Chromium DPR; screenshots and pointer regions remain CSS-pixel based |
 | `REPLAYFORGE_MODEL_POLICY_FILE` | `config/model-policy.yaml` | Reviewed discovery budget |
@@ -94,8 +102,8 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 
 | Option | Decision | Reason |
 |---|---|---|
-| Asynchronous queue and polling API | Rejected for this slice | Adds persistence and worker lifecycle without improving the core demonstration |
-| Synchronous invocation | **Chosen** | Exact behavior is visible in one request; browser work still stays on its owner thread |
+| Bounded asynchronous launch with polling | **Chosen for visual runs** | Return an identity immediately and observe execution without keeping the launch request open; no database required |
+| Synchronous invocation | Retained for API callers | Uses the same engines and owner-thread browser operations |
 | Generated frontend client | Not implemented | The small console uses local TypeScript shapes; API models remain authoritative |
 | Environment-selected model | Rejected | Prevents callers from bypassing reviewed cost and reasoning limits |
 | Local evidence path in API | Rejected | Callers receive opaque `evidence://` keys rather than filesystem paths |

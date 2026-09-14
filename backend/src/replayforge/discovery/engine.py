@@ -70,7 +70,7 @@ from replayforge.policy.models import (
     RunMode,
 )
 from replayforge.policy.types import Decision
-from replayforge.runs.ports import InterventionRouter, RunRecorder
+from replayforge.runs.ports import RunRecorder
 from replayforge.runs.results import (
     ArtifactPrivacyDiagnostic,
     FailureResult,
@@ -119,7 +119,6 @@ class DiscoveryEngine:
     effective_policy: EffectivePolicy | None
     lease_service: ControlLeaseService
     recorder: RunRecorder
-    intervention_router: InterventionRouter
     clock: Clock
     policy_resolver: Callable[[DiscoveryRequest], EffectivePolicy] | None = None
     contract_planner: Callable[[PlanningContext], CapabilityDraftSpec] | None = None
@@ -173,13 +172,10 @@ class DiscoveryEngine:
                     repeated_state = 0
                 previous_fingerprint = observation.fingerprint
                 if repeated_state >= request.max_repeated_state:
-                    result = self._intervene(
+                    result = self._stop_blocked(
                         request,
-                        session,
-                        lease.version,
                         "repeated_observation",
                         None,
-                        observation,
                     )
                     return result
 
@@ -212,13 +208,10 @@ class DiscoveryEngine:
                     details=self._proposal_summary(proposal),
                 )
                 if isinstance(proposal, EscalateProposal):
-                    result = self._intervene(
+                    result = self._stop_blocked(
                         request,
-                        session,
-                        lease.version,
                         proposal.reason_code,
                         None,
-                        observation,
                     )
                     return result
                 if isinstance(proposal, CompleteProposal):
@@ -291,23 +284,17 @@ class DiscoveryEngine:
                 )
                 previous_action = action_fingerprint
                 if repeated_action >= request.max_repeated_action:
-                    result = self._intervene(
+                    result = self._stop_blocked(
                         request,
-                        session,
-                        lease.version,
                         "repeated_action",
                         None,
-                        observation,
                     )
                     return result
                 if proposal.confidence < request.minimum_confidence:
-                    result = self._intervene(
+                    result = self._stop_blocked(
                         request,
-                        session,
-                        lease.version,
                         "low_model_confidence",
                         None,
-                        observation,
                     )
                     return result
 
@@ -622,13 +609,10 @@ class DiscoveryEngine:
                     recoverable=True,
                     effect_absent=True,
                 )
-            return self._intervene(
+            return self._stop_blocked(
                 request,
-                session,
-                lease_version,
                 decision.reason_code,
                 None,
-                before,
             )
         self.recorder.record("action_intent", request.run_id)
         if isinstance(proposal.action, ExtractAction):
@@ -707,17 +691,13 @@ class DiscoveryEngine:
             history += " Condition verified and retained in the recorded trace."
         return recorded, history
 
-    def _intervene(
+    def _stop_blocked(
         self,
         request: DiscoveryRequest,
-        session: SurfaceSession,
-        lease_version: int,
         code: str,
         step_id: str | None,
-        observation: NormalizedObservation,
     ) -> FailureResult:
-        # Discovery is unattended. A blocker must never create a claimable session.
-        del session, lease_version, observation
+        """Discovery is unattended; blockers never create a claimable session."""
         return self._failure(
             request, code, "Automated discovery stopped at a safety or progress boundary."
         ).model_copy(update={"step_id": step_id})

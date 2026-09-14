@@ -128,7 +128,10 @@ length, never manual text.
 Resume validates fresh location and the interrupted step's effect or a declared business outcome.
 An unchanged state cannot resume. Successful validation restores automation ownership and continues
 the remaining steps. HTTP frame polling provides the required real handoff with modest transport
-complexity. Discovery can pause for control, but its automatic continuation remains a documented cut.
+complexity. Discovery is unattended: blockers return a typed failure and close the session.
+The execution console launches either mode, displays actual frames and a sanitized timeline,
+and provides bounded in-memory Back/Next/Live inspection for replay. Historical screens never
+authorize input. Discovery validation and publication remain automatic, without human approval.
 
 ## 6. Safety
 
@@ -163,9 +166,9 @@ those engine mechanisms have independent regression tests, not fabricated discov
 |---|---|
 | PostgreSQL and distributed workers | Saved capabilities need durable files; multi-process coordination would justify a transactional repository |
 | S3 | Local durable evidence satisfies this single-node submission |
-| Full operations product and co-browsing stream | A focused polling console proves real handoff |
+| Durable screen recordings and continuous video | Step-wise live viewing and temporary replay inspection avoid a persistent raw-screen archive |
 | Native desktop adapter | Typed surface seam exists; OS transport requires separate implementation |
-| Discovery continuation after human control | Replay continuation is implemented; discovery needs a separately validated continuation model |
+| Human intervention during discovery | Discovery is intentionally unattended; live human control and resume belong to replay |
 | Tenant overlay engine | Shared-artifact validation proves reuse; specialization design is documented |
 | LLM replay fallback | Finite deterministic recovery preserves the production model boundary |
 

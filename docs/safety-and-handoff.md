@@ -128,7 +128,10 @@ sequenceDiagram
 
 Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence. Before persistence, every screenshot is fully masked in memory: neither DOM selectors nor OCR can establish that all remaining pixels are public.
 
-Discovery can pause and expose the same session, but deterministic continuation after manual work is currently implemented only for replay. Discovery resume reopens safely because no continuation is available.
+Discovery is unattended. Low confidence, repeated state/action, model escalation, or an unresolved
+safety boundary returns a typed failure and closes its browser; it does not create a human session.
+Replay retains its existing same-session handoff and verified continuation. In the execution
+viewer, earlier screenshots are read-only; return Live before claiming or sending input.
 
 ## Stale-input protection
 
@@ -163,6 +166,7 @@ different paths, with different recipients and lifetimes.
 | Discovery perception | OpenAI adapter → remote provider | Unmasked screenshot and UI/OCR facts; visible customer values can be present even though input values are omitted from structured input fields |
 | Model-call metrics | Local Langfuse | Model identity, token/cost usage, latency, and bounded outcomes; no prompt, response, or screenshot payload |
 | Live manual control | Current human lease holder | Unmasked viewport; transient and non-cacheable, not a retained evidence image |
+| Execution viewing | Holder of the per-execution viewer token | Actual frames and results; bounded in-memory retention, no screenshot files, no control authority |
 | Successful invocation | API caller | Typed task outputs; evidence redaction does not redact the caller's result |
 | Durable evidence | Confined local files | Restricted events/results; fully masked viewport images preserve dimensions, not visual content |
 | Published capability | Local registry | Symbolic bindings and semantic targets; not the original customer inputs or model transcript |

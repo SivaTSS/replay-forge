@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from replayforge.discovery.constraints import (
     DEFAULT_DISCOVERY_STEPS,
@@ -63,6 +63,46 @@ class DiscoveryLaunch(DiscoveryInvocation):
 
 class LaunchRequest(ApiModel):
     execution: ReplayLaunch | DiscoveryLaunch = Field(discriminator="mode")
+
+
+class ViewerStartResponse(ApiModel):
+    execution_id: str = Field(pattern=r"^exe_[0-9a-f]{32}$")
+    viewer_token: str = Field(min_length=32, max_length=100, repr=False)
+
+
+class ViewerFrameMetadata(ApiModel):
+    sequence: int = Field(ge=1)
+    run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
+    phase: str = Field(min_length=1, max_length=100)
+    captured_at: AwareDatetime
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    event_sequence: int = Field(ge=0)
+
+
+class ViewerEvent(ApiModel):
+    sequence: int = Field(ge=1)
+    run_id: str = Field(pattern=r"^run_[0-9a-f]{32}$")
+    phase: str = Field(min_length=1, max_length=100)
+    event_type: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    step_id: str | None
+    occurred_at: AwareDatetime
+    details: dict[str, JsonValue]
+
+
+class ViewerSnapshot(ApiModel):
+    execution_id: str = Field(pattern=r"^exe_[0-9a-f]{32}$")
+    mode: Literal["replay", "discovery"]
+    state: Literal["running", "paused", "success", "failure", "business_outcome", "terminated"]
+    phase: str = Field(min_length=1, max_length=100)
+    run_ids: tuple[str, ...]
+    frames: tuple[ViewerFrameMetadata, ...]
+    evicted_frames: int = Field(ge=0)
+    events: tuple[ViewerEvent, ...]
+    event_cursor: int = Field(ge=0)
+    first_event_sequence: int | None = Field(default=None, ge=1)
+    result: dict[str, JsonValue] | None
+    retention_seconds: int = Field(ge=1)
 
 
 class DiscoverySuiteScenario(ApiModel):

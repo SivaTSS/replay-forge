@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Header, Query, Response
 from fastapi.responses import JSONResponse
 
-from replayforge.api.contracts import LaunchRequest
+from replayforge.api.contracts import LaunchRequest, ViewerSnapshot, ViewerStartResponse
 from replayforge.api.services import ExecutionController
 from replayforge.capabilities.values import ContractValidationError
 from replayforge.runs.viewing import ViewingError
@@ -18,23 +18,30 @@ def viewing_router(controller: ExecutionController) -> APIRouter:
     def catalog() -> JSONResponse:
         return JSONResponse(controller.catalog(), headers=HEADERS)
 
-    @router.post("")
+    @router.post("", response_model=ViewerStartResponse, status_code=202)
     def start(body: LaunchRequest) -> JSONResponse:
         try:
             started = controller.start(body)
         except (ContractValidationError, ValueError) as error:
             del error
             raise ViewingError("execution_input_invalid", 422) from None
-        return JSONResponse(started, status_code=202, headers=HEADERS)
+        return JSONResponse(
+            ViewerStartResponse.model_validate(started).model_dump(mode="json"),
+            status_code=202,
+            headers=HEADERS,
+        )
 
-    @router.get("/{execution_id}")
+    @router.get("/{execution_id}", response_model=ViewerSnapshot)
     def snapshot(
         execution_id: str,
         x_viewer_token: str = Header(default="", max_length=100),
         after: int = Query(default=0, ge=0),
     ) -> JSONResponse:
         return JSONResponse(
-            controller.viewer.snapshot(execution_id, x_viewer_token, after), headers=HEADERS
+            ViewerSnapshot.model_validate(
+                controller.viewer.snapshot(execution_id, x_viewer_token, after)
+            ).model_dump(mode="json"),
+            headers=HEADERS,
         )
 
     @router.get("/{execution_id}/frames/{sequence}")
