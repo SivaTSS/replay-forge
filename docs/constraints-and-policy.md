@@ -76,6 +76,11 @@ analysis pixels and 2,000 components, and grounding at ten seconds. The threshol
 `config/vision-policy.yaml` are a reviewed deterministic profile validated by the viewport/DPR
 matrix; they are not claimed as universal computer-vision constants.
 
+OpenCV and ONNX each use one native computation thread. Shared OCR initialization/inference is
+serialized; browser sessions retain their individual owner threads. This prevents host-wide native
+thread pools from multiplying per-run work and consuming the grounding time budget. Frontend builds
+run one application at a time for the same resource-predictability reason.
+
 ## Decisions
 
 | Option | Decision | Why |

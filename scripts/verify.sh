@@ -7,6 +7,7 @@ set -euo pipefail
 export UV_CACHE_DIR PLAYWRIGHT_BROWSERS_PATH npm_config_cache
 
 uv sync --extra dev --frozen
+uv run playwright install chromium
 npx --yes pnpm@10.15.1 install --frozen-lockfile
 uv run ruff format --check backend scripts pyproject.toml
 uv run ruff check backend scripts

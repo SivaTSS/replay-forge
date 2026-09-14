@@ -7,6 +7,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 from math import exp
+from threading import Lock
 from time import monotonic
 from typing import Literal, Protocol, cast
 
@@ -42,6 +43,11 @@ class TextRecognizer(Protocol):
     def recognize(self, png: bytes) -> tuple[VisualToken, ...]: ...
 
 
+# Runs already have their own workers. OpenCV's machine-wide default thread pool
+# oversubscribes large hosts and can exhaust a grounding deadline on a small frame.
+# Configure once at import, before any session workers are started.
+cv2.setNumThreads(1)
+
 VisualNodeKind = Literal["phrase", "control", "image", "container"]
 
 
@@ -71,11 +77,20 @@ class RapidOcrTextRecognizer:
     """Lazy local OCR adapter; model initialization never performs a network call."""
 
     _engine: RapidOCR | None = field(default=None, init=False, repr=False)
+    _lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
     def recognize(self, png: bytes) -> tuple[VisualToken, ...]:
-        if self._engine is None:
-            self._engine = RapidOCR()
-        result = cast(object, self._engine(png))
+        # RapidOCR mutates its runtime parameters during calls; the recognizer is
+        # shared by runs, so initialization and inference must have one owner.
+        with self._lock:
+            if self._engine is None:
+                self._engine = RapidOCR(
+                    params={
+                        "EngineConfig.onnxruntime.intra_op_num_threads": 1,
+                        "EngineConfig.onnxruntime.inter_op_num_threads": 1,
+                    }
+                )
+            result = cast(object, self._engine(png))
         boxes = getattr(result, "boxes", None)
         texts = getattr(result, "txts", None)
         scores = getattr(result, "scores", None)

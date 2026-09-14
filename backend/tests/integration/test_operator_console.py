@@ -13,10 +13,12 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 
 
-def _wait(url: str) -> None:
+def _wait(url: str, process: subprocess.Popen[bytes]) -> None:
     # Runtime composition loads the OCR model; coverage instrumentation can make
     # cold startup materially slower than the normal local path.
     for _ in range(600):
+        if process.poll() is not None:
+            raise RuntimeError(f"test service exited before readiness: {url}")
         try:
             with urlopen(url, timeout=1) as response:
                 if response.status == 200:
@@ -44,6 +46,7 @@ def operator_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     repository = Path(__file__).resolve().parents[3]
     evidence = tmp_path_factory.mktemp("operator-evidence")
     environment = {**os.environ, "NEXT_TELEMETRY_DISABLED": "1"}
+    log = (evidence / "services.log").open("wb")
     processes = [
         subprocess.Popen(
             [
@@ -56,12 +59,12 @@ def operator_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
             ],
             cwd=repository / "apps/demo-bank",
             env=environment,
-            stdout=subprocess.DEVNULL,
+            stdout=log,
             stderr=subprocess.STDOUT,
         )
     ]
     try:
-        _wait("http://127.0.0.1:3001/harbor")
+        _wait("http://127.0.0.1:3001/harbor", processes[-1])
         processes.append(
             subprocess.Popen(
                 [
@@ -78,11 +81,11 @@ def operator_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
                     "PYTHONPATH": str(repository / "backend/src"),
                     "REPLAYFORGE_EVIDENCE_DIRECTORY": str(evidence),
                 },
-                stdout=subprocess.DEVNULL,
+                stdout=log,
                 stderr=subprocess.STDOUT,
             )
         )
-        _wait("http://127.0.0.1:8000/health/live")
+        _wait("http://127.0.0.1:8000/health/live", processes[-1])
         processes.append(
             subprocess.Popen(
                 [
@@ -95,17 +98,18 @@ def operator_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
                 ],
                 cwd=repository / "apps/control-plane",
                 env=environment,
-                stdout=subprocess.DEVNULL,
+                stdout=log,
                 stderr=subprocess.STDOUT,
             )
         )
-        _wait("http://127.0.0.1:3000")
+        _wait("http://127.0.0.1:3000", processes[-1])
         yield evidence
     finally:
         for process in reversed(processes):
             process.terminate()
         for process in reversed(processes):
             process.wait(timeout=10)
+        log.close()
 
 
 @pytest.mark.integration
