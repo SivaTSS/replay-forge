@@ -17,7 +17,6 @@ workflows:
     expected_risk: read_only
     expected_inputs: [member_id, merchant, transaction_date, amount]
     expected_outputs: [transaction_reference, merchant, posted_date, amount, currency, status]
-    artifact_output: capabilities/member.transaction_investigation/1.0.0.yaml
   loan_payoff_quote:
     goal: >-
       For the synthetic member, open Auto loan, calculate a payoff quote for the supplied
@@ -34,7 +33,6 @@ workflows:
     expected_risk: read_only
     expected_inputs: [member_id, payoff_date]
     expected_outputs: [principal_balance, accrued_interest, payoff_amount, currency, good_through_date]
-    artifact_output: capabilities/member.loan_payoff_quote/1.0.0.yaml
   temporary_card_lock:
     goal: >-
       For the synthetic member, open Checking and Card controls, select card_last4, review and
@@ -51,4 +49,3 @@ workflows:
     expected_risk: reversible
     expected_inputs: [member_id, card_last4]
     expected_outputs: [card_last4, lock_status, effective_at, confirmation_reference]
-    artifact_output: capabilities/member.temporary_card_lock/1.0.0.yaml

@@ -102,6 +102,11 @@ two are read-only; card locking is reversible because the same session exposes a
 inverse, `Unlock card`. The suite runner discovers each task independently, validates it on Harbor
 and Summit, and writes its own immutable artifact. No post-discovery reviewer exists.
 
+The runtime publishes each new capability version to its configured registry. The capture command
+exports a separate owner-only copy under a fresh `.local/discovery-captures/capture-*` directory;
+its summary includes the actual version and path. Re-running discovery never overwrites committed
+fixtures. `--output-directory` changes the private export root.
+
 ## Failure behavior
 
 | Condition | HTTP/result behavior |

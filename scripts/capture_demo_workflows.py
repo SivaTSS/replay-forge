@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from replayforge.evidence.discovery_capture import SuiteCaptureRequest, capture_suite
+from replayforge.shared.yaml import load_unique_yaml
 
 
 def _workflow_request(raw: dict[str, Any]) -> SuiteCaptureRequest:
@@ -35,13 +36,19 @@ def main() -> None:
     parser.add_argument("--spec", type=Path, default=Path("config/demo-discovery.yaml"))
     parser.add_argument("--workflow", action="append", help="Workflow key; omit to capture all")
     parser.add_argument("--resume-suite", help="Resume validation for one existing suite ID")
+    parser.add_argument("--output-directory", type=Path, default=Path(".local/discovery-captures"))
     arguments = parser.parse_args()
     if not 10 <= arguments.timeout_seconds <= 600:
         parser.error("timeout must be between 10 and 600 seconds")
-    raw = yaml.safe_load(arguments.spec.read_text(encoding="utf-8"))
+    raw = load_unique_yaml(arguments.spec.read_text(encoding="utf-8"))
     workflows = raw.get("workflows") if isinstance(raw, dict) else None
     if not isinstance(workflows, dict) or not workflows:
         parser.error("spec must contain a non-empty workflows mapping")
+    if any(
+        not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{1,63}", name)
+        for name in workflows
+    ):
+        parser.error("workflow names must be safe lowercase identifiers")
     selected = arguments.workflow or list(workflows)
     unknown = sorted(set(selected) - set(workflows))
     if unknown:
@@ -49,13 +56,14 @@ def main() -> None:
     if arguments.resume_suite and len(selected) != 1:
         parser.error("--resume-suite requires exactly one --workflow")
 
+    arguments.output_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    capture_directory = Path(tempfile.mkdtemp(prefix="capture-", dir=arguments.output_directory))
     summaries: dict[str, dict[str, str]] = {}
     for name in selected:
         item = workflows[name]
         if not isinstance(item, dict):
             parser.error(f"workflow {name} must be a mapping")
-        output = Path(str(item["artifact_output"]))
-        output.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        output = capture_directory / f"{name}.yaml"
         summaries[name] = capture_suite(
             arguments.base_url,
             arguments.timeout_seconds,
