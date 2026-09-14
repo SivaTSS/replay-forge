@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 from typing import Any, cast
 
 import cv2
@@ -617,6 +617,68 @@ def test_compact_text_enclosures_do_not_depend_on_page_median_font(
         with pytest.raises(SurfaceError) as error:
             vision.resolve(candidate, encoded.tobytes(), viewport)
         assert error.value.code == "target_ambiguous"
+
+
+@pytest.mark.parametrize("scale", [0.75, 1.0, 1.5])
+@pytest.mark.parametrize("buttons", [0, 1, 2])
+@pytest.mark.parametrize("dark", [False, True])
+def test_native_label_inspection_preserves_thin_borders_and_ambiguity(
+    tmp_path: Path, scale: float, buttons: int, dark: bool
+) -> None:
+    def region(x: int, y: int, width: int, height: int) -> ScreenRegion:
+        return ScreenRegion(*(round(value * scale) for value in (x, y, width, height)))
+
+    background, ink, border = (30, 240, 85) if dark else (245, 25, 190)
+    frame = np.full((round(900 * scale), round(1600 * scale), 3), background, dtype=np.uint8)
+    # A row crossing every crop boundary must not become a local button.
+    row = region(10, 65, 1500, 80)
+    cv2.rectangle(frame, (row.x, row.y), (row.x + row.width, row.y + row.height), (border,) * 3, 1)
+    tokens = (
+        VisualToken("Record 42", 0.99, region(30, 93, 100, 20)),
+        VisualToken("Open", 0.99, region(520, 93, 45, 20)),
+        VisualToken("Open", 0.99, region(1020, 93, 45, 20)),
+    )
+    for token in tokens[1:]:
+        cv2.putText(
+            frame,
+            "Open",
+            (token.region.x + 2, token.region.y + round(15 * scale)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5 * scale,
+            (ink,) * 3,
+            1,
+            cv2.LINE_AA,
+        )
+    for x in (1013, 513)[:buttons]:
+        box = region(x, 88, 60, 29)
+        cv2.rectangle(
+            frame, (box.x, box.y), (box.x + box.width, box.y + box.height), (border,) * 3, 1
+        )
+    ok, encoded = cv2.imencode(".png", frame)
+    assert ok
+    png = encoded.tobytes()
+    vision = semantic_vision(tmp_path, tokens)
+    assert vision.policy is not None
+    # Deliberately coarse whole-frame analysis exercises the native local path;
+    # this does not change the production policy or screenshot resolution.
+    vision.policy = vision.policy.model_copy(
+        update={
+            "segmentation": vision.policy.segmentation.model_copy(
+                update={"maximum_analysis_pixels": 50000}
+            )
+        }
+    )
+    viewport = Viewport(frame.shape[1], frame.shape[0])
+    matches = tokens[1:]
+    selected = vision._prefer_unique_control(matches, png, viewport, monotonic())
+    assert selected == ((tokens[2],) if buttons == 1 else matches)
+    # Clipping at the viewport must not create an enclosing component either.
+    assert (
+        vision._local_text_enclosures(
+            frame, ScreenRegion(frame.shape[1] + 100, 0, 10, 10), monotonic()
+        )
+        == ()
+    )
 
 
 def test_ocr_relative_text_and_region_extraction(tmp_path: Path) -> None:

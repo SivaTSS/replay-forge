@@ -175,6 +175,7 @@ authenticity or proof that a model understood the task.
 |---|---|---|
 | Exact output assertions on changed inputs | Only assert HTTP success | Detect wrong record, stale input, and neighboring-field extraction |
 | Current-artifact input and scenario acceptance checks | Check only artifact syntax or historical versions | Every supplied input must participate in an action/target, and current artifacts must contain the declared case set; these are distribution tests, not task-specific runtime rules |
+| Thin-border tests across scales and light/dark backgrounds | Assume a component box proves a control | Real text pixels, clipped rows, zero/one/two buttons and coarse whole-frame analysis exercise local border confirmation and fail-closed ambiguity |
 | Actual Chromium pointer/keyboard tests | Mock the application for end-to-end claims | Exercise rendering, focus, scrolling, and retained sessions |
 | Temporary explicit policy fixtures | Keep obsolete production demo artifacts | Isolate engine fault/handoff tests without maintaining a second UI |
 | Isolated operator test ports | Reuse fixed runtime/console ports | Avoid disrupting an operator's running services |

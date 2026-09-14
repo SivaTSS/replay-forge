@@ -231,12 +231,65 @@ class VisionGrounder:
             for control in (*graph.of_kind("control"), *graph.of_kind("text_enclosure"))
             if sum(self._center_in(match.region, control.region) for match in matches) == 1
         )
+        # Global segmentation has a bounded analysis resolution. Thin borders can
+        # disappear there, so inspect each competing label locally at native
+        # resolution. Inspect ALL matches: discovering a second compact button
+        # must restore ambiguity, not silently favor the globally visible one.
+        image = self._decode(png)
+        enclosures = tuple(
+            region
+            for match in matches
+            for search_region in (
+                match.region,
+                *(
+                    control.region
+                    for control in controls
+                    if self._strictly_contains(control.region, match.region)
+                ),
+            )
+            for region in self._local_text_enclosures(
+                image, match.region, started, search_region=search_region
+            )
+            if sum(self._center_in(other.region, region) for other in matches) == 1
+        )
         contained = tuple(
             match
             for match in matches
-            if any(self._center_in(match.region, control.region) for control in controls)
+            if any(self._center_in(match.region, region) for region in enclosures)
         )
         return contained if len(contained) == 1 else matches
+
+    def _local_text_enclosures(
+        self,
+        image: np.ndarray,
+        label: ScreenRegion,
+        started: float,
+        *,
+        search_region: ScreenRegion | None = None,
+    ) -> tuple[ScreenRegion, ...]:
+        """Retain complete local borders, never contours created by clipping a row."""
+        padding = label.height
+        search = label if search_region is None else search_region
+        left, top = max(0, search.x - padding), max(0, search.y - padding)
+        right = min(image.shape[1], search.x + search.width + padding)
+        bottom = min(image.shape[0], search.y + search.height + padding)
+        if right <= left or bottom <= top:
+            return ()
+        crop = image[top:bottom, left:right]
+        local_label = ScreenRegion(label.x - left, label.y - top, label.width, label.height)
+        local_frame = ScreenRegion(0, 0, right - left, bottom - top)
+        boxes = self._segmented_boxes(
+            crop,
+            self._edge_map(crop, normalize=False),
+            started,
+            reference_area=image.shape[0] * image.shape[1],
+        )
+        return tuple(
+            ScreenRegion(left + box.x, top + box.y, box.width, box.height)
+            for box in boxes
+            if self._strictly_contains(local_frame, box)
+            and self._strictly_contains(box, local_label)
+        )
 
     def tokens(self, png: bytes) -> tuple[VisualToken, ...]:
         return self._tokens(png)
@@ -787,7 +840,12 @@ class VisionGrounder:
         return graph
 
     def _segmented_boxes(
-        self, image: np.ndarray, edge: np.ndarray, started: float
+        self,
+        image: np.ndarray,
+        edge: np.ndarray,
+        started: float,
+        *,
+        reference_area: int | None = None,
     ) -> tuple[ScreenRegion, ...]:
         policy = self._required_policy()
         image_area = max(1, image.shape[0] * image.shape[1])
@@ -812,8 +870,11 @@ class VisionGrounder:
         for mode in (cv2.THRESH_BINARY, cv2.THRESH_BINARY_INV):
             _threshold, binary = cv2.threshold(gray, 0, 255, mode | cv2.THRESH_OTSU)
             sources.append(binary)
-        minimum_area = image_area * policy.segmentation.minimum_component_area_ratio
-        maximum_area = image_area * policy.segmentation.maximum_component_area_ratio
+        # Local inspection retains the same surface-relative component limits;
+        # cropping must not make a small button into a prohibited "large" object.
+        component_area = image_area if reference_area is None else reference_area
+        minimum_area = component_area * policy.segmentation.minimum_component_area_ratio
+        maximum_area = component_area * policy.segmentation.maximum_component_area_ratio
         boxes: list[ScreenRegion] = []
         for source in sources:
             contours, _hierarchy = cv2.findContours(source, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -1482,7 +1543,10 @@ class VisionGrounder:
         return cast(np.ndarray, image)
 
     @staticmethod
-    def _edge_map(image: np.ndarray) -> np.ndarray:
+    def _edge_map(image: np.ndarray, *, normalize: bool = True) -> np.ndarray:
         gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        normalized = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
-        return cast(np.ndarray, cv2.Canny(normalized, 60, 160))
+        # On small label crops, equalization can flatten a thin gray border.
+        # Native contrast uses the same edge thresholds without resampling.
+        if normalize:
+            gray = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+        return cast(np.ndarray, cv2.Canny(gray, 60, 160))
