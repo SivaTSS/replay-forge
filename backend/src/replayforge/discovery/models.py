@@ -77,7 +77,10 @@ class CapabilityDraftSpec(DiscoveryModel):
                 raise ValueError(f"capability drafts cannot declare more than 50 {contract_name}s")
             if len(set(contract.required)) != len(contract.required):
                 raise ValueError(f"{contract_name} contract contains duplicate required fields")
-            for name in names:
+            pending = list(contract.properties.items())
+            while pending:
+                name, schema = pending.pop()
+                pending.extend(schema.properties.items())
                 if not re.fullmatch(r"[a-z][a-z0-9_]{1,63}", name):
                     raise ValueError(f"{contract_name} field name is invalid")
                 if any(
@@ -85,7 +88,6 @@ class CapabilityDraftSpec(DiscoveryModel):
                     for token in {"password", "secret", "token", "credential", "api", "key"}
                 ):
                     raise ValueError(f"{contract_name} field name appears credential-related")
-                schema = contract.properties[name]
                 if schema.data_classification in {
                     DataClassification.CREDENTIAL,
                     DataClassification.SECRET,

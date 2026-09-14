@@ -8,7 +8,7 @@ import re
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
@@ -47,6 +47,10 @@ class CapabilityVersionRecord:
     artifact: CapabilityArtifact
     content_hash: str
     published_at: datetime
+
+    def snapshot(self) -> CapabilityVersionRecord:
+        """Detach nested mappings: frozen Pydantic models are not deeply frozen."""
+        return replace(self, artifact=self.artifact.model_copy(deep=True))
 
 
 class CapabilityRegistry(Protocol):
@@ -97,14 +101,14 @@ class InMemoryCapabilityRegistry:
                     raise CapabilityConflictError(
                         "capability versions are immutable and cannot be overwritten"
                     )
-                return existing
+                return existing.snapshot()
             record = CapabilityVersionRecord(
-                artifact=artifact,
+                artifact=artifact.model_copy(deep=True),
                 content_hash=content_hash,
                 published_at=self.clock.now(),
             )
             self._records[key] = record
-            return record
+            return record.snapshot()
 
     def publish_next(self, artifact: CapabilityArtifact) -> CapabilityVersionRecord:
         capability_id = artifact.capability.id
@@ -123,12 +127,13 @@ class InMemoryCapabilityRegistry:
                 version = proposed
             version_text = ".".join(str(part) for part in version)
             candidate = artifact.model_copy(
+                deep=True,
                 update={
                     "capability": artifact.capability.model_copy(update={"version": version_text}),
                     "provenance": artifact.provenance.model_copy(
                         update={"artifact_content_hash": None}
                     ),
-                }
+                },
             )
             content_hash = artifact_content_hash(candidate)
             candidate = candidate.model_copy(
@@ -140,12 +145,12 @@ class InMemoryCapabilityRegistry:
             )
             record = CapabilityVersionRecord(candidate, content_hash, self.clock.now())
             self._records[(capability_id, version_text)] = record
-            return record
+            return record.snapshot()
 
     def get(self, capability_id: str, version: str) -> CapabilityVersionRecord:
         with self._lock:
             try:
-                return self._records[(capability_id, version)]
+                return self._records[(capability_id, version)].snapshot()
             except KeyError as error:
                 raise CapabilityNotFoundError(
                     "capability or exact version was not found"
@@ -160,7 +165,7 @@ class InMemoryCapabilityRegistry:
     def versions(self, capability_id: str) -> tuple[CapabilityVersionRecord, ...]:
         with self._lock:
             records = tuple(
-                record
+                record.snapshot()
                 for (registered_id, _), record in self._records.items()
                 if registered_id == capability_id
             )

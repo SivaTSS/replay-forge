@@ -71,7 +71,7 @@ def test_lowercase_is_an_explicit_extraction_transform(
     assert action.transform == "lowercase"
 
 
-def test_valid_artifact_is_deeply_immutable(valid_artifact_data: dict[str, Any]) -> None:
+def test_artifact_model_rejects_field_reassignment(valid_artifact_data: dict[str, Any]) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
 
     with pytest.raises(ValidationError, match="frozen"):

@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from replayforge.capabilities.models import JsonValueType, ObjectContract, ValueSchema
+from replayforge.policy.types import DataClassification
 
 
 class ContractValidationError(ValueError):
@@ -27,6 +28,39 @@ def resolve_input(inputs: dict[str, Any], path: str) -> Any:
             raise ContractValidationError(path, "input_binding_missing")
         current = current[part]
     return current
+
+
+def contract_classifications(
+    contract: ObjectContract, prefix: str
+) -> dict[str, DataClassification]:
+    """Preserve nested classifications when preparing a result for redaction."""
+    result: dict[str, DataClassification] = {}
+
+    def visit(schema: ValueSchema, path: str) -> None:
+        result[path] = schema.data_classification
+        for name, child in schema.properties.items():
+            visit(child, f"{path}.{name}")
+
+    for name, schema in contract.properties.items():
+        visit(schema, f"{prefix}.{name}")
+    return result
+
+
+def binding_classification(
+    contract: ObjectContract, path: str, forbidden: frozenset[DataClassification]
+) -> DataClassification | None:
+    """A forbidden parent classification also protects its nested fields."""
+    properties = contract.properties
+    classification = None
+    for part in path.split("."):
+        schema = properties.get(part)
+        if schema is None:
+            return None
+        classification = schema.data_classification
+        if classification in forbidden:
+            return classification
+        properties = schema.properties
+    return classification
 
 
 def validate_object(

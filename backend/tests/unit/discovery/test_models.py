@@ -11,7 +11,12 @@ from replayforge.capabilities.models import (
     LocatorStrategy,
     NavigateAction,
 )
-from replayforge.discovery.models import ActProposal, DiscoverySuccess, RecordedDiscoveryStep
+from replayforge.discovery.models import (
+    ActProposal,
+    CapabilityDraftSpec,
+    DiscoverySuccess,
+    RecordedDiscoveryStep,
+)
 from replayforge.policy.types import Risk
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, Viewport
@@ -27,6 +32,29 @@ def observation() -> NormalizedObservation:
         fingerprint="frame-state",
         landmarks=("Member Search",),
     )
+
+
+def test_nested_secret_cannot_hide_inside_a_public_discovery_contract(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    inputs = valid_artifact_data["inputs"]
+    inputs["properties"]["member_id"] = {
+        "type": "object",
+        "description": "Member",
+        "data_classification": "public",
+        "properties": {
+            "value": {"type": "string", "description": "Value", "data_classification": "secret"}
+        },
+    }
+    with pytest.raises(ValueError, match="forbidden field"):
+        CapabilityDraftSpec(
+            operation_slug="lookup_member",
+            name="Lookup",
+            description="Read member",
+            inputs=inputs,
+            outputs=valid_artifact_data["outputs"],
+            risk=Risk.READ_ONLY,
+        )
 
 
 def test_discovery_actions_enforce_target_pairing() -> None:

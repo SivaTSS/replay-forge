@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from replayforge.capabilities.models import CapabilityArtifact
+from replayforge.shared.yaml import load_unique_yaml
 
 
 class ArtifactParseError(ValueError):
@@ -19,7 +20,7 @@ class ArtifactParseError(ValueError):
 
 def load_artifact_yaml(content: str) -> CapabilityArtifact:
     try:
-        raw = yaml.safe_load(content)
+        raw = load_unique_yaml(content)
     except yaml.YAMLError as exc:
         raise ArtifactParseError("artifact is not valid safe YAML") from exc
     if not isinstance(raw, dict):

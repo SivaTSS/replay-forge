@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
@@ -174,7 +175,7 @@ class InMemoryRunJournal:
 
     def events(self) -> tuple[RunEvent, ...]:
         with self._lock:
-            return tuple(self._events)
+            return deepcopy(tuple(self._events))
 
     def finalize(
         self,

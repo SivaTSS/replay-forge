@@ -48,6 +48,11 @@ _COMMITTED_ARTIFACT_HASHES = {
 }
 
 
+def test_yaml_cannot_silently_overwrite_reviewed_fields() -> None:
+    with pytest.raises(ArtifactParseError, match="valid safe YAML"):
+        load_artifact_yaml("schema_version: '1.4'\nschema_version: '1.0'\n")
+
+
 def test_yaml_round_trip_preserves_artifact_and_hash(
     valid_artifact_data: dict[str, Any],
 ) -> None:

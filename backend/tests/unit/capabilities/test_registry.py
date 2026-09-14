@@ -36,7 +36,7 @@ def test_registry_publishes_and_resolves_exact_version(
     record = registry.publish(artifact)
 
     assert registry.ready()
-    assert registry.get(artifact.capability.id, "1.0.0") is record
+    assert registry.get(artifact.capability.id, "1.0.0") == record
     assert record.published_at == instant
     assert record.content_hash.startswith("sha256:")
 
@@ -45,7 +45,22 @@ def test_identical_publish_is_idempotent(valid_artifact_data: dict[str, Any]) ->
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
     artifact = _artifact(valid_artifact_data)
 
-    assert registry.publish(artifact) is registry.publish(artifact)
+    assert registry.publish(artifact) == registry.publish(artifact)
+
+
+def test_nested_mutation_cannot_change_published_content(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
+    artifact = _artifact(valid_artifact_data)
+    published = registry.publish(artifact)
+    artifact.inputs.properties.clear()
+    published.artifact.outputs.properties.clear()
+    fetched = registry.get(published.artifact.capability.id, "1.0.0")
+    assert fetched.artifact.inputs.properties
+    assert fetched.artifact.outputs.properties
+    fetched.artifact.inputs.properties.clear()
+    assert registry.latest(published.artifact.capability.id).artifact.inputs.properties
 
 
 def test_version_cannot_be_overwritten(valid_artifact_data: dict[str, Any]) -> None:

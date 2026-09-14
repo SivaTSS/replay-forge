@@ -34,7 +34,10 @@ class _DecisionContext(TypedDict):
 
 
 def _canonical_origin(origin: str) -> str | None:
-    parsed = urlsplit(origin)
+    try:
+        parsed = urlsplit(origin)
+    except ValueError:
+        return None
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return None
     if (

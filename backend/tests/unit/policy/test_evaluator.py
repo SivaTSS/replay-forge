@@ -61,6 +61,7 @@ def test_known_read_only_field_can_accept_search_input(
         ({"control_owner": "automation_paused"}, "control_owner_mismatch"),
         ({"origin": "https://evil.example"}, "origin_not_allowed"),
         ({"origin": "not-an-origin"}, "origin_not_allowed"),
+        ({"origin": "http://[invalid"}, "origin_not_allowed"),
         ({"origin": "http://demo.local:3001?tenant=evil"}, "origin_not_allowed"),
         ({"origin": "http://demo.local:3001#other"}, "origin_not_allowed"),
         ({"origin": "http://demo.local:invalid"}, "origin_not_allowed"),

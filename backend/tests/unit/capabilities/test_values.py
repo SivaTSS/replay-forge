@@ -3,7 +3,13 @@ from typing import Any
 import pytest
 
 from replayforge.capabilities.models import ObjectContract
-from replayforge.capabilities.values import ContractValidationError, resolve_input, validate_object
+from replayforge.capabilities.values import (
+    ContractValidationError,
+    contract_classifications,
+    resolve_input,
+    validate_object,
+)
+from replayforge.evidence.redaction import StructuredRedactor
 
 
 def contract_with(property_schema: dict[str, Any]) -> ObjectContract:
@@ -102,3 +108,21 @@ def test_nested_input_resolution_and_missing_optional_values() -> None:
     for inputs in missing_inputs:
         with pytest.raises(ContractValidationError, match="input_binding_missing"):
             resolve_input(inputs, "member.id")
+
+
+def test_nested_personal_outputs_are_redacted_below_public_objects() -> None:
+    contract = contract_with(
+        {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name", "data_classification": "personal"}
+            },
+        }
+    )
+    redacted = StructuredRedactor().sanitize_json(
+        {"outputs": {"value": {"name": "Private Person"}}},
+        contract_classifications(contract, "outputs"),
+        run_salt="run",
+    )
+    assert b"Private Person" not in redacted.content
+    assert "drop:outputs.value.name" in redacted.redaction_directives

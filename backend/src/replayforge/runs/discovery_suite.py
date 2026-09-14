@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from threading import Lock
@@ -186,13 +187,13 @@ class InMemoryDiscoverySuiteRepository:
     def get(self, suite_id: str) -> DiscoverySuite:
         with self._lock:
             try:
-                return self._records[suite_id]
+                return deepcopy(self._records[suite_id])
             except KeyError as exc:
                 raise DiscoverySuiteError("discovery suite was not found") from exc
 
     def save(self, suite: DiscoverySuite) -> None:
         with self._lock:
-            self._records[suite.suite_id] = suite
+            self._records[suite.suite_id] = deepcopy(suite)
 
 
 @dataclass(slots=True)
