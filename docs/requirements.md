@@ -41,7 +41,7 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 
 | Evaluation question | Inspect | Boundary to keep in mind |
 |---|---|---|
-| Was discovery genuine? | [Four recorded discovery bundles](verification.md#scenario-matrix) | They are historical executions, not recordings regenerated for the current docs |
+| Was discovery genuine? | [Five recorded discovery bundles](verification.md#scenario-matrix) | Recorded executions, including the richer workstation; earlier bundles are not regenerated or relabeled |
 | Does replay avoid model decisions? | [Dependency test](../backend/tests/unit/replay/test_dependency_rule.py) and [browser matrix](../backend/tests/integration/test_visual_portability.py) | The target and local OCR are still required |
 | Is the compiler task-independent? | [Generic compiler tests](../backend/tests/unit/discovery/test_generic_compiler.py) and [runtime import rules](../backend/tests/unit/runtime/test_dependency_rules.py) | New applications still require registration |
 | What does task success actually prove? | [Annotated real artifact](capability-and-replay.md#worked-example-temporary-card-lock) | Typed output validity is not automatically a business-value assertion |

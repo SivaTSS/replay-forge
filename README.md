@@ -15,8 +15,10 @@ flowchart LR
 The demo's front door is a [dated servicing workstation](docs/demo-bank.md) with member and account
 inquiry, transaction research, internal transfers, card maintenance, holds, payoff quotes, service
 cases, and a journal. Open `http://127.0.0.1:3001/harbor/servicing` after starting the target. This
-expanded application has its own business-rule and UI tests; new model discovery against it is
-still pending. Existing evidence and capability versions remain tied to the earlier fixture routes.
+expanded application has its own business-rule and UI tests and a
+[genuine payoff discovery](evidence/discovery-servicing-loan-payoff/manifest.json), automatically
+validated on Harbor and Summit. Earlier evidence and capability versions remain tied to their
+original fixture routes; other workstation workflows are not yet discovered.
 
 The earlier canvas-only member workbench supports three non-trivial servicing tasks: investigate an exact
 transaction, calculate a dated loan payoff quote, and temporarily lock a selected card. Discovery
@@ -71,6 +73,19 @@ curl --fail-with-body --silent --show-error \
 ```
 
 Expected: `status: success`, five validated outputs, and checkpoint `savings_balance_verified`.
+
+To replay the genuinely discovered task on the richer servicing workstation:
+
+```bash
+curl --fail-with-body --silent --show-error \
+  -H 'content-type: application/json' \
+  -d '{"tenant":"harbor","version":"1.0.1","inputs":{"member_id":"12346","payoff_date":"2026-09-21"}}' \
+  http://127.0.0.1:8000/api/v1/capabilities/member.servicing_loan_payoff_quote/replays
+```
+
+Expected: an issued quote for `$9,035.70`, good through `2026-09-21`, and reference `HBR-000001`.
+These inputs differ from discovery. The artifact verifies the date equality during every replay;
+the browser regression independently checks all three exact outputs. No model is needed.
 
 ## Exercise each runtime result
 

@@ -52,7 +52,7 @@ themes can differ, so this is a recorded layout check, not a cross-viewer guaran
 
 | Property | Test mechanism | Committed evidence |
 |---|---|---|
-| Genuine model-guided discovery | Provider, engine, compiler tests; recorded runs | Three task-specific discovery bundles plus the original fixture |
+| Genuine model-guided discovery | Provider, engine, compiler tests; recorded runs | Five bundles: original fixture, three workbench tasks, and the richer workstation payoff |
 | Replay cannot import a model provider | Structural dependency test | `evidence/replay-success` |
 | Typed success and five outputs | Engine + composed integration | `evidence/replay-success` |
 | Legitimate negative answer | Outcome precedence tests | `evidence/replay-member-not-found` |
@@ -67,9 +67,10 @@ themes can differ, so this is a recorded layout check, not a cross-viewer guaran
 | Redaction before retention | Redactor/journal/store tests | Manifest directives and sanitized payloads |
 
 The expanded [demo-bank workstation](demo-bank.md) has separate domain/controller tests and
-screenshot-driven Chromium tests. These exercise the target application's business behavior, not
-a new discovered capability. Historical discovery and replay bundles remain tied to the earlier
-fixture routes; richer-screen discovery and runtime compatibility validation are still pending.
+screenshot-driven Chromium tests. These exercise the target application's business behavior.
+Separately, `member.servicing_loan_payoff_quote/1.0.1` was genuinely discovered on the workstation
+and passed automatic Harbor/Summit validation. Historical bundles remain tied to the earlier
+fixture routes; other workstation functions do not yet have discovered capabilities.
 
 ## Audit regression coverage
 
@@ -163,7 +164,33 @@ Verified on 2026-09-14 after the servicing workflow audit:
 
 Reproduce the new browser checks with `test_playwright_surface.py` and the selection
 `real_iframe_search_and_account_extraction or visual_evidence_masks or evidence_masks_unclassified or registered_artifact_classifies_permission_denial or real_output_failure_retains`.
-The proposed capture in `config/servicing-discovery.yaml` is not an artifact or an evidence bundle.
+The capture recipe itself is not evidence; the later successful execution is recorded below.
+
+### Workstation discovery checkpoint
+
+The genuine run used runtime commit `a06fe8a`, the configured OpenAI model, real screenshots,
+and synthetic invocation values. Its exported 59-event record is not a scripted browser test.
+Suite finalization automatically validated both tenants and published the immutable `1.0.1`;
+the earlier value-bound `1.0.0` is excluded. Failed attempts are recorded in
+[Discovery](discovery.md#perception-decision), not relabeled as successes.
+
+Post-discovery verification includes the shared-transform correction in `36615e9`:
+
+| Gate | Result / scope |
+|---|---|
+| Backend units | 673 passed; one existing Starlette/AnyIO deprecation warning |
+| Model-free replay regression | Eight passed: all six historical discovered-task/tenant cases plus workstation payoff on both tenants with a different member/date at 1440×900 and no provider credentials |
+| Production visual grounding | Four search/navigation and two exact receipt-extraction Chromium checks passed during this series |
+| Target application | 33 domain/controller/editor tests, TypeScript, and production build passed |
+| Static and documentation | Ruff, strict mypy, local-link/Mermaid checks, and seven documentation-checker tests passed |
+| Evidence integrity | Eleven bundles verified; the ten historical bundles were not changed |
+
+This is a scoped runtime/privacy/discovery checkpoint, not a newly rerun full coverage matrix.
+The reuse tests assert the exact amount, requested date, and tenant-specific issuance reference;
+they first exposed the discovery/replay transform mismatch, then passed after its shared fix.
+The new discovery bundle intentionally contains no raw screenshots or customer output values.
+Its terminal record identifies the pre-publication draft; the bundled artifact is the suite's
+versioned, tenant-validated publication derived from that run, with its own hash.
 
 ## Evidence bundle anatomy
 
@@ -223,6 +250,7 @@ not delete evidence automatically.
 | [discovery-transaction-investigation](../evidence/discovery-transaction-investigation/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a 15-step, six-output artifact |
 | [discovery-loan-payoff](../evidence/discovery-loan-payoff/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced an 11-step, five-output artifact |
 | [discovery-temporary-card-lock](../evidence/discovery-temporary-card-lock/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a reversible 12-step, four-output artifact |
+| [discovery-servicing-loan-payoff](../evidence/discovery-servicing-loan-payoff/manifest.json) | `1.0.1` | Harbor + Summit validation | success | Real OpenAI/Luna discovery on the dense workstation: 11 steps, three receipt outputs, bound date equality |
 | [replay-success](../evidence/replay-success/manifest.json) | `1.0.0` | Harbor | success | Model-free outputs and final checkpoint |
 | [replay-member-not-found](../evidence/replay-member-not-found/manifest.json) | `1.0.0` | Harbor | business outcome | “No member” is not reported as a crash |
 | [replay-recovery](../evidence/replay-recovery/manifest.json) | `1.0.1` | Harbor | success | Known notice dismissed once, then resumed |
@@ -259,7 +287,7 @@ failure diagnosis uses operational event codes and the authorized live viewport.
 |---|---|---|
 | Mock-only browser tests | Rejected | Would not prove iframe, locator, navigation, or screenshot behavior |
 | Live-model tests on every CI run | Rejected | Non-deterministic, credentialed, and paid |
-| Unit fakes + real Chromium + committed live evidence | **Chosen** | Deterministic gates plus auditable proof of four genuine model runs, including three distinct tasks |
+| Unit fakes + real Chromium + committed live evidence | **Chosen** | Deterministic gates plus five genuine discovery bundles across the fixture and richer workstation surfaces |
 | Trust exported evidence files | Rejected | Closed-set validation and hashes expose changes relative to the committed manifest |
 | Store raw screenshots | Rejected | Evidence is masked before persistence |
 | Add S3-compatible storage | Rejected for this slice | Local durable files satisfy single-node execution and repository review; remote distribution adds no requirement coverage here |

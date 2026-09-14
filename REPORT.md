@@ -8,8 +8,10 @@ banking workbench with transaction investigation, dated loan payoff quoting, and
 locking. Its controls and values are painted on a canvas.
 
 The expanded [staff workstation](docs/demo-bank.md) adds connected balances, transfers, holds,
-card maintenance, and service cases. Its application tests are separate from the historical
-discovery/replay evidence; automation coverage on that richer UI is not yet claimed.
+card maintenance, and service cases. Its payoff workflow now has
+[genuine discovery evidence](evidence/discovery-servicing-loan-payoff/manifest.json) and automatic
+Harbor/Summit replay validation. Other workstation functions have application tests, not discovered
+capabilities. Historical evidence remains tied to the earlier fixtures.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -153,7 +155,7 @@ deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines th
 ## 7. Cuts
 
 Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
-assignment requests. Four genuine discovery bundles and six replay/handoff bundles preserve the
+assignment requests. Five genuine discovery bundles and six replay/handoff bundles preserve the
 end-to-end evidence; tests exercise current code against immutable artifacts.
 
 | Deliberate cut | Reason / next condition |

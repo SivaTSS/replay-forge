@@ -221,11 +221,17 @@ not a claim of zero defects across every browser, input method, or future datase
 
 The new registered entry point is `legacy_servicing`, with route `/servicing`. Existing
 `member_search`, `visual_member_search`, and `visual_member_workbench` routes remain unchanged
-regression fixtures. Committed discovery artifacts still refer to those earlier routes; none is
-claimed to work unchanged on this workstation. The first labeled-control grounding probe on the
-denser screen exceeded the current visual time budget. Fresh discovery, reviewed runtime
-compatibility, and model-free replay tests are required before claiming automation coverage here;
-neither DOM targeting nor relaxed safety budgets are silently substituted.
+regression fixtures. A [genuine model run](../evidence/discovery-servicing-loan-payoff/manifest.json)
+produced `member.servicing_loan_payoff_quote/1.0.1`: an 11-step, three-output artifact for this
+workstation. It binds both supplied inputs, issues a non-binding quote, extracts receipt fields
+through stable labels, and asserts that its good-through date equals the requested date.
+Harbor and Summit passed automatic deterministic validation before publication. No DOM targeting,
+stored coordinates, hand-authored trace, human publication approval, or relaxed safety budget was
+substituted. [Discovery](discovery.md#perception-decision) records the earlier unsuccessful attempts
+and generic runtime corrections. Other workstation tasks still need genuine discovery.
+Independent model-free replays also passed on both tenants at 1440×900 with another member and
+date, checking the exact payoff amount, date, and issuance reference. These are committed browser
+regressions, not additional model runs.
 OCR also misoriented one long colored denial message despite its readable rendering. The browser
 permission check verifies the unchanged screen and empty journal before a successful authorized
 quote; domain tests verify the exact denial code. This remains an automation-recognition concern,

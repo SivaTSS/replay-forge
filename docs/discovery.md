@@ -110,6 +110,11 @@ tenant validation but could not generalize to a different member. These are boun
 guards (strings of at least four characters), not semantic PII detection. Stable field labels and
 operational status assertions remain supported; different-input replay is still necessary proof.
 
+Discovery and replay share one pure extraction-transform implementation. `trim` removes only
+surrounding whitespace; only `decimal` removes dollar signs and grouping commas. `lowercase` uses
+Unicode lowercase, not case-folding. Separate implementations were rejected after an exact-output
+browser test exposed replay silently changing a value that discovery had preserved.
+
 ## Bounds
 
 The request and engine share domain-defined step and wall-time bounds. Repeated observations,
@@ -186,8 +191,9 @@ Published schema `1.4` targets retain semantic identity, not coordinates or rela
 Replay re-resolves every action from a fresh frame and never calls the model.
 
 The richer workstation's [capture specification](../config/servicing-discovery.yaml) describes a
-loan-payoff discovery and model-free Summit validation. It is an executable capture recipe, not
-a discovered capability or proof of success. Synthetic screenshot/member/loan data transmission
+loan-payoff discovery and model-free Summit validation. The recipe itself is not proof; the
+[exported genuine run](../evidence/discovery-servicing-loan-payoff/manifest.json) records execution.
+Synthetic screenshot/member/loan data transmission
 was explicitly authorized on 2026-09-14. Early genuine attempts exposed several boundaries:
 
 | Attempt | Observed result | Follow-up |
@@ -204,6 +210,18 @@ was explicitly authorized on 2026-09-14. Early genuine attempts exposed several 
 
 None of these attempts established a reusable workstation capability. Their local runtime records
 are not relabeled as successful portable evidence bundles.
+
+The subsequent run `run_71db81152027445bb3613a7360f75697`, on runtime commit `a06fe8a`,
+completed with the new guards and published `member.servicing_loan_payoff_quote/1.0.1` after
+automatic Summit and Harbor replay validation. Its 11 recorded steps bind both invocation inputs,
+extract all three outputs from the issued receipt using stable field labels, and retain the
+good-through/input-date equality assertion. The earlier value-bound `1.0.0` was moved unchanged
+to ignored local diagnostic storage, not overwritten or included among deliverables.
+The primary terminal record identifies the pre-publication draft; suite finalization adds the
+validated tenant and assigns the immutable `1.0.1` version, so its published hash differs.
+Subsequent model-free tests, with no provider credentials configured, reused that unchanged
+artifact on both tenants at 1440×900 with a different member and payoff date. Exact output checks
+passed after correcting the shared transform semantics described above.
 
 ## Provider decision
 

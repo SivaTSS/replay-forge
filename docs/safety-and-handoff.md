@@ -215,9 +215,13 @@ Terminal evidence omits free-text failure messages, expected/observed payloads, 
 outputs. Declared output classifications still apply recursively; the API caller's live result is
 unchanged. Discovery terminal records contain an artifact identity and hash, not a duplicate of
 the complete artifact. Before publication, a deterministic artifact guard rejects configured
-secrets, email/SSN-shaped strings, and string invocation values of four or more characters copied
-into metadata, examples, or executable fields. Runtime-generated provenance is excluded only
-from invocation-substring matching to avoid accidental matches inside random run IDs.
+secrets, email/SSN-shaped strings, and invocation or classified captured-output strings of four or
+more characters copied into metadata, examples, or executable fields. Captured-output checks cover
+personal, customer-identifier, and financial classifications. Runtime-generated provenance is
+excluded from value-substring matching to avoid accidental matches inside random run IDs.
+Extraction also rejects a locator containing the value it just read, before binding that output;
+stable field-label accessors remain supported. This prevents a successful same-input validation
+from legitimizing a financial-value literal as a reusable target.
 
 These guards deliberately fail closed on known matches. They do not identify every name,
 short input, encoded value, or personal image; synthetic-only discovery is the supported demo
