@@ -76,6 +76,10 @@ using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
 Conditions use operand as the route pattern, visible text, or output name. Identity conditions use
 operand for the extracted output and secondary_operand for the input path.
+Use output_equals to verify an extracted state against an observed constant; operand is the output
+name and secondary_operand is the required state. Attach expected_condition to an action when its
+effect can be checked immediately, including an extraction's identity/state check. The runtime
+executes and records that condition; expected_effect prose alone is never verification.
 An identity or output-valid condition requires its output to be in captured_output_fields.
 Visible text alone is not a captured output: extract it before proposing that condition.
 Completed-action history reports actual executions. A verified assertion is already retained in
@@ -171,7 +175,9 @@ class ProviderScrollAction(ProviderModel):
 class ProviderCondition(ProviderModel):
     """Flat provider wire shape; the domain adapter validates the kind-specific fields."""
 
-    kind: Literal["route", "text", "rendered_text", "output_valid", "identity_matches"]
+    kind: Literal[
+        "route", "text", "rendered_text", "output_valid", "output_equals", "identity_matches"
+    ]
     operand: str = Field(min_length=1, max_length=500)
     secondary_operand: str | None = Field(default=None, min_length=1, max_length=200)
     match: MatchMode | None = None
@@ -348,6 +354,7 @@ class ProviderActProposalBase(ProviderModel):
     expected_effect: str = Field(min_length=1, max_length=500)
     declared_risk: Risk
     confidence: float = Field(ge=0, le=1)
+    expected_condition: ProviderCondition | None = None
 
 
 class ProviderClickProposal(ProviderActProposalBase):
@@ -432,6 +439,12 @@ def _condition_payload(condition: dict[str, Any]) -> dict[str, Any]:
         }
     if kind == "output_valid":
         return {"kind": kind, "output": condition.get("operand")}
+    if kind == "output_equals":
+        return {
+            "kind": kind,
+            "output": condition.get("operand"),
+            "value": condition.get("secondary_operand"),
+        }
     if kind == "identity_matches":
         return {
             "kind": kind,
@@ -446,6 +459,8 @@ def _proposal_payload(proposal: BaseModel) -> dict[str, Any]:
     action = payload.get("action")
     if isinstance(action, dict) and isinstance(action.get("condition"), dict):
         action["condition"] = _condition_payload(action["condition"])
+    if isinstance(payload.get("expected_condition"), dict):
+        payload["expected_condition"] = _condition_payload(payload["expected_condition"])
     return payload
 
 

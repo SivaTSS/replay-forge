@@ -54,6 +54,7 @@ from replayforge.capabilities.models import (
     NavigateAction,
     NormalizedRegion,
     NotCondition,
+    OutputEqualsCondition,
     OutputValidCondition,
     PressKeysAction,
     RenderedGroupImageCandidate,
@@ -778,6 +779,8 @@ class PlaywrightSurfaceSession:
             return states[condition.state]
         if isinstance(condition, OutputValidCondition):
             return condition.output in outputs and outputs[condition.output] not in (None, "")
+        if isinstance(condition, OutputEqualsCondition):
+            return outputs.get(condition.output) == condition.value
         if isinstance(condition, IdentityMatchesCondition):
             try:
                 expected = self._resolve_value(

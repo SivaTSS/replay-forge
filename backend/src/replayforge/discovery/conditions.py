@@ -8,6 +8,7 @@ from replayforge.capabilities.models import (
     Condition,
     IdentityMatchesCondition,
     NotCondition,
+    OutputEqualsCondition,
     OutputValidCondition,
 )
 from replayforge.capabilities.values import ContractValidationError, resolve_input
@@ -23,10 +24,12 @@ def validate_condition_bindings(
             validate_condition_bindings(child, outputs, inputs)
     elif isinstance(condition, NotCondition):
         validate_condition_bindings(condition.condition, outputs, inputs)
-    elif isinstance(condition, OutputValidCondition | IdentityMatchesCondition):
+    elif isinstance(
+        condition, OutputValidCondition | OutputEqualsCondition | IdentityMatchesCondition
+    ):
         output = (
             condition.output
-            if isinstance(condition, OutputValidCondition)
+            if isinstance(condition, OutputValidCondition | OutputEqualsCondition)
             else condition.extracted_output
         )
         if output not in outputs:

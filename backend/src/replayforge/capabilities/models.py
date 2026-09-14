@@ -500,6 +500,14 @@ class OutputValidCondition(ArtifactModel):
     output: str
 
 
+class OutputEqualsCondition(ArtifactModel):
+    """An extracted business state must equal its discovered constant exactly."""
+
+    kind: Literal["output_equals"]
+    output: str
+    value: str = Field(min_length=1, max_length=200)
+
+
 class IdentityMatchesCondition(ArtifactModel):
     kind: Literal["identity_matches"]
     extracted_output: str
@@ -528,6 +536,7 @@ Condition = Annotated[
     | VisualTextCondition
     | ElementCondition
     | OutputValidCondition
+    | OutputEqualsCondition
     | IdentityMatchesCondition
     | AllCondition
     | AnyCondition
@@ -868,7 +877,7 @@ class Provenance(ArtifactModel):
 
 
 def _condition_outputs(condition: Condition) -> set[str]:
-    if isinstance(condition, OutputValidCondition):
+    if isinstance(condition, OutputValidCondition | OutputEqualsCondition):
         return {condition.output}
     if isinstance(condition, IdentityMatchesCondition):
         return {condition.extracted_output}
@@ -909,7 +918,10 @@ def _validate_condition_references(
     condition: Condition, inputs: ObjectContract, outputs: ObjectContract
 ) -> None:
     for item in _walk_conditions(condition):
-        if isinstance(item, OutputValidCondition) and item.output not in outputs.properties:
+        if (
+            isinstance(item, OutputValidCondition | OutputEqualsCondition)
+            and item.output not in outputs.properties
+        ):
             raise ValueError(f"condition references unknown output {item.output}")
         if isinstance(item, IdentityMatchesCondition):
             if item.extracted_output not in outputs.properties:
