@@ -18,9 +18,9 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 | Typed inputs/outputs | Implemented | Closed object contracts and runtime validation | Distinct transaction, payoff, and card contracts |
 | Success checkpoint | Evidenced | Route, visible text, output validity, input/output identity | Artifact conditions + exact-output browser tests |
 | Model-free replay | Evidenced | `ReplayEngine` has no provider import | Structural test + bundle |
-| Business outcome | Evidenced | Declared outcome conditions and exact typed results | Payoff negative scenarios discovered and replayed on both tenants |
-| Recoverable condition | Evidenced | Bounded recovery, lease renewal, fixed resume point | Payoff notice recovery followed by verified task completion on both tenants |
-| Hard failure | Implemented, Tested | Typed application/mechanical failures and masked evidence | Engine tests; no UI-specific permission detector in current artifacts |
+| Business outcome | Evidenced | Declared outcome conditions and exact typed results | Negative scenarios in all three tasks discovered and replayed on both tenants |
+| Recoverable condition | Evidenced | Bounded recovery, lease renewal, fixed resume point | Payoff and card notice recoveries followed by verified task completion on both tenants |
+| Hard failure | Evidenced, Tested | Typed application/mechanical failures and masked evidence | Invalid-date/reason and restricted-member branches; separate mechanical-failure bundle with masked screenshot. Role-denial discovery is not claimed |
 | Explicit allowlist | Implemented | Origin/route/action/risk policy intersections | Policy decision tests |
 | Conservative risk | Evidenced | Sensitive pauses; irreversible denies | Policy and real-session browser tests |
 | No sensitive persistence | Hardened for synthetic demo; bounded | Restricted journal/terminal fields, keyed pseudonyms, artifact leak guard, full-frame masks, image capture disabled by default | Tested boundaries, not a universal PII detector; see [data policy](safety-and-handoff.md#data-exposure-boundaries) |

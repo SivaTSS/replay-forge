@@ -23,6 +23,7 @@ uv run mypy \
   scripts/verify_evidence_bundles.py \
   scripts/capture_demo_workflows.py \
   scripts/capture_replay_evidence.py \
+  scripts/validate_scenario_evidence.py \
   scripts/test_submission_evidence.py
 uv run python scripts/verify_evidence_bundles.py evidence --require-submission
 npx --yes pnpm@10.15.1 typecheck

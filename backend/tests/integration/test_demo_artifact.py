@@ -65,7 +65,7 @@ def test_geometry_free_artifact_contains_only_semantic_visual_identity(artifact_
 
 def test_card_lock_trace_checks_identity_on_both_sides_of_the_change() -> None:
     artifact = load_artifact_yaml(
-        (REPOSITORY / "capabilities/member.temporary_card_lock/1.0.1.yaml").read_text()
+        (REPOSITORY / "capabilities/member.temporary_card_lock/1.0.2.yaml").read_text()
     )
     mutations = [
         index for index, step in enumerate(artifact.steps) if step.risk.value == "reversible"

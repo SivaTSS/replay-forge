@@ -37,6 +37,13 @@ Summit. Recovery includes scrolling to the exact learned rejoin target, followed
 lock with fresh identity/status checks. The replay matrix used `9c9d051` and published `1.0.2`;
 each discovery manifest records its own actual recording revision.
 
+Transaction investigation has a [fresh parameterized primary recording](discovery-transaction-parameterized/manifest.json)
+and two genuine negative-case discoveries, all recorded on `d7c0dda`. Six model-free matrix replays
+on `879a18a` verify normal completion, missing member, and a reference absent from the requested
+account on both tenants. Successful finalization published `1.0.3`; the replay bundles preserve
+the exact merged candidate used before publication. The primary was launched through the viewer
+API; its capture command is a reproduction recipe, not a claim that the CLI launched that run.
+
 ```bash
 uv run python scripts/verify_evidence_bundles.py evidence --require-submission
 ```
@@ -71,6 +78,17 @@ uv run python scripts/validate_scenario_evidence.py \
 This performs real UI replays and publishes the next unused version only if every required case
 passes; existing versions are never overwritten. Optional `--output-root`, `--evidence-prefix`,
 and `--commit-sha` export those actual replay proofs to a new directory.
+
+For the transaction matrix, use its parameterized primary and the two observed branches:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
+uv run python scripts/validate_scenario_evidence.py \
+  --spec config/servicing-discovery.yaml --workflow transaction_investigation \
+  --primary-version 1.0.2 \
+  --scenario transaction_not_found=evidence/discovery-transaction-not-found \
+  --scenario member_not_found=evidence/discovery-transaction-member-not-found
+```
 
 Old-UI runs were removed, not relabeled as workstation runs. Browser regressions for policy-driven
 handoff use explicit temporary fixtures and real live control, not fabricated discovery evidence.

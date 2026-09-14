@@ -35,9 +35,8 @@ flowchart TD
 
 ## Three-task coverage matrix
 
-Payoff's five cases and card lock's six cases have
-[genuine discovery and two-tenant replay proof](verification.md#scenario-matrix), published in
-their respective versions `1.0.2`. The transaction exception cases remain unproven.
+All 13 declared cases have [genuine discovery and two-tenant replay proof](verification.md#scenario-matrix):
+two transaction outcomes in `1.0.3`, five payoff cases in `1.0.2`, and six card-lock cases in `1.0.2`.
 The same verification matrix distinguishes original discoveries from model-free replay evidence.
 
 | Task | Scenario | Required disposition | Invariants |
@@ -119,7 +118,8 @@ evidence: export and verify sanitized bundles using the
 [evidence workflow](verification.md), including actual run IDs and the recording commit.
 
 To extend a committed example without rediscovering its successful path, add
-`--primary-version 1.0.1`. The exact version must first pass fresh replay. Its original discovery
+`--primary-version VERSION`. The transaction scenarios extend `1.0.2`; payoff and card scenarios
+extend their respective `1.0.1` recordings. The exact version must first pass fresh replay. Its original discovery
 provenance remains intact; only the new scenario runs are new discovery evidence.
 For staged evidence work, `--collect-only` saves the verified scenario traces without publication
 and reports `collected`, never `published`. Then run the model-free restoration/validation tool.

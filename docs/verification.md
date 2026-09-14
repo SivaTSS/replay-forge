@@ -54,7 +54,8 @@ transfer without falsely publishing a special model-discovered handoff capabilit
 All three tasks have genuine successful-flow discovery evidence. Payoff `1.0.2` additionally
 declares two negative outcomes, two application failures, and one recovery, with genuine discovery
 and fresh replay on both tenants. Card lock `1.0.2` adds three business outcomes, two application
-failures, and a notice recovery. Transaction exception coverage is still being established.
+failures, and a notice recovery. Transaction `1.0.3` adds two negative outcomes from a newly
+discovered path that explicitly binds member, account, and reference selection.
 Unknown states fail closed; engine tests alone do not prove application-specific branches.
 
 The submission gate also requires independently exported successful and failed model-free replay
@@ -69,7 +70,25 @@ attachment. An empty evidence directory fails verification.
 | [Loan payoff](../evidence/discovery-servicing-loan-payoff/manifest.json) | `member.servicing_loan_payoff_quote/1.0.1` | Issued quote and receipt; returned date matches requested date; Harbor/Summit validation |
 | [Temporary card lock](../evidence/discovery-servicing-card-lock/manifest.json) | `member.temporary_card_lock/1.0.1` | Reversible mutation, fresh pre/post card identity checks, exact final locked status, receipt; Harbor/Summit validation |
 
-The following are genuine **scenario discovery** bundles, extending the original payoff trace.
+Transaction [version 1.0.3](../capabilities/member.transaction_investigation/1.0.3.yaml) extends
+a [fresh parameterized primary discovery](../evidence/discovery-transaction-parameterized/manifest.json),
+published as `1.0.2`. It searches by member, explicitly selects the supplied account, then filters
+by transaction reference. The original `1.0.1` recording is retained as provenance, not used as
+proof of these stronger selection semantics.
+
+| Transaction case | Discovery | Exact result | Harbor replay | Summit replay |
+|---|---|---|---|---|
+| Normal task | [Trace](../evidence/discovery-transaction-parameterized/manifest.json) | `success` | [Evidence](../evidence/replay-transaction-harbor-primary/manifest.json) | [Evidence](../evidence/replay-transaction-summit-primary/manifest.json) |
+| Missing member | [Trace](../evidence/discovery-transaction-member-not-found/manifest.json) | `business_outcome:member_not_found` | [Evidence](../evidence/replay-transaction-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-transaction-summit-member-not-found/manifest.json) |
+| Reference belongs to another account | [Trace](../evidence/discovery-transaction-not-found/manifest.json) | `business_outcome:transaction_not_found` | [Evidence](../evidence/replay-transaction-harbor-transaction-not-found/manifest.json) | [Evidence](../evidence/replay-transaction-summit-transaction-not-found/manifest.json) |
+
+The final case deliberately uses a reference that exists in the default account but not the
+requested account. It proves that the lookup does not silently accept the default. No recovery
+is expected in these read-only cases. Primary discovery ran through the live execution API with
+the checked-in goal and inputs; the manifest's capture command reproduces the same contract.
+Scenario discovery used the capture CLI. Neither used scripted browser navigation.
+
+The following genuine **scenario discovery** bundles extend the original payoff trace.
 Their distinct model-free replay proofs follow below.
 
 | Payoff scenario discovery | Observed evidence |
@@ -121,7 +140,8 @@ allocates the immutable published version. That expected difference is not a for
 
 Other failed or paused attempts stay in private runtime audit storage. They are not relabeled as
 success, and no manual UI action is substituted for model discovery. The replay bundles were
-captured from `a462cdf` (original pair), `7512f5e` (payoff branch matrix), and `9c9d051` (card matrix);
+captured from `a462cdf` (original pair), `7512f5e` (payoff branch matrix), `9c9d051` (card matrix),
+and `879a18a` (transaction matrix);
 [reproduction instructions](../evidence/README.md) run the actual
 saved capability with synthetic input data, not a scripted navigation substitute.
 
@@ -154,6 +174,7 @@ authenticity or proof that a model understood the task.
 | Choice | Alternative | Reason |
 |---|---|---|
 | Exact output assertions on changed inputs | Only assert HTTP success | Detect wrong record, stale input, and neighboring-field extraction |
+| Current-artifact input and scenario acceptance checks | Check only artifact syntax or historical versions | Every supplied input must participate in an action/target, and current artifacts must contain the declared case set; these are distribution tests, not task-specific runtime rules |
 | Actual Chromium pointer/keyboard tests | Mock the application for end-to-end claims | Exercise rendering, focus, scrolling, and retained sessions |
 | Temporary explicit policy fixtures | Keep obsolete production demo artifacts | Isolate engine fault/handoff tests without maintaining a second UI |
 | Isolated operator test ports | Reuse fixed runtime/console ports | Avoid disrupting an operator's running services |

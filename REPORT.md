@@ -89,6 +89,9 @@ the previous effect is absent; uncertain mutations are never blindly repeated.
 Known notices, delayed loads, permission denial, and ambiguity have engine test coverage.
 Payoff `1.0.2` also has genuine discovery and two-tenant replay evidence for two negative outcomes,
 two application failures, and notice recovery followed by verified task completion.
+Card lock `1.0.2` proves six exception/recovery cases; transaction `1.0.3` proves two negative
+outcomes after explicit account selection. Across all three tasks, 13 genuinely discovered
+branches and 32 model-free matrix replays cover each declared case and normal completion on both tenants.
 Open-ended model recovery was rejected because replay must remain reproducible.
 
 ## 4. Heterogeneity & multi-tenant
@@ -168,10 +171,10 @@ deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines th
 Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
 assignment requests. Three genuine discovery bundles preserve the current UI's provenance. Tests exercise model-free
 reuse and real same-session handoff; policy-injection fixtures are explicitly separate from discovery.
-Payoff and card lock now include five and six genuinely discovered exception/recovery branches,
-respectively, with complete two-tenant replay proof. Transaction exception branches remain
-unproven; engine fixtures are not substituted
-for their discovery evidence. See the [proof matrix](docs/verification.md#scenario-matrix).
+All 13 declared exception/recovery branches have genuine discovery and complete two-tenant replay
+proof. This does not claim exhaustive coverage of every possible application failure: unrecognized
+states still fail closed or pause, and engine fixtures remain distinct from discovery evidence.
+See the [proof matrix](docs/verification.md#scenario-matrix).
 
 | Deliberate cut | Reason / next condition |
 |---|---|

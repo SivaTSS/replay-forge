@@ -1,0 +1,764 @@
+schema_version: '1.4'
+capability:
+  id: member.transaction_investigation
+  version: 1.0.3
+  name: Investigate member transaction
+  description: Use the application's member search to locate the supplied member_id,
+    explicitly select that member, select and verify the supplied account_id, then
+    use the account's transaction search to locate and verify the supplied transaction_reference.
+    Return the requested transaction details without changing account or transaction
+    state, and produce an explicit no-match result when a supplied identifier cannot
+    be found.
+  application_family: northstar_member_service
+  surface: web
+  risk: read_only
+  tags:
+  - member-services
+  - transaction-research
+  - identifier-verified
+  - no-state-change
+compatibility:
+  application_family: northstar_member_service
+  base_variant: standard
+  supported_variants:
+  - harbor
+  - summit
+  surface_contract: web.v1
+  entry_point: legacy_servicing
+  rendered_surface: true
+  fingerprint:
+    required_landmarks:
+    - kind: visual_text
+      value: Branch member directory
+    forbidden_landmarks: []
+inputs:
+  type: object
+  additional_properties: false
+  required:
+  - member_id
+  - account_id
+  - transaction_reference
+  properties:
+    member_id:
+      type: string
+      description: Invocation value for member id.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    account_id:
+      type: string
+      description: Invocation value for account id.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    transaction_reference:
+      type: string
+      description: Invocation value for transaction reference.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+outputs:
+  type: object
+  additional_properties: false
+  required:
+  - transaction_reference
+  - account_id
+  - amount
+  - posted_date
+  - description
+  - posting_status
+  properties:
+    transaction_reference:
+      type: string
+      description: Reference of the located transaction, verified against the supplied
+        transaction_reference.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    account_id:
+      type: string
+      description: Identifier of the explicitly selected account, verified against
+        the supplied account_id.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    amount:
+      type: string
+      description: Amount shown in the actual transaction details.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    posted_date:
+      type: string
+      description: Posted date shown in the actual transaction details.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    description:
+      type: string
+      description: Transaction description shown in the actual transaction details.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    posting_status:
+      type: string
+      description: Posting status shown in the actual transaction details.
+      data_classification: operational
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+preconditions:
+- kind: route
+  pattern: /servicing
+steps:
+- id: step_01_type
+  name: Member ID / name / city
+  action:
+    kind: type
+    value:
+      source: input
+      path: member_id
+    clear: true
+  target:
+    description: Member ID / name / city
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Member ID / name / city
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_02_click
+  name: Search
+  action:
+    kind: click
+  target:
+    description: Search
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Search
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs:
+  - member_not_found
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_03_click
+  name: Open
+  action:
+    kind: click
+  target:
+    description: Open
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Open
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_04_click
+  name: Open action for the account identified by the supplied account_id
+  action:
+    kind: click
+  target:
+    description: Open action for the account identified by the supplied account_id
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: input_text
+      value:
+        source: input
+        path: account_id
+      target_text: Open
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs:
+  - transaction_not_found
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_05_type
+  name: Description / reference
+  action:
+    kind: type
+    value:
+      source: input
+      path: transaction_reference
+    clear: true
+  target:
+    description: Description / reference
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Description / reference
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_06_click
+  name: Apply filter
+  action:
+    kind: click
+  target:
+    description: Apply filter
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Apply filter
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_07_click
+  name: Open action for the transaction identified by the supplied transaction_reference
+  action:
+    kind: click
+  target:
+    description: Open action for the transaction identified by the supplied transaction_reference
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: input_text
+      value:
+        source: input
+        path: transaction_reference
+      target_text: Open
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_08_extract
+  name: Reference
+  action:
+    kind: extract
+    output: transaction_reference
+    transform: trim
+  target:
+    description: Reference
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Reference
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: identity_matches
+    extracted_output: transaction_reference
+    input_path: transaction_reference
+  - kind: output_valid
+    output: transaction_reference
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_09_extract
+  name: Account
+  action:
+    kind: extract
+    output: account_id
+    transform: trim
+  target:
+    description: Account
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Account
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: identity_matches
+    extracted_output: account_id
+    input_path: account_id
+  - kind: output_valid
+    output: account_id
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_10_extract
+  name: Amount
+  action:
+    kind: extract
+    output: amount
+    transform: trim
+  target:
+    description: Amount
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Amount
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: amount
+  - kind: output_valid
+    output: amount
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_11_extract
+  name: Date
+  action:
+    kind: extract
+    output: posted_date
+    transform: trim
+  target:
+    description: Date
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Date
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: posted_date
+  - kind: output_valid
+    output: posted_date
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_12_extract
+  name: Description
+  action:
+    kind: extract
+    output: description
+    transform: trim
+  target:
+    description: Description
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Description
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: description
+  - kind: output_valid
+    output: description
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_13_extract
+  name: Posting status
+  action:
+    kind: extract
+    output: posting_status
+    transform: trim
+  target:
+    description: Posting status
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Posting status
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: posting_status
+  - kind: output_valid
+    output: posting_status
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+recoveries: []
+outcomes:
+- code: transaction_not_found
+  description: Observe and verify that no transaction matches the supplied reference
+    in the requested account. Do not substitute another transaction.
+  detect:
+    kind: rendered_text
+    value: No records to display.
+    match: exact
+  allowed_after_steps:
+  - step_04_click
+  result:
+    status: business_outcome
+    details: {}
+- code: member_not_found
+  description: Observe and verify that the supplied member does not exist. Stop without
+    choosing another member.
+  detect:
+    kind: rendered_text
+    value: No matching members. Refine the inquiry; no record was selected.
+    match: exact
+  allowed_after_steps:
+  - step_02_click
+  result:
+    status: business_outcome
+    details: {}
+failures: []
+checkpoint:
+  id: investigate_member_transaction_verified
+  condition:
+    kind: all
+    conditions:
+    - kind: route
+      pattern: /servicing
+    - kind: all
+      conditions:
+      - kind: rendered_text
+        value: Reference
+        match: exact
+      - kind: rendered_text
+        value: Account
+        match: exact
+      - kind: rendered_text
+        value: Amount
+        match: exact
+      - kind: rendered_text
+        value: Date
+        match: exact
+      - kind: rendered_text
+        value: Description
+        match: exact
+      - kind: rendered_text
+        value: Posting status
+        match: exact
+    - kind: output_valid
+      output: transaction_reference
+    - kind: output_valid
+      output: account_id
+    - kind: output_valid
+      output: amount
+    - kind: output_valid
+      output: posted_date
+    - kind: output_valid
+      output: description
+    - kind: output_valid
+      output: posting_status
+policy:
+  allowed_action_types:
+  - extract
+  - type
+  - click
+  allowed_entry_points:
+  - legacy_servicing
+  maximum_risk: read_only
+  allowed_route_patterns:
+  - /servicing
+  forbidden_text_inputs: []
+  output_redaction:
+    transaction_reference: last4
+    account_id: last4
+    amount: last4
+    posted_date: last4
+    description: last4
+    posting_status: last4
+provenance:
+  discovery_run_id: run_af6874f458bb46e1ae9fe3fc2912d750
+  provider: openai
+  model: gpt-5.6-luna
+  prompt_policy_version: 2.1.1
+  surface_adapter_version: web.v1
+  compiler_version: 2.0.1
+  created_at: '2026-09-14T21:54:52.915717Z'
+  target_fingerprint: 2b28197860002d6b882a480b073fbc07b032b6852c6932c4ef5219c437dfa68f
+  evidence_manifest_key: evidence://run_af6874f458bb46e1ae9fe3fc2912d750/manifest-evd_c91b0f8975ba4f2792856d42310ca82b.bin
+  artifact_content_hash: sha256:b8776ee886f46d0f9fdf63d5d5439ec52dca41c6fbc86b195c82a16365addfee

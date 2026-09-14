@@ -20,7 +20,7 @@ REPOSITORY = Path(__file__).resolve().parents[3]
 CASES = [
     (
         "member.transaction_investigation",
-        "1.0.1",
+        "1.0.3",
         {"member_id": "12346", "account_id": "12346-01", "transaction_reference": "POS-80429"},
         {
             "transaction_reference": "POS-80429",
