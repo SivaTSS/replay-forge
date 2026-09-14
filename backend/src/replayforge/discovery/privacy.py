@@ -14,9 +14,16 @@ from pydantic import BaseModel
 
 from replayforge.capabilities.models import (
     CapabilityArtifact,
+    ExtractAction,
+    IdentityMatchesCondition,
+    InputValue,
     LocatorBundle,
     LocatorStrategy,
+    ObjectContract,
+    OutputEqualsCondition,
+    OutputValidCondition,
     RenderedFieldValueCandidate,
+    ValueSchema,
 )
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.policy.types import DataClassification
@@ -36,35 +43,85 @@ class ArtifactPrivacyError(EvidenceRejectedError):
         super().__init__(f"artifact contains a literal {source} value at {location}")
 
 
-def _match_location(value: Any, serialized: str, path: str = "artifact") -> str | None:
+_REFERENCE_FIELDS: dict[type[BaseModel], frozenset[str]] = {
+    InputValue: frozenset({"path"}),
+    ExtractAction: frozenset({"output"}),
+    OutputValidCondition: frozenset({"output"}),
+    OutputEqualsCondition: frozenset({"output"}),
+    IdentityMatchesCondition: frozenset({"extracted_output", "input_path"}),
+}
+
+
+def _match_location(
+    value: Any,
+    serialized: str,
+    path: str = "artifact",
+    *,
+    source: Literal["invocation", "captured"] = "invocation",
+    reference: bool = False,
+) -> str | None:
     """Paths contain model field names/indices; caller-controlled dictionary keys are opaque."""
     if isinstance(value, BaseModel):
         for name in type(value).model_fields:
             if path == "artifact" and name == "provenance":
                 continue
-            if serialized in json.dumps(name, ensure_ascii=False)[1:-1].casefold():
+            # Static Python schema keys cannot have been copied from captured UI data.
+            if source == "invocation" and serialized in name.casefold():
                 return f"{path}.{name}:key"
-            found = _match_location(getattr(value, name), serialized, f"{path}.{name}")
+            is_contract = isinstance(value, ObjectContract | ValueSchema)
+            is_reference = name in _REFERENCE_FIELDS.get(type(value), frozenset()) or (
+                is_contract and name in {"properties", "required"}
+            )
+            found = _match_location(
+                getattr(value, name),
+                serialized,
+                f"{path}.{name}",
+                source=source,
+                reference=is_reference,
+            )
             if found is not None:
                 return found
     elif isinstance(value, dict):
         for key, item in value.items():
-            if serialized in json.dumps(str(key), ensure_ascii=False)[1:-1].casefold():
+            encoded_key = json.dumps(str(key), ensure_ascii=False)[1:-1].casefold()
+            if _matches_literal(encoded_key, serialized, source, reference):
                 return f"{path}.*:key"
-            found = _match_location(item, serialized, f"{path}.*")
+            # Only contract property keys are symbols. Their schemas remain fully scanned.
+            found = _match_location(item, serialized, f"{path}.*", source=source)
             if found is not None:
                 return found
     elif isinstance(value, list | tuple | set | frozenset):
         for index, item in enumerate(value):
-            found = _match_location(item, serialized, f"{path}[{index}]")
+            found = _match_location(
+                item, serialized, f"{path}[{index}]", source=source, reference=reference
+            )
             if found is not None:
                 return found
     elif (
         isinstance(value, str)
-        and serialized in json.dumps(value, ensure_ascii=False)[1:-1].casefold()
-    ):
+        and _matches_literal(
+            json.dumps(value, ensure_ascii=False)[1:-1].casefold(),
+            serialized,
+            source,
+            reference,
+        )
+    ) or (isinstance(value, int | float | bool) and serialized in json.dumps(value).casefold()):
         return path
     return None
+
+
+def _matches_literal(
+    encoded: str,
+    serialized: str,
+    source: Literal["invocation", "captured"],
+    reference: bool,
+) -> bool:
+    # A bound schema identifier is not free text: a captured status must not match
+    # a substring of an output name. Whole-symbol copies still fail. Invocation
+    # values remain substring-checked even in symbols, as they predate the draft.
+    if source == "captured" and reference:
+        return encoded == serialized
+    return serialized in encoded
 
 
 def target_contains_invocation_literal(target: LocatorBundle, inputs: dict[str, Any]) -> bool:
@@ -95,9 +152,6 @@ def validate_artifact_privacy(
     (redactor or StructuredRedactor()).validate_text(full_content)
     if any(pattern.search(full_content) for pattern in _PERSONAL_PATTERNS):
         raise EvidenceRejectedError("artifact contains personal-data-shaped text")
-    # Provenance is runtime-generated; a random run ID may coincidentally contain
-    # a short numeric input. It is not an invocation value embedded by the model.
-    content = artifact.model_dump_json(exclude={"provenance"}).casefold()
 
     def check(value: object, source: Literal["invocation", "captured"]) -> None:
         if isinstance(value, dict):
@@ -109,8 +163,8 @@ def validate_artifact_privacy(
         elif isinstance(value, str) and len(value.strip()) >= 4:
             # Match serialized text too: quotes/newlines must not evade the guard.
             serialized = json.dumps(value, ensure_ascii=False)[1:-1].casefold()
-            if serialized in content:
-                location = _match_location(artifact, serialized) or "artifact"
+            location = _match_location(artifact, serialized, source=source)
+            if location is not None:
                 raise ArtifactPrivacyError(source, location)
 
     check(inputs, "invocation")

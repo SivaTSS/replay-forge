@@ -110,6 +110,20 @@ tenant validation but could not generalize to a different member. These are boun
 guards (strings of at least four characters), not semantic PII detection. Stable field labels and
 operational status assertions remain supported; different-input replay is still necessary proof.
 
+The publication guard walks the typed artifact, rather than treating serialized JSON as one
+unstructured string. For captured values, contract property names and typed input/output
+references use whole-symbol comparison: a status such as `Posted` is not the field identifier
+`posted_date`. Literal copies of either complete symbol still fail. Descriptions, selectors,
+examples, enum/constant values, and condition operands retain substring checks; metadata is not
+exempt. Invocation values remain substring-checked even inside identifiers. Secret and
+personal-data-shaped patterns still scan the entire artifact, including provenance. This fixes
+schema-name collisions without changing output classifications or adding application-specific
+exceptions; it does not detect arbitrary encodings of personal data.
+
+A failed suite exposes a typed `privacy_rejection` with the source category and schema-only
+location. Dictionary keys become `*`; rejected values and free-text failure messages stay out of
+suite snapshots. Capture errors include the suite ID so the failed run remains identifiable.
+
 A labeled extraction may record the observed `right_of` or `below` relation. With no direction,
 competing horizontal and stacked layouts remain ambiguous. An explicit relation selects the
 observed layout, but still requires one matching value group. This avoids guessing that the next

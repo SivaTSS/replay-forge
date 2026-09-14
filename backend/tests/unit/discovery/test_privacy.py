@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -115,3 +116,95 @@ def test_structural_field_label_is_not_treated_as_an_output_value() -> None:
     )
     assert not extraction_locator_contains_value(target, "High")
     assert not extraction_locator_contains_value(target, "$7,832.25")
+
+
+def _with_status_contract(data: dict[str, Any]) -> CapabilityArtifact:
+    data["outputs"]["required"] += ["posted_date", "posting_status"]
+    for name in ("posted_date", "posting_status"):
+        data["outputs"]["properties"][name] = {
+            "type": "string",
+            "description": "Value read from the selected record",
+            "data_classification": "personal",
+            "persistence": "redacted",
+        }
+    for index, name in enumerate(("posted_date", "posting_status")):
+        step = deepcopy(data["steps"][2])
+        step["id"] = f"record.extract_{index}"
+        step["action"]["output"] = name
+        step["postconditions"] = [{"kind": "output_valid", "output": name}]
+        data["steps"].append(step)
+    data["checkpoint"]["condition"] = {
+        "kind": "all",
+        "conditions": [
+            data["checkpoint"]["condition"],
+            {"kind": "output_valid", "output": "posted_date"},
+            {"kind": "output_valid", "output": "posting_status"},
+        ],
+    }
+    return CapabilityArtifact.model_validate(data)
+
+
+def test_captured_status_does_not_match_partial_contract_symbol(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = _with_status_contract(valid_artifact_data)
+    validate_artifact_privacy(artifact, {}, outputs={"posting_status": "Posted"})
+
+
+@pytest.mark.parametrize("value", ["posted_date", "posting_status"])
+def test_captured_value_cannot_be_copied_as_a_complete_contract_symbol(
+    valid_artifact_data: dict[str, Any], value: str
+) -> None:
+    artifact = _with_status_contract(valid_artifact_data)
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(artifact, {}, outputs={"posting_status": value})
+
+
+def test_invocation_substrings_remain_forbidden_in_contract_symbols(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = _with_status_contract(valid_artifact_data)
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(artifact, {"query": "Posted"})
+
+
+@pytest.mark.parametrize("field", ["description", "example", "const", "enum", "pattern"])
+def test_contract_symbol_handling_does_not_exempt_schema_literal_content(
+    valid_artifact_data: dict[str, Any], field: str
+) -> None:
+    artifact = _with_status_contract(valid_artifact_data)
+    data = artifact.model_dump(mode="json")
+    data["outputs"]["properties"]["posted_date"][field] = (
+        ["Posted"] if field == "enum" else "Posted"
+    )
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(
+            CapabilityArtifact.model_validate(data), {}, outputs={"posting_status": "Posted"}
+        )
+
+
+def test_symbol_name_in_free_text_is_not_exempt(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = _with_status_contract(valid_artifact_data)
+    data = artifact.model_dump(mode="json")
+    data["capability"]["description"] = "Return posted_date."
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(
+            CapabilityArtifact.model_validate(data), {}, outputs={"posting_status": "Posted"}
+        )
+
+
+def test_known_string_cannot_be_embedded_as_numeric_example(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["inputs"]["properties"]["member_id"] = {
+        "type": "integer",
+        "description": "Record identifier",
+        "data_classification": "customer_identifier",
+        "example": 12345,
+    }
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(
+            CapabilityArtifact.model_validate(valid_artifact_data), {"query": "12345"}
+        )

@@ -122,6 +122,44 @@ def test_rejects_http_and_non_object_responses(monkeypatch: pytest.MonkeyPatch) 
         _request_json("http://localhost:8000", "/api/v1/discovery-suites", 120)
 
 
+def test_failed_suite_capture_reports_schema_path_not_free_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = SuiteCaptureRequest(
+        goal="Read a record",
+        application_family="warehouse",
+        tenant="example",
+        entry_point="dashboard",
+        inputs={},
+        validation_tenants=(),
+        expected_capability_id="warehouse.read_record",
+        expected_risk="read_only",
+        expected_inputs=(),
+        expected_outputs=("status",),
+    )
+    monkeypatch.setattr(
+        discovery_capture,
+        "_request_json",
+        lambda *_args, **_kwargs: {
+            "suite_id": "sui_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "primary": {
+                "status": "failure",
+                "code": "artifact_privacy_rejected",
+                "message": "Customer value that must stay private",
+                "privacy_rejection": {
+                    "source": "captured",
+                    "location": "artifact.outputs.properties.*:key",
+                },
+            },
+        },
+    )
+    with pytest.raises(RuntimeError) as error:
+        discovery_capture.invoke_suite("http://localhost:8000", 120, request)
+    assert "sui_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in str(error.value)
+    assert "artifact.outputs.properties.*:key" in str(error.value)
+    assert "Customer value" not in str(error.value)
+
+
 def test_suite_capture_requires_real_provenance_and_validated_contract(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
