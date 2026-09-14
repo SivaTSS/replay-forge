@@ -97,6 +97,7 @@ type ContinuationSink = Callable[[ReplayContinuation], None]
 @dataclass(frozen=True, slots=True)
 class RecoveryResume:
     step_id: str
+    lease_version: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +163,7 @@ class ReplayEngine:
                 )
                 if isinstance(result, RecoveryResume):
                     lease = self.lease_service.heartbeat(
-                        session.session_id, lease.version, AUTOMATION_OWNER
+                        session.session_id, result.lease_version, AUTOMATION_OWNER
                     )
                     step_index = step_indexes[result.step_id]
                     continue
@@ -284,7 +285,7 @@ class ReplayEngine:
                 )
                 if isinstance(result, RecoveryResume):
                     refreshed = self.lease_service.heartbeat(
-                        session.session_id, automation_lease_version, AUTOMATION_OWNER
+                        session.session_id, result.lease_version, AUTOMATION_OWNER
                     )
                     automation_lease_version = refreshed.version
                     step_index = step_indexes[result.step_id]
@@ -585,10 +586,14 @@ class ReplayEngine:
         lease_version: int,
     ) -> RunResult | RecoveryResume | None:
         indexed = {recovery.id: recovery for recovery in request.artifact.recoveries}
-        for recovery_id in step.recovery_refs:
-            recovery = indexed[recovery_id]
-            if not session.evaluate(recovery.trigger, outputs, inputs):
-                continue
+        matching = tuple(
+            indexed[code]
+            for code in step.recovery_refs
+            if session.evaluate(indexed[code].trigger, outputs, inputs)
+        )
+        if len(matching) > 1:
+            raise SurfaceError("branch_ambiguous", "Multiple recovery conditions matched.")
+        for recovery in matching:
             uses = recovery_uses.get(recovery.id, 0)
             if uses >= recovery.max_uses:
                 self.recorder.record(
@@ -621,7 +626,7 @@ class ReplayEngine:
                 recovery_uses,
                 lease_version,
             )
-            if result is not None:
+            if not isinstance(result, int):
                 return result
             self.recorder.record(
                 "recovery_completed",
@@ -629,7 +634,7 @@ class ReplayEngine:
                 step_id=step.id,
                 details={"recovery_id": recovery.id, "resume_at": recovery.resume_at},
             )
-            return RecoveryResume(recovery.resume_at)
+            return RecoveryResume(recovery.resume_at, result)
         return None
 
     def _execute_recovery(
@@ -641,7 +646,8 @@ class ReplayEngine:
         outputs: dict[str, Any],
         recovery_uses: dict[str, int],
         lease_version: int,
-    ) -> RunResult | None:
+    ) -> RunResult | int:
+        lease = self.lease_service.heartbeat(session.session_id, lease_version, AUTOMATION_OWNER)
         for recovery_step in recovery.steps:
             result = self._execute_step(
                 request,
@@ -650,7 +656,7 @@ class ReplayEngine:
                 inputs,
                 outputs,
                 recovery_uses,
-                lease_version,
+                lease.version,
                 allow_recovery=False,
                 allow_intervention=False,
             )
@@ -658,7 +664,10 @@ class ReplayEngine:
                 raise RuntimeError("nested recovery control flow is not allowed")
             if result is not None:
                 return result
-        return None
+            lease = self.lease_service.heartbeat(
+                session.session_id, lease.version, AUTOMATION_OWNER
+            )
+        return lease.version
 
     @staticmethod
     def _detect_outcome(
@@ -669,11 +678,14 @@ class ReplayEngine:
         inputs: dict[str, Any],
     ) -> BusinessOutcome | None:
         indexed = {outcome.code: outcome for outcome in artifact.outcomes}
-        for code in step.outcome_refs:
-            outcome = indexed[code]
-            if session.evaluate(outcome.detect, outputs, inputs):
-                return outcome
-        return None
+        matching = tuple(
+            indexed[code]
+            for code in step.outcome_refs
+            if session.evaluate(indexed[code].detect, outputs, inputs)
+        )
+        if len(matching) > 1:
+            raise SurfaceError("branch_ambiguous", "Multiple business outcomes matched.")
+        return matching[0] if matching else None
 
     @staticmethod
     def _detect_failure(
@@ -684,11 +696,14 @@ class ReplayEngine:
         inputs: dict[str, Any],
     ) -> ApplicationFailure | None:
         indexed = {failure.code: failure for failure in artifact.failures}
-        for code in step.failure_refs:
-            failure = indexed[code]
-            if session.evaluate(failure.detect, outputs, inputs):
-                return failure
-        return None
+        matching = tuple(
+            indexed[code]
+            for code in step.failure_refs
+            if session.evaluate(indexed[code].detect, outputs, inputs)
+        )
+        if len(matching) > 1:
+            raise SurfaceError("branch_ambiguous", "Multiple application failures matched.")
+        return matching[0] if matching else None
 
     def _application_failure(
         self,

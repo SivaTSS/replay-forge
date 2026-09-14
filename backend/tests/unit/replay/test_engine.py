@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
@@ -481,6 +481,86 @@ def test_known_not_found_is_business_outcome_before_missing_happy_path(
     assert result.code == "member_not_found"
     assert result.details == {"member_id": "***6789"}
     assert session.closed is True
+
+
+@pytest.mark.parametrize("kind", ["outcomes", "failures", "recoveries"])
+def test_multiple_matching_branches_fail_closed_before_any_correction(
+    valid_artifact_data: dict[str, Any], kind: str
+) -> None:
+    from copy import deepcopy
+
+    if kind == "failures":
+        add_permission_failure(valid_artifact_data)
+    elif kind == "recoveries":
+        add_interstitial_recovery(valid_artifact_data)
+    duplicate = deepcopy(valid_artifact_data[kind][0])
+    key = "id" if kind == "recoveries" else "code"
+    original = duplicate[key]
+    duplicate[key] = "other_branch"
+    if kind == "recoveries":
+        duplicate["steps"][0]["id"] = "recovery.other_branch"
+    valid_artifact_data[kind].append(duplicate)
+    refs = {"outcomes": "outcome_refs", "failures": "failure_refs", "recoveries": "recovery_refs"}[
+        kind
+    ]
+    for step in valid_artifact_data["steps"]:
+        if original in step.get(refs, []):
+            step[refs].append("other_branch")
+    surface = FakeSurfaceSession(
+        member_not_found=kind == "outcomes",
+        permission_denied=kind == "failures",
+        interstitial_visible=kind == "recoveries",
+    )
+    engine, recorder, _router = build_engine(surface)
+    result = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(result, FailureResult)
+    assert result.code == "branch_ambiguous"
+    assert not any(event == "recovery_started" for event, _step in recorder.events)
+
+
+def test_multistep_recovery_renews_lease_and_returns_latest_version(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from copy import deepcopy
+    from dataclasses import replace
+
+    @dataclass
+    class AdvancingClock:
+        instant: datetime = datetime(2026, 9, 10, 12, 30, tzinfo=UTC)
+
+        def now(self) -> datetime:
+            return self.instant
+
+    clock = AdvancingClock()
+    add_interstitial_recovery(valid_artifact_data)
+    recovery = valid_artifact_data["recoveries"][0]
+    original_step = recovery["steps"][0]
+    recovery["steps"] = [
+        {**deepcopy(original_step), "id": f"recovery.action_{index}"} for index in range(4)
+    ]
+    original_execute = FakeSurfaceSession.execute
+
+    def delayed_action(
+        self: FakeSurfaceSession,
+        action: object,
+        target: ResolvedTarget | None,
+        inputs: dict[str, Any],
+    ) -> ActionReceipt:
+        receipt = original_execute(self, action, target, inputs)
+        if self.executed_targets[-1:] == ["Continue notice"]:
+            clock.instant += timedelta(seconds=12)
+        return receipt
+
+    monkeypatch.setattr(FakeSurfaceSession, "execute", delayed_action)
+    surface = FakeSurfaceSession(interstitial_visible=True)
+    engine, recorder, _router = build_engine(surface)
+    engine = replace(
+        engine, lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock)
+    )
+    result = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(result, SuccessResult)
+    assert clock.instant == datetime(2026, 9, 10, 12, 30, 48, tzinfo=UTC)
+    assert ("recovery_completed", "search.submit") in recorder.events
 
 
 @pytest.mark.parametrize("happy_path_visible", [True, False])

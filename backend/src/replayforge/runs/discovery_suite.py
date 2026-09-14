@@ -85,6 +85,8 @@ class DiscoveryScenario:
     inputs: dict[str, Any] = field(repr=False)
 
     def __post_init__(self) -> None:
+        if self.kind not in {"business_outcome", "application_failure", "recovery"}:
+            raise ValueError("discovery scenario kind is invalid")
         if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.code) is None:
             raise ValueError("discovery scenario code is invalid")
         if not self.goal.strip() or not self.description.strip():
@@ -322,6 +324,20 @@ class DiscoverySuiteService:
 
     def get(self, suite_id: str) -> DiscoverySuite:
         return self._store.get(suite_id)
+
+    def restore_scenarios(
+        self, suite_id: str, scenarios: tuple[DiscoveryScenario, ...]
+    ) -> DiscoverySuite:
+        """Local evidence-restoration boundary; no HTTP import or replay proof is implied."""
+        suite = self.get(suite_id)
+        if suite.status != DiscoverySuiteStatus.COLLECTING or suite.scenarios:
+            raise DiscoverySuiteError("restoration requires an empty collecting suite")
+        if not isinstance(suite.primary, DiscoverySuccess) or not 1 <= len(scenarios) <= 50:
+            raise DiscoverySuiteError("restoration requires a primary and bounded scenarios")
+        _merge_scenarios(suite.primary.artifact, scenarios)
+        restored = replace(suite, scenarios=scenarios, artifact=None)
+        self._store.save(restored)
+        return restored
 
     def add_scenario(
         self,

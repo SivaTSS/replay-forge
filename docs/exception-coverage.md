@@ -112,3 +112,14 @@ The model-free replay capture tool accepts `expected_status: business_outcome` w
 `expected_code`. A recovery case uses `expected_status: success` and `expected_recovery`;
 the named recovery must appear in an actual `recovery_completed` journal event. Contradictory
 expectations are rejected before browser execution; mismatched results are not exported.
+
+Recovery renews its automation lease between corrective actions and passes the newest lease
+version back to the primary loop. Matching multiple outcomes, failures, or recoveries within one
+category is `branch_ambiguous`, not permission to choose the first declaration. Existing failure
+precedence over outcomes remains unchanged.
+
+After a runtime restart, `scripts/validate_scenario_evidence.py` can restore a suite from an exact
+published primary and verified local scenario bundles. It checks original run identity, successful
+model-driven completion, and the explicit branch event's assertion boundary. No branch is inferred
+from filenames or invented navigation. No model is configured; every tenant/scenario validation
+and finalization gate runs again. Local evidence is integrity-checked, not externally attested.
