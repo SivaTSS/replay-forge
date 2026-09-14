@@ -88,7 +88,9 @@ role_name target, use the exact role and name from actionable_controls and requi
 For a relative_text following_value extraction, use the exact anchor from extractable_fields and
 require count one. Extractable field labels are structural names only; their values are omitted.
 For extract actions, use each required output field's preferred_transform exactly. Extract only
-remaining_output_fields. Never extract a field listed in captured_output_fields or any undeclared
+remaining_output_fields, through stable field labels or structural accessors. Never put a displayed
+output value in an extraction locator (including ocr_relative target_text). Use rendered_field_value
+for labeled values. Never extract a field listed in captured_output_fields or any undeclared
 output. Complete when remaining_output_fields is empty and the requested result is verified."""
 
 

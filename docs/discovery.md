@@ -101,6 +101,15 @@ successive keystrokes or arbitrary text. Domain validation rejects malformed cho
 dispatch; text entry must use a typed value binding. This replaces unrestricted key strings that
 could reach the browser as unsupported commands.
 
+Extraction targets must identify a field, not its current value. After reading a candidate,
+the engine rejects locators that contain the captured value and asks for a structural accessor;
+the rejected extraction does not bind an output or enter the replay trace. Publication also
+checks artifact content against captured personal, customer-identifier, and financial strings.
+This closes the observed failure where a locator containing a payoff amount passed same-input
+tenant validation but could not generalize to a different member. These are bounded literal
+guards (strings of at least four characters), not semantic PII detection. Stable field labels and
+operational status assertions remain supported; different-input replay is still necessary proof.
+
 ## Bounds
 
 The request and engine share domain-defined step and wall-time bounds. Repeated observations,
@@ -191,9 +200,10 @@ was explicitly authorized on 2026-09-14. Early genuine attempts exposed several 
 | `run_4489ea9042714e39b9c39847a1ed8705` | Keyboard dispatch failed after entering the member query | Constrained key names and validated single-chord structure before dispatch |
 | `run_4a543f86096e430d828b3e4cab442666` | Model skipped the supplied date; the bound equality check correctly failed | Clarified that visible defaults cannot substitute for supplied symbolic inputs |
 | `run_55ef5f4a7b244b23aebc0b88b449028b` | All outputs captured and equality verified twice; unchanged-screen guard stopped completion | Marked successful assertions in model history and treated verified observational actions as non-visual progress |
+| `run_4368c049fd434ae88a2dffa6a60c2db8` | Published after both same-input tenant validations; reuse audit found a literal financial value in an extraction target | Added automatic value-bound extraction rejection and captured-output publication checks; artifact excluded from deliverables |
 
-None of these attempts yielded a published portable capability. Their local runtime records
-are not relabeled as successful exported bundles.
+None of these attempts established a reusable workstation capability. Their local runtime records
+are not relabeled as successful portable evidence bundles.
 
 ## Provider decision
 

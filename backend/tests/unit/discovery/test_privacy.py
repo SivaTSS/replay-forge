@@ -2,8 +2,11 @@ from typing import Any
 
 import pytest
 
-from replayforge.capabilities.models import CapabilityArtifact
-from replayforge.discovery.privacy import validate_artifact_privacy
+from replayforge.capabilities.models import CapabilityArtifact, LocatorBundle
+from replayforge.discovery.privacy import (
+    extraction_locator_contains_value,
+    validate_artifact_privacy,
+)
 from replayforge.evidence.redaction import EvidenceRejectedError
 
 
@@ -34,3 +37,53 @@ def test_structural_artifact_without_invocation_literals_is_allowed(
     validate_artifact_privacy(
         CapabilityArtifact.model_validate(valid_artifact_data), {"member_id": "12345"}
     )
+
+
+@pytest.mark.parametrize("classification", ["financial", "personal"])
+def test_artifact_cannot_embed_classified_captured_output(
+    valid_artifact_data: dict[str, Any],
+    classification: str,
+) -> None:
+    valid_artifact_data["capability"]["description"] = "Observed value: $7,832.25"
+    valid_artifact_data["outputs"]["properties"]["available_balance"]["data_classification"] = (
+        classification
+    )
+    with pytest.raises(EvidenceRejectedError, match="captured value"):
+        validate_artifact_privacy(
+            CapabilityArtifact.model_validate(valid_artifact_data),
+            {},
+            outputs={"available_balance": "$7,832.25"},
+        )
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        {"strategy": "rendered_text", "value": "$7,832.25"},
+        {"strategy": "ocr_text", "value": "$7,832.25"},
+        {
+            "strategy": "ocr_relative",
+            "anchor": "Payoff amount",
+            "target_text": "$7,832.25",
+            "relation": "right_of",
+        },
+    ],
+)
+def test_extraction_locator_must_not_name_the_captured_value(candidate: dict[str, Any]) -> None:
+    target = LocatorBundle.model_validate(
+        {"description": "Amount", "visual_candidates": [candidate]}
+    )
+    assert extraction_locator_contains_value(target, "$7,832.25")
+
+
+def test_structural_field_label_is_not_treated_as_an_output_value() -> None:
+    target = LocatorBundle.model_validate(
+        {
+            "description": "Priority",
+            "visual_candidates": [
+                {"strategy": "rendered_field_value", "label": "High priority"},
+            ],
+        }
+    )
+    assert not extraction_locator_contains_value(target, "High")
+    assert not extraction_locator_contains_value(target, "$7,832.25")

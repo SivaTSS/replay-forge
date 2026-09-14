@@ -11,6 +11,7 @@ workflows:
       The resulting capability must retain this comparison as a replayable equality assertion
       between good_through_date and payoff_date, not just a visual claim during discovery.
       Complete only after the quote has actually been calculated, not on a review screen.
+      Extract all returned values from the issued quote, not its pre-issuance review.
     application_family: northstar_member_service
     tenant: harbor
     validation_tenants: [summit]

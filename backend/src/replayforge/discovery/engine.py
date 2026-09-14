@@ -48,7 +48,10 @@ from replayforge.discovery.models import (
     RecordedDiscoveryStep,
 )
 from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelProviderError
-from replayforge.discovery.privacy import validate_artifact_privacy
+from replayforge.discovery.privacy import (
+    extraction_locator_contains_value,
+    validate_artifact_privacy,
+)
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
@@ -222,7 +225,9 @@ class DiscoveryEngine:
                             tuple(getattr(session, "required_landmarks", ())),
                             tuple(getattr(session, "forbidden_landmarks", ())),
                         )
-                        validate_artifact_privacy(artifact, request.inputs, self.privacy_redactor)
+                        validate_artifact_privacy(
+                            artifact, request.inputs, self.privacy_redactor, outputs
+                        )
                     except ValueError:
                         return self._failure(
                             request,
@@ -313,6 +318,13 @@ class DiscoveryEngine:
                             "current screenshot. Both the anchor and the related target must be "
                             "unique; repeating this locator will not resolve the ambiguity. "
                             "Escalate if no supported locator can distinguish the control."
+                        )
+                    elif error.code == "extraction_locator_value_bound":
+                        history.append(
+                            "Previous extraction was rejected and its output was not bound: "
+                            "the locator contains the value being extracted. Use a stable field "
+                            "label with rendered_field_value (or a structural DOM field locator), "
+                            "not the displayed customer, financial, date, or reference value."
                         )
                     elif error.code in {"condition_output_unbound", "condition_input_unbound"}:
                         history.append(
@@ -572,9 +584,18 @@ class DiscoveryEngine:
                 return self._failure(
                     request, "target_absent", "Extraction requires a resolved target."
                 )
-            outputs[proposal.action.output] = self._transform(
-                session.extract(target), proposal.action.transform
-            )
+            observed_value = session.extract(target)
+            value = self._transform(observed_value, proposal.action.transform)
+            if extraction_locator_contains_value(
+                stable_target, observed_value
+            ) or extraction_locator_contains_value(stable_target, value):
+                raise SurfaceError(
+                    "extraction_locator_value_bound",
+                    "The extraction locator depends on the observed output value.",
+                    recoverable=True,
+                    effect_absent=True,
+                )
+            outputs[proposal.action.output] = value
         else:
             receipt = session.execute(proposal.action, target, request.inputs)
             if receipt.status is ActionStatus.FAILED:

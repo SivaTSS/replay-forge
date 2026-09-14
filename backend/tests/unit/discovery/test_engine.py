@@ -14,6 +14,7 @@ from replayforge.capabilities.models import (
     IdentityMatchesCondition,
     InputValue,
     LiteralValue,
+    LocatorBundle,
     ObjectContract,
     OutputValidCondition,
     TextCondition,
@@ -42,7 +43,7 @@ from replayforge.policy.types import DataClassification, Risk
 from replayforge.runs.results import FailureResult, InterventionRequiredResult
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
-from replayforge.surfaces.models import NormalizedObservation, SurfaceError
+from replayforge.surfaces.models import NormalizedObservation, ResolvedTarget, SurfaceError
 from replayforge.surfaces.ports import SurfaceDriver
 from tests.unit.replay.test_engine import (
     FakeSurfaceDriver,
@@ -803,6 +804,61 @@ def test_bound_identity_mismatch_remains_a_terminal_failure(
     assert isinstance(result, FailureResult)
     assert result.code == "action_condition_not_verified"
     assert compiler.calls == []
+
+
+def test_value_bound_extraction_is_replanned_without_binding_or_recording_it(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    class CapturingSession(FakeSurfaceSession):
+        latest: LocatorBundle | None = None
+
+        def resolve(self, target: object, timeout_ms: int) -> ResolvedTarget:
+            assert isinstance(target, LocatorBundle)
+            self.latest = target
+            return super().resolve(target, timeout_ms)
+
+        def capture_locator(self, target: ResolvedTarget) -> LocatorBundle:
+            assert self.latest is not None
+            return self.latest
+
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[2]
+    good = ActProposal(
+        kind="act",
+        action=step.action,
+        target=step.target,
+        rationale="Capture the declared output.",
+        expected_effect="Bind output.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    bad = good.model_copy(
+        update={
+            "target": LocatorBundle.model_validate(
+                {
+                    "description": "Displayed amount",
+                    "visual_candidates": [
+                        {
+                            "strategy": "ocr_relative",
+                            "anchor": "Available balance",
+                            "target_text": "$1,420.57",
+                            "relation": "right_of",
+                        }
+                    ],
+                }
+            )
+        }
+    )
+    provider = QueueModelProvider(
+        [bad, good, CompleteProposal(kind="complete", rationale="Verified.")]
+    )
+    engine, compiler = build_discovery(CapturingSession(), provider, artifact)
+    result = engine.execute(make_request())
+    assert isinstance(result, DiscoverySuccess)
+    assert provider.calls[1].captured_output_names == ()
+    assert "locator contains the value" in provider.calls[1].action_history[-1]
+    assert len(compiler.calls[0]) == 1
+    assert compiler.calls[0][0].target == step.target
 
 
 def test_undeclared_extraction_is_rejected_before_execution(

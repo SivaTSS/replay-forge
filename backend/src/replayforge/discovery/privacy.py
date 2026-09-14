@@ -1,4 +1,4 @@
-"""Reject known invocation data in an artifact before it can be published.
+"""Reject known invocation and classified output data before artifact publication.
 
 This is a deterministic leak guard, not semantic PII detection: unknown personal
 values from a target still require a deployment-specific data policy.
@@ -10,8 +10,14 @@ import json
 import re
 from typing import Any
 
-from replayforge.capabilities.models import CapabilityArtifact
+from replayforge.capabilities.models import (
+    CapabilityArtifact,
+    LocatorBundle,
+    LocatorStrategy,
+    RenderedFieldValueCandidate,
+)
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
+from replayforge.policy.types import DataClassification
 
 _PERSONAL_PATTERNS = (
     re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
@@ -23,6 +29,7 @@ def validate_artifact_privacy(
     artifact: CapabilityArtifact,
     inputs: dict[str, Any],
     redactor: StructuredRedactor | None = None,
+    outputs: dict[str, Any] | None = None,
 ) -> None:
     full_content = artifact.model_dump_json()
     (redactor or StructuredRedactor()).validate_text(full_content)
@@ -43,6 +50,36 @@ def validate_artifact_privacy(
             # Match serialized text too: quotes/newlines must not evade the guard.
             serialized = json.dumps(value, ensure_ascii=False)[1:-1].casefold()
             if serialized in content:
-                raise EvidenceRejectedError("artifact contains a literal invocation value")
+                raise EvidenceRejectedError(
+                    "artifact contains a literal invocation or captured value"
+                )
 
     check(inputs)
+    for name, value in (outputs or {}).items():
+        schema = artifact.outputs.properties.get(name)
+        if schema is not None and schema.data_classification in {
+            DataClassification.PERSONAL,
+            DataClassification.CUSTOMER_IDENTIFIER,
+            DataClassification.FINANCIAL,
+        }:
+            check(value)
+
+
+def extraction_locator_contains_value(target: LocatorBundle | None, value: str) -> bool:
+    """Detect locators coupled to the value they just extracted, not a stable field."""
+    value = value.strip().casefold()
+    if target is None or len(value) < 4:
+        return False
+
+    for candidate in (*target.visual_candidates, *target.candidates):
+        if isinstance(candidate, RenderedFieldValueCandidate) or (
+            candidate.strategy == LocatorStrategy.RELATIVE_TEXT
+        ):
+            continue
+        fields = candidate.model_dump(mode="json")
+        if any(
+            isinstance(fields.get(name), str) and value in fields[name].casefold()
+            for name in ("value", "text", "name", "anchor", "label", "target_text", "group_label")
+        ):
+            return True
+    return False
