@@ -21,7 +21,12 @@ from replayforge.capabilities.models import (
     TypeAction,
     WaitForAction,
 )
-from replayforge.capabilities.values import ContractValidationError, validate_object
+from replayforge.capabilities.values import (
+    ContractValidationError,
+    binding_classification,
+    resolve_input,
+    validate_object,
+)
 from replayforge.discovery.constraints import (
     DEFAULT_DISCOVERY_STEPS,
     DEFAULT_DISCOVERY_TIMEOUT,
@@ -277,6 +282,7 @@ class DiscoveryEngine:
                         outputs,
                         effective_policy,
                         output_contract,
+                        draft.inputs if draft is not None else None,
                     )
                 except SurfaceError as error:
                     if not error.recoverable or not error.effect_absent:
@@ -368,7 +374,13 @@ class DiscoveryEngine:
                 if draft.capability_id not in {None, request.existing_capability_id}:
                     raise ValueError("provider capability id conflicts with the requested id")
                 draft = draft.model_copy(update={"capability_id": request.existing_capability_id})
+            validate_object(draft.inputs, request.inputs)
             return draft
+        except ContractValidationError as error:
+            raise ModelProviderError(
+                "discovery_input_invalid",
+                "Supplied inputs do not satisfy the planned capability contract.",
+            ) from error
         except ValueError as error:
             raise ModelProviderError(
                 "provider_contract_invalid",
@@ -435,6 +447,7 @@ class DiscoveryEngine:
         outputs: dict[str, Any],
         effective_policy: EffectivePolicy,
         output_contract: ObjectContract,
+        input_contract: ObjectContract | None,
     ) -> tuple[RecordedDiscoveryStep, str] | FailureResult | InterventionRequiredResult:
         value_source = (
             proposal.action.value
@@ -444,7 +457,7 @@ class DiscoveryEngine:
             else None
         )
         if isinstance(value_source, LiteralValue) and (
-            str(value_source.value) in {str(value) for value in request.inputs.values()}
+            self._contains_input_literal(request.inputs, str(value_source.value))
             or (isinstance(value_source.value, str) and value_source.value.isdigit())
         ):
             return self._failure(
@@ -452,6 +465,16 @@ class DiscoveryEngine:
                 "literal_customer_value",
                 "Discovery cannot publish a customer value embedded in an action.",
             )
+        if isinstance(value_source, InputValue):
+            try:
+                resolve_input(request.inputs, value_source.path)
+            except ContractValidationError as error:
+                raise SurfaceError(
+                    "input_binding_missing",
+                    "The proposed input binding is unavailable.",
+                    recoverable=True,
+                    effect_absent=True,
+                ) from error
         if isinstance(proposal.action, ExtractAction):
             output_name = proposal.action.output
             if output_name not in output_contract.required:
@@ -486,6 +509,13 @@ class DiscoveryEngine:
                 ),
                 declared_risk=proposal.declared_risk,
                 registered_target_risk=(target.registered_risk if target else None),
+                field_classification=(
+                    binding_classification(
+                        input_contract, value_source.path, effective_policy.forbidden_field_classes
+                    )
+                    if input_contract is not None and isinstance(value_source, InputValue)
+                    else None
+                ),
                 control_owner=AUTOMATION_OWNER.value,
             ),
         )
@@ -659,6 +689,16 @@ class DiscoveryEngine:
             summary["output_binding"] = proposal.action.output
             summary["transform"] = proposal.action.transform
         return summary
+
+    @staticmethod
+    def _contains_input_literal(inputs: object, literal: str) -> bool:
+        if isinstance(inputs, dict):
+            return any(
+                DiscoveryEngine._contains_input_literal(value, literal) for value in inputs.values()
+            )
+        if isinstance(inputs, list):
+            return any(DiscoveryEngine._contains_input_literal(value, literal) for value in inputs)
+        return str(inputs) == literal
 
     @staticmethod
     def _transform(value: str, transform: str) -> str:

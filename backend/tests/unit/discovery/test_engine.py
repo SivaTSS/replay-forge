@@ -1,15 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
 
-from replayforge.capabilities.models import CapabilityArtifact, ExtractAction, ObjectContract
+from replayforge.capabilities.models import (
+    CapabilityArtifact,
+    ExtractAction,
+    InputValue,
+    LiteralValue,
+    ObjectContract,
+    TypeAction,
+)
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import (
     ActProposal,
+    CapabilityDraftSpec,
     CompleteProposal,
     DiscoveryProposal,
     DiscoverySuccess,
@@ -24,7 +32,7 @@ from replayforge.interventions.leases import (
 )
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
-from replayforge.policy.types import Risk
+from replayforge.policy.types import DataClassification, Risk
 from replayforge.runs.results import FailureResult, InterventionRequiredResult
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
@@ -154,6 +162,155 @@ def test_discovery_extraction_transforms_match_artifact_semantics() -> None:
         "2026-09-10T12:30:00Z"
     )
     assert DiscoveryEngine._transform(" unchanged ", "text") == " unchanged "
+
+
+def test_planned_input_contract_is_checked_before_any_action(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    provider = QueueModelProvider([])
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+    draft = CapabilityDraftSpec(
+        operation_slug="read_value",
+        name="Read",
+        description="Read a value",
+        inputs=artifact.inputs,
+        outputs=artifact.outputs,
+        risk=Risk.READ_ONLY,
+    )
+    engine = replace(engine, contract_planner=lambda context: draft)
+    result = engine.execute(make_request(inputs={"member_id": "not-a-valid-id"}))
+    assert isinstance(result, FailureResult)
+    assert result.code == "discovery_input_invalid"
+    assert provider.calls == []
+    assert session.executed_targets == []
+    assert session.closed
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("forbidden", [False, True])
+def test_discovery_input_classification_applies_before_typing(
+    valid_artifact_data: dict[str, Any], nested: bool, forbidden: bool
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    field: dict[str, Any] = {
+        "type": "string",
+        "description": "Label",
+        "data_classification": "personal",
+    }
+    if nested:
+        field = {
+            "type": "object",
+            "description": "Member",
+            "data_classification": "personal",
+            "required": ["label"],
+            "properties": {
+                "label": {"type": "string", "description": "Label", "data_classification": "public"}
+            },
+        }
+    draft = CapabilityDraftSpec(
+        operation_slug="read_value",
+        name="Read",
+        description="Read a value",
+        inputs=ObjectContract.model_validate(
+            {"required": ["member"], "properties": {"member": field}}
+        ),
+        outputs=artifact.outputs,
+        risk=Risk.READ_ONLY,
+    )
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=TypeAction(
+                    kind="type",
+                    value=InputValue(source="input", path="member.label" if nested else "member"),
+                ),
+                target=artifact.steps[0].target,
+                rationale="Enter the supplied label",
+                expected_effect="Field filled",
+                declared_risk=Risk.READ_ONLY,
+                confidence=0.99,
+            )
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+    engine = replace(engine, contract_planner=lambda context: draft)
+    assert engine.effective_policy is not None
+    if forbidden:
+        engine = replace(
+            engine,
+            effective_policy=replace(
+                engine.effective_policy,
+                forbidden_field_classes=frozenset({DataClassification.PERSONAL}),
+            ),
+        )
+    inputs = {"member": {"label": "Synthetic label"} if nested else "Synthetic label"}
+    result = engine.execute(make_request(inputs=inputs, max_steps=1))
+    assert isinstance(result, FailureResult)
+    assert result.code == ("policy_blocked" if forbidden else "max_steps_exceeded")
+    assert bool(session.executed_targets) is not forbidden
+
+
+def test_discovery_cannot_embed_nested_customer_values_in_literal_actions(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=TypeAction(
+                    kind="type", value=LiteralValue(source="literal", value="Synthetic label")
+                ),
+                target=artifact.steps[0].target,
+                rationale="Enter a label",
+                expected_effect="Field filled",
+                declared_risk=Risk.READ_ONLY,
+                confidence=0.99,
+            )
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+    result = engine.execute(
+        make_request(inputs={"member": {"label": "Synthetic label"}}, max_steps=1)
+    )
+    assert isinstance(result, FailureResult)
+    assert result.code == "literal_customer_value"
+    assert session.executed_targets == []
+
+
+def test_missing_discovery_binding_is_rejected_without_dispatch(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=TypeAction(kind="type", value=InputValue(source="input", path="missing")),
+                target=artifact.steps[0].target,
+                rationale="Enter the supplied value",
+                expected_effect="Field filled",
+                declared_risk=Risk.READ_ONLY,
+                confidence=0.99,
+            )
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, _ = build_discovery(session, provider, artifact)
+    result = engine.execute(make_request(max_steps=1))
+    assert isinstance(result, FailureResult)
+    assert result.code == "max_steps_exceeded"
+    assert session.executed_targets == []
+    assert isinstance(engine.recorder, MemoryRecorder)
+    assert {
+        "code": "input_binding_missing",
+        "effect_absent": True,
+    } in engine.recorder.recorded_details
 
 
 def test_successful_loop_records_action_and_compiles_verified_artifact(

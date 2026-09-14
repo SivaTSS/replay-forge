@@ -36,6 +36,7 @@ sequenceDiagram
     E->>S: observe + screenshot
     E->>M: goal, field names, UI facts, frame, recent actions
     M-->>E: typed contract draft
+    E->>E: validate supplied inputs against draft
     E->>M: goal + draft contract + UI facts
     M-->>E: typed act / complete / escalate proposal
     E->>S: resolve stable target
@@ -75,6 +76,13 @@ escalate → reason code and bounded rationale
 ```
 
 Raw chain-of-thought is not requested or persisted. Provider errors are reduced to bounded categories; their raw messages are not exposed in run results.
+
+Before the action loop, supplied values must satisfy the planned input contract; a mismatch returns
+`discovery_input_invalid`. Every bound typing/selection action carries its input classification into
+policy, including forbidden parent-object classifications. Missing bindings are rejected before
+dispatch. Literal values matching supplied data—even nested values—cannot become recorded actions.
+This uses the same value-contract and classification helpers as replay: a successful discovery must
+not depend on inputs that its published capability would reject.
 
 ## Bounds
 
