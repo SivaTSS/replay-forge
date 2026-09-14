@@ -1134,6 +1134,8 @@ class DiscoveryEngine:
         if isinstance(proposal.action, AssertAction | WaitForAction):
             # Retain the discriminator, never the expected text or customer value.
             summary["condition_kind"] = proposal.action.condition.kind
+        if proposal.expected_condition is not None:
+            summary["expected_condition_kind"] = proposal.expected_condition.kind
         return summary
 
     @staticmethod

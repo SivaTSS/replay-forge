@@ -48,6 +48,23 @@ def test_journal_drops_forbidden_detail_keys() -> None:
     assert recorder.events()[0].details == {"decision": "allow"}
 
 
+@pytest.mark.parametrize("kind", ["text", "rendered_text", "identity_matches", "all"])
+def test_journal_retains_expected_condition_discriminator_only(kind: str) -> None:
+    recorder = journal()
+    recorder.record(
+        "proposal_received",
+        recorder.run_id,
+        details={"expected_condition_kind": kind, "expected_condition": "Private customer"},
+    )
+    assert recorder.events()[0].details == {"expected_condition_kind": kind}
+    recorder.record(
+        "proposal_received",
+        recorder.run_id,
+        details={"expected_condition_kind": "Private customer"},
+    )
+    assert recorder.events()[1].details == {}
+
+
 def test_journal_drops_unclassified_free_text_before_retention() -> None:
     recorder = journal(StructuredRedactor(configured_secrets=("highly-sensitive",)))
 

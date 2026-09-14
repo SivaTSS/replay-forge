@@ -123,6 +123,11 @@ def event_detail_classifications(details: dict[str, object]) -> dict[str, DataCl
             or (key in {"effect_absent", "target_present"} and isinstance(value, bool))
             or (key in _ENUM_FIELDS and isinstance(value, str) and value in _ENUM_FIELDS[key])
             or (
+                key == "expected_condition_kind"
+                and isinstance(value, str)
+                and value in _ENUM_FIELDS["condition_kind"]
+            )
+            or (
                 key in {"session_id", "intervention_id"}
                 and isinstance(value, str)
                 and re.fullmatch(r"(?:ses|int)_[0-9a-f]{32}", value) is not None
