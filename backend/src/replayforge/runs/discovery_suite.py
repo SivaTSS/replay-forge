@@ -47,12 +47,14 @@ class ReplayValidation:
 
     def verifies(self, scenario: DiscoveryScenario | None = None) -> bool:
         if scenario is None:
-            return self.result.status == "success"
+            return self.result.status == "success" and not self.completed_recoveries
         if scenario.kind == "recovery":
-            return self.result.status == "success" and scenario.code in self.completed_recoveries
+            return self.result.status == "success" and self.completed_recoveries == (scenario.code,)
         expected = "business_outcome" if scenario.kind == "business_outcome" else "failure"
         return (
-            self.result.status == expected and getattr(self.result, "code", None) == scenario.code
+            self.result.status == expected
+            and getattr(self.result, "code", None) == scenario.code
+            and not self.completed_recoveries
         )
 
 

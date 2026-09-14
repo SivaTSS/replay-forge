@@ -467,6 +467,14 @@ def test_recovery_validation_requires_completed_named_recovery() -> None:
     assert not happy.verifies(scenario)
     assert not ReplayValidation(happy.result, ("different_recovery",)).verifies(scenario)
     assert ReplayValidation(happy.result, ("dismiss_notice",)).verifies(scenario)
+    assert not ReplayValidation(happy.result, ("dismiss_notice", "different_recovery")).verifies(
+        scenario
+    )
+    assert not ReplayValidation(happy.result, ("dismiss_notice", "dismiss_notice")).verifies(
+        scenario
+    )
+    assert happy.verifies()
+    assert not ReplayValidation(happy.result, ("dismiss_notice",)).verifies()
 
 
 def test_negative_validation_requires_exact_disposition_and_code() -> None:
@@ -494,6 +502,7 @@ def test_negative_validation_requires_exact_disposition_and_code() -> None:
         recoverable=False,
     )
     assert ReplayValidation(failure).verifies(scenario)
+    assert not ReplayValidation(failure, ("unexpected_correction",)).verifies(scenario)
     assert not ReplayValidation(failure.model_copy(update={"code": "target_absent"})).verifies(
         scenario
     )

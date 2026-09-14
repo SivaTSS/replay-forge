@@ -128,6 +128,9 @@ precedence over outcomes remains unchanged.
 Replay verifies same-step identity guards before returning a negative disposition or starting
 recovery. A matching status label cannot excuse a mismatched selected record. Composite identity
 guards retain their original boolean semantics.
+Suite proof also checks isolation: primary and terminal cases must not execute a recovery;
+a recovery case must complete exactly its named correction once. Success with an unrelated,
+repeated, or spuriously triggered recovery does not pass publication.
 
 Discovery also renews between model inference, grounding, execution, and condition checks.
 Each renewal checks the same owner and exact lease version. A single stage that outlasts the
