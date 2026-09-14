@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -31,7 +32,7 @@ def resolve_input(inputs: dict[str, Any], path: str) -> Any:
 
 
 def contract_classifications(
-    contract: ObjectContract, prefix: str
+    contract: ObjectContract, prefix: str, redactions: Mapping[str, str] | None = None
 ) -> dict[str, DataClassification]:
     """Preserve nested classifications when preparing a result for redaction."""
     result: dict[str, DataClassification] = {}
@@ -43,6 +44,14 @@ def contract_classifications(
 
     for name, schema in contract.properties.items():
         visit(schema, f"{prefix}.{name}")
+    for name, mode in (redactions or {}).items():
+        path = f"{prefix}.{name}"
+        if mode == "remove":
+            result[path] = DataClassification.PERSONAL
+        elif result.get(path) in {DataClassification.PUBLIC, DataClassification.OPERATIONAL}:
+            # Tokenization reveals less than last-four. Existing financial and
+            # personal restrictions remain stronger than either directive.
+            result[path] = DataClassification.CUSTOMER_IDENTIFIER
     return result
 
 

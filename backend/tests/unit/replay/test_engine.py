@@ -449,13 +449,16 @@ def test_known_not_found_is_business_outcome_before_missing_happy_path(
     assert session.closed is True
 
 
+@pytest.mark.parametrize("happy_path_visible", [True, False])
 def test_known_outcome_is_rechecked_after_waiting_for_ui_transition(
-    valid_artifact_data: dict[str, Any],
+    valid_artifact_data: dict[str, Any], happy_path_visible: bool
 ) -> None:
     valid_artifact_data["steps"][1]["postconditions"] = [
         {"kind": "text", "value": "Member Results", "match": "exact"}
     ]
-    session = FakeSurfaceSession(member_not_found_after_wait=True)
+    session = FakeSurfaceSession(
+        member_not_found_after_wait=True, postconditions_valid=happy_path_visible
+    )
     engine, _, _ = build_engine(session)
 
     result = engine.execute(request_for(valid_artifact_data, "123456789"))

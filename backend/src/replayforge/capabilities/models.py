@@ -968,6 +968,10 @@ class CapabilityArtifact(ArtifactModel):
             raise ValueError("capability risk and policy maximum risk must match")
         if self.compatibility.entry_point not in self.policy.allowed_entry_points:
             raise ValueError("compatibility entry point is not allowed by capability policy")
+        if self.policy.output_redaction.keys() - self.outputs.properties.keys():
+            raise ValueError("output redaction references an unknown output")
+        if any(not term.strip() for term in self.policy.forbidden_text_inputs):
+            raise ValueError("forbidden text inputs must be non-empty")
 
         step_ids = [step.id for step in self.steps]
         if len(step_ids) != len(set(step_ids)):

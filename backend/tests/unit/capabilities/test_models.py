@@ -92,6 +92,25 @@ def test_unknown_input_reference_is_rejected(valid_artifact_data: dict[str, Any]
         CapabilityArtifact.model_validate(valid_artifact_data)
 
 
+def test_output_redaction_cannot_reference_an_undeclared_output(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["policy"]["output_redaction"] = {"unknown": "remove"}
+
+    with pytest.raises(ValidationError, match="output redaction references an unknown output"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize("term", ["", " ", "\t"])
+def test_forbidden_input_terms_cannot_be_blank(
+    valid_artifact_data: dict[str, Any], term: str
+) -> None:
+    valid_artifact_data["policy"]["forbidden_text_inputs"] = [term]
+
+    with pytest.raises(ValidationError, match="forbidden text inputs must be non-empty"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
 def test_duplicate_step_ids_are_rejected(valid_artifact_data: dict[str, Any]) -> None:
     valid_artifact_data["steps"][1]["id"] = valid_artifact_data["steps"][0]["id"]
 

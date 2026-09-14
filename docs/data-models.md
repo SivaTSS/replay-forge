@@ -1,8 +1,11 @@
 # Data models
 
 ReplayForge separates data by trust and lifetime. Serialized boundaries use strict Pydantic
-models with unknown fields rejected; durable contracts are frozen. Internal state uses frozen
-dataclasses. Repository protocols own mutation.
+models with unknown fields rejected; durable contracts reject field reassignment. Internal state
+uses frozen dataclasses. Nested dictionaries remain ordinary Python mappings, so capability and
+application registries, discovery-suite repositories, and journal reads use detached snapshots.
+This prevents a caller from mutating a published contract through a previously returned object.
+Repository protocols own mutation.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -73,6 +76,15 @@ flowchart TB
 | Policy | Entry points, routes, actions, risk ceiling, and forbidden data classes are explicit |
 | Provenance | Run, provider/model, component versions, timestamp, fingerprint, evidence key, and optional canonical hash are recorded |
 
+Artifact and registration YAML rejects duplicate mapping keys, including duplicates introduced
+by merge keys. Silent last-key-wins parsing would let displayed configuration disagree with the
+effective contract. The parser is shared so both boundaries use the same rule.
+
+Compatibility is checked against registration before launch and registered readiness landmarks
+on the live entry surface. Descriptive discovery fingerprints are not executable preconditions.
+See [Compatibility](heterogeneity-and-compatibility.md) for legacy-schema rules, vendor-version
+handling, and the deliberately unimplemented overlay design.
+
 Actions and conditions are discriminated unions. For example, `type` requires a value source and a
 target; `navigate` accepts an entry-point name and cannot carry a target. The same pairing is
 checked on model proposals, recorded discovery steps, and final artifact steps.
@@ -94,8 +106,9 @@ flowchart TB
 ```
 
 `ProviderContext` and `PlanningContext` are transient and may contain the goal, synthetic inputs,
-and a sanitized PNG. A provider response is only a proposal. It becomes a recording after policy
-allows it, the adapter executes it, and deterministic postconditions pass.
+and an unmasked live PNG. These authorized discovery frames are distinct from masked evidence
+frames; they are not retained locally. A provider response is only a proposal. It becomes a recording
+after policy allows it, the adapter executes it, and deterministic postconditions pass.
 
 `DiscoverySuccess` binds a typed run ID to that run's evidence manifest. `DiscoverySuite` has its
 own `sui_` identity and four states: `collecting`, `validated`, `published`, or `failed`. A suite can
@@ -141,6 +154,13 @@ Each `PolicyLayer` contains credential-free HTTP origins, safe route patterns, a
 a risk ceiling, and forbidden data classes. Intersection keeps only shared allowlists, unions
 forbidden classes, and chooses the lowest risk ceiling. Empty intersections are valid and fail
 closed.
+
+Replay passes the bound input's classification into policy, including forbidden classifications
+in parent objects. Discovery rejects nested credential/secret fields as well as top-level ones.
+Evidence classification also walks nested outputs. Explicit `remove` directives drop the field;
+`tokenize` and `last4` never weaken a stronger classification, and customer tokenization is used
+instead of retaining trailing identifying digits. These are persistence rules; successful callers
+receive the typed task outputs.
 
 `ActionContext` deliberately accepts hostile observed values so the evaluator can return a stable
 denial instead of failing during parsing. `PolicyDecision` is strict: typed `dec_` ID, stable

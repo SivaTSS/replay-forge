@@ -620,7 +620,9 @@ def build_runtime(settings: object) -> LocalRuntime:
         with lock:
             journals[run_id] = journal
             result_classifications[run_id] = {
-                **contract_classifications(record.artifact.outputs, "outputs"),
+                **contract_classifications(
+                    record.artifact.outputs, "outputs", record.artifact.policy.output_redaction
+                ),
                 "expected": DataClassification.PERSONAL,
                 "observed": DataClassification.PERSONAL,
             }

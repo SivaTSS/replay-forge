@@ -5,11 +5,13 @@ import pytest
 from replayforge.capabilities.models import ObjectContract
 from replayforge.capabilities.values import (
     ContractValidationError,
+    binding_classification,
     contract_classifications,
     resolve_input,
     validate_object,
 )
 from replayforge.evidence.redaction import StructuredRedactor
+from replayforge.policy.types import DataClassification
 
 
 def contract_with(property_schema: dict[str, Any]) -> ObjectContract:
@@ -126,3 +128,39 @@ def test_nested_personal_outputs_are_redacted_below_public_objects() -> None:
     )
     assert b"Private Person" not in redacted.content
     assert "drop:outputs.value.name" in redacted.redaction_directives
+
+
+@pytest.mark.parametrize("mode", ["remove", "tokenize", "last4"])
+def test_explicit_redaction_also_protects_public_outputs(mode: str) -> None:
+    contract = contract_with({"type": "string"})
+    redacted = StructuredRedactor().sanitize_json(
+        {"outputs": {"value": "private-value"}},
+        contract_classifications(contract, "outputs", {"value": mode}),
+        run_salt="run",
+    )
+    assert b"private-value" not in redacted.content
+
+
+@pytest.mark.parametrize("mode", ["tokenize", "last4"])
+def test_output_directives_cannot_weaken_personal_classification(mode: str) -> None:
+    contract = contract_with({"type": "string", "data_classification": "personal"})
+    classifications = contract_classifications(contract, "outputs", {"value": mode})
+    assert classifications["outputs.value"] is DataClassification.PERSONAL
+
+
+def test_forbidden_parent_classification_protects_public_nested_input() -> None:
+    contract = contract_with(
+        {
+            "type": "object",
+            "data_classification": "secret",
+            "properties": {
+                "token": {"type": "string", "description": "Token", "data_classification": "public"}
+            },
+        }
+    )
+    assert (
+        binding_classification(contract, "value.token", frozenset({DataClassification.SECRET}))
+        is DataClassification.SECRET
+    )
+    assert binding_classification(contract, "value.token", frozenset()) is DataClassification.PUBLIC
+    assert binding_classification(contract, "missing", frozenset()) is None
