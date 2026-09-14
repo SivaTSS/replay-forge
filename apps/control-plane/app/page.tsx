@@ -98,6 +98,8 @@ export default function InterventionConsole() {
   const [now, setNow] = useState(Date.now());
   const mutationInFlight = useRef(false);
   const frameInFlight = useRef(false);
+  const selectedIntervention = useRef<string | null>(null);
+  const loadSequence = useRef(0);
 
   const refreshInbox = useCallback(async (quiet = false) => {
     try {
@@ -113,13 +115,28 @@ export default function InterventionConsole() {
   }, []);
 
   const loadById = useCallback(async (id: string, quiet = false) => {
+    if (!quiet) {
+      if (selectedIntervention.current !== id) setIntervention(null);
+      selectedIntervention.current = id;
+    }
+    if (selectedIntervention.current !== id) return null;
+    const sequence = ++loadSequence.current;
     try {
       const response = await fetch(
         `/runtime/api/v1/interventions/${encodeURIComponent(id)}`,
         { cache: "no-store" },
       );
       const next = await readJson<Intervention>(response);
-      setIntervention(next);
+      if (
+        selectedIntervention.current !== id || sequence !== loadSequence.current
+      )
+        return null;
+      setIntervention((current) =>
+        current?.intervention_id === id &&
+        current.lease_version > next.lease_version
+          ? current
+          : next,
+      );
       setInterventionId(next.intervention_id);
       if (!quiet) {
         setError(null);
@@ -127,7 +144,11 @@ export default function InterventionConsole() {
       }
       return next;
     } catch (cause) {
-      if (!quiet) setError(errorMessage(cause));
+      if (
+        !quiet && selectedIntervention.current === id &&
+        sequence === loadSequence.current
+      )
+        setError(errorMessage(cause));
       return null;
     }
   }, []);
@@ -159,7 +180,10 @@ export default function InterventionConsole() {
       action: "claim" | "release" | "resume" | "heartbeat" | "terminate",
       quiet = false,
     ) => {
-      if (!intervention || mutationInFlight.current) return;
+      if (
+        !intervention || mutationInFlight.current ||
+        selectedIntervention.current !== intervention.intervention_id
+      ) return;
       mutationInFlight.current = true;
       if (!quiet) {
         setPending(action);
@@ -182,6 +206,7 @@ export default function InterventionConsole() {
           },
         );
         const next = await readJson<TransitionResponse>(response);
+        if (selectedIntervention.current !== intervention.intervention_id) return;
         setResumeResult(next.result ?? null);
         if (
           next.result?.status === "intervention_required" &&
@@ -202,7 +227,8 @@ export default function InterventionConsole() {
         }
         await refreshInbox(true);
       } catch (cause) {
-        if (!quiet) setError(errorMessage(cause));
+        if (!quiet && selectedIntervention.current === intervention.intervention_id)
+          setError(errorMessage(cause));
         await loadById(intervention.intervention_id, true);
         await refreshInbox(true);
       } finally {
@@ -218,6 +244,7 @@ export default function InterventionConsole() {
   const owned = Boolean(ownerMatches && !leaseExpired);
 
   useEffect(() => {
+    setManualText("");
     setFrame(null);
     setViewportUrl((old) => {
       if (old) URL.revokeObjectURL(old);
@@ -322,7 +349,10 @@ export default function InterventionConsole() {
 
   const sendInput = useCallback(
     async (input: HumanInput) => {
-      if (!intervention || !frame || !owned || mutationInFlight.current)
+      if (
+        !intervention || !frame || !owned || mutationInFlight.current ||
+        selectedIntervention.current !== intervention.intervention_id
+      )
         return false;
       mutationInFlight.current = true;
       setPending("input");
@@ -345,6 +375,7 @@ export default function InterventionConsole() {
           },
         );
         await readJson(response);
+        if (selectedIntervention.current !== intervention.intervention_id) return false;
         setNotice("Input applied to the retained session.");
         setFrame(null);
         setViewportUrl((old) => {
@@ -353,7 +384,8 @@ export default function InterventionConsole() {
         });
         return true;
       } catch (cause) {
-        setError(errorMessage(cause));
+        if (selectedIntervention.current === intervention.intervention_id)
+          setError(errorMessage(cause));
         await loadById(intervention.intervention_id, true);
         return false;
       } finally {

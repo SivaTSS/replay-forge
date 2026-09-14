@@ -31,6 +31,10 @@ separate per-tenant policy editor or caller-supplied policy override. Registered
 reach replay, and input classification includes protected parent objects. Capability-declared
 forbidden input labels are enforced before typing.
 
+Discovery applies the same bound-input classification rules after validating its planned input
+contract. This closes the policy boundary before the first typing/selection action, not only when
+the resulting artifact is replayed.
+
 Risk is the maximum of:
 
 - Risk declared by the step or proposal.
@@ -132,6 +136,12 @@ intervention ID
 ```
 
 After one accepted input, the frame is invalidated. The next action requires a fresh screenshot.
+
+The console separately guards asynchronous responses: an old lookup cannot replace a newly selected
+intervention, and an older poll cannot lower the displayed lease version. Switching context clears
+the previous frame and unsent manual text; late mutation responses cannot update the new context.
+Ignoring stale responses was chosen over trusting arrival order. Server-side lease/frame validation
+remains authoritative; the UI guard prevents misleading context, not a substitute authorization layer.
 
 ## Evidence path
 

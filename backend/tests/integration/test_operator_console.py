@@ -10,7 +10,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 import pytest
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import Route, expect, sync_playwright
 
 
 def _wait(url: str, process: subprocess.Popen[bytes]) -> None:
@@ -110,6 +110,56 @@ def operator_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
         for process in reversed(processes):
             process.wait(timeout=10)
         log.close()
+
+
+@pytest.mark.integration
+def test_delayed_lookup_cannot_replace_new_operator_selection(operator_stack: Path) -> None:
+    # Mock only HTTP ordering; this test does not claim to be discovery/handoff evidence.
+    del operator_stack
+    first_id, second_id = "int_" + "a" * 32, "int_" + "b" * 32
+    records = [
+        {
+            "intervention_id": identity,
+            "capability_name": name,
+            "status": "open",
+            "control_owner": "automation_paused",
+            "lease_version": 1,
+            "lease_expires_at": "2099-01-01T00:00:00Z",
+            "tenant": "harbor",
+            "explanation": "Synthetic ordering test",
+        }
+        for identity, name in ((first_id, "First task"), (second_id, "Second task"))
+    ]
+    delayed: list[Route] = []
+
+    def respond(route: Route) -> None:
+        if route.request.url.endswith(first_id):
+            delayed.append(route)
+        elif route.request.url.endswith(second_id):
+            route.fulfill(json=records[1])
+        else:
+            route.fulfill(json={"items": records})
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.route("**/runtime/api/v1/interventions**", respond)
+        page.goto("http://127.0.0.1:3000")
+        with page.expect_request(f"**/{first_id}"):
+            page.get_by_role("button", name="First task", exact=False).click()
+        page.get_by_role("button", name="Second task", exact=False).click()
+        expect(page.get_by_role("heading", name="Second task", exact=True)).to_be_visible()
+        assert delayed
+        with page.expect_response(f"**/{first_id}") as response:
+            delayed[0].fulfill(json=records[0])
+        response.value.finished()
+        page.evaluate(
+            "() => new Promise(resolve => "
+            "requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+        )
+        expect(page.get_by_role("heading", name="Second task", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="First task", exact=True)).to_have_count(0)
+        browser.close()
 
 
 @pytest.mark.integration
