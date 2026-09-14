@@ -91,6 +91,7 @@ be claimed; they are not fabricated by changing replay results.
 | End terminal traces at the verified model-selected marker | Ask the model for another action after a terminal result | Prevent duplicate branch proposals or mutation after rejection; compilation, privacy, checkpoint, and fresh-replay gates still apply |
 | Retain composite identity guards and new assertions | Replace all postconditions for scenario convenience | Exception discovery must not weaken record selection checks |
 | Current-frame bounded-control disambiguation | Fixed offsets or first matching label | Distinguish an action from repeated status text while retaining ambiguity when multiple controls match |
+| Symbolic input annotations on observed OCR tokens | Ask the model to infer caller identity from field names alone | Connect an exact visible phrase to its input binding without transmitting unseen values; runtime uniqueness and identity checks remain authoritative |
 | Bounded OCR inference pool | Raise grounding deadlines or reduce screenshot fidelity | Default two intra-operation threads, one inter-operation thread; serialized inference retains current recognition and timing bounds |
 | Classify viewport scrolling by its operation | Treat prose such as “reveal the lower section” as a protected reveal button | Scrolling activates no control; explicit registered/declared risk floors, location checks, and action allowlists still apply |
 

@@ -2,16 +2,17 @@ schema_version: "1.0"
 workflows:
   transaction_investigation:
     goal: >-
-      Investigate the transaction identified by transaction_reference in account_id belonging
-      to member_id. Return exactly transaction_reference, account_id, amount, posted_date,
+      Search for member_id, select that member's account identified by account_id, and search
+      within that account for transaction_reference. Return exactly transaction_reference,
+      account_id, amount, posted_date,
       description, and posting_status from the actual transaction details. Verify the returned
       transaction reference and account identity against the supplied inputs. Do not change
       any account or transaction state.
       Correctness must depend on every supplied identifier, including when it differs from an
       initially visible or preselected record. Do not assume defaults match the caller's request.
       Explicitly select the requested account before locating the transaction, not merely check
-      its identity afterward. Member and reference lookups must support an explicit application
-      no-match result for unknown inputs, not just clicking a row in the initial directory.
+      its identity afterward. Use the application's search facility for the member and
+      transaction lookups so an absent record can produce an explicit no-match response.
     application_family: northstar_member_service
     tenant: harbor
     validation_tenants: [summit]

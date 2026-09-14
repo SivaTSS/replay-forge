@@ -33,13 +33,13 @@ CASES = [
     ),
     (
         "member.servicing_loan_payoff_quote",
-        "1.0.1",
+        "1.0.2",
         {"member_id": "12346", "payoff_date": "2026-09-21"},
         {"payoff_amount": "$9,035.70", "good_through_date": "2026-09-21"},
     ),
     (
         "member.temporary_card_lock",
-        "1.0.1",
+        "1.0.2",
         {
             "member_id": "12346",
             "card_id": "12346-D1",
