@@ -580,6 +580,45 @@ def test_relative_text_only_prefers_a_unique_bounded_control(
         assert error.value.code == "target_ambiguous"
 
 
+@pytest.mark.parametrize("scale", [0.75, 1.0, 1.5])
+@pytest.mark.parametrize("buttons", [0, 1, 2])
+def test_compact_text_enclosures_do_not_depend_on_page_median_font(
+    tmp_path: Path, scale: float, buttons: int
+) -> None:
+    def region(x: int, y: int, width: int, height: int) -> ScreenRegion:
+        return ScreenRegion(*(round(value * scale) for value in (x, y, width, height)))
+
+    frame = np.full((round(240 * scale), round(500 * scale), 3), 245, dtype=np.uint8)
+    for box in [(10, 60, 480, 90), *[(x, 87, 72, 28) for x in (300, 180)[:buttons]]]:
+        bounds = region(*box)
+        cv2.rectangle(
+            frame,
+            (bounds.x, bounds.y),
+            (bounds.x + bounds.width, bounds.y + bounds.height),
+            (20, 80, 140),
+            1,
+        )
+    ok, encoded = cv2.imencode(".png", frame)
+    assert ok
+    tokens = (
+        VisualToken("Record 42", 0.99, region(20, 90, 100, 24)),
+        VisualToken("Open", 0.99, region(190, 92, 50, 20)),
+        VisualToken("Open", 0.99, region(310, 92, 50, 20)),
+        VisualToken("LARGE HEADING", 0.99, region(20, 5, 300, 35)),
+    )
+    vision = semantic_vision(tmp_path, tokens)
+    candidate = OcrRelativeCandidate(
+        strategy="ocr_relative", anchor="Record 42", target_text="Open", relation="right_of"
+    )
+    viewport = Viewport(round(500 * scale), round(240 * scale))
+    if buttons == 1:
+        assert vision.resolve(candidate, encoded.tobytes(), viewport).region == tokens[2].region
+    else:
+        with pytest.raises(SurfaceError) as error:
+            vision.resolve(candidate, encoded.tobytes(), viewport)
+        assert error.value.code == "target_ambiguous"
+
+
 def test_ocr_relative_text_and_region_extraction(tmp_path: Path) -> None:
     tokens = (
         VisualToken("Account type", 0.99, ScreenRegion(30, 40, 100, 20)),

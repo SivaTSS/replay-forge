@@ -48,7 +48,7 @@ class TextRecognizer(Protocol):
 # Configure once at import, before any session workers are started.
 cv2.setNumThreads(1)
 
-VisualNodeKind = Literal["phrase", "control", "image", "container"]
+VisualNodeKind = Literal["phrase", "control", "text_enclosure", "image", "container"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +228,7 @@ class VisionGrounder:
         graph = self._layout_graph(png, viewport, started)
         controls = tuple(
             control
-            for control in graph.of_kind("control")
+            for control in (*graph.of_kind("control"), *graph.of_kind("text_enclosure"))
             if sum(self._center_in(match.region, control.region) for match in matches) == 1
         )
         contained = tuple(
@@ -752,6 +752,11 @@ class VisionGrounder:
                 and aspect_ratio >= policy.segmentation.minimum_control_aspect_ratio
             ):
                 kind = "control"
+            elif any(self._strictly_contains(box, token.region) for token in tokens):
+                # A compact bordered label may be shorter than the page's median text
+                # (large headings or OCR padding). Preserve its actual enclosure for
+                # text-click disambiguation, without treating it as an editable field.
+                kind = "text_enclosure"
             elif text_overlap <= policy.segmentation.text_overlap_threshold:
                 kind = "image"
             else:
@@ -1126,6 +1131,15 @@ class VisionGrounder:
             and child.y >= container.y
             and child.x + child.width <= container.x + container.width
             and child.y + child.height <= container.y + container.height
+        )
+
+    @staticmethod
+    def _strictly_contains(container: ScreenRegion, child: ScreenRegion) -> bool:
+        return (
+            child.x > container.x
+            and child.y > container.y
+            and child.x + child.width < container.x + container.width
+            and child.y + child.height < container.y + container.height
         )
 
     @staticmethod
