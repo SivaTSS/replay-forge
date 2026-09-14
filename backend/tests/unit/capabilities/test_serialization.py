@@ -18,6 +18,9 @@ _COMMITTED_ARTIFACT_HASHES = {
     "member.transaction_investigation/1.0.1.yaml": (
         "sha256:354824ebbd3ba6b77a126537b3c1d442e09a62235d275b9077ef1805024e7a03"
     ),
+    "member.transaction_investigation/1.0.2.yaml": (
+        "sha256:a5b82adb1f1f12dcf140cb6c057f0aa7aecbe340480bd3e7153698c2a8f403fb"
+    ),
     "member.servicing_loan_payoff_quote/1.0.1.yaml": (
         "sha256:ea95e6c1a0aa65528270e7078374eb8997f57a573389fa3a1d827bc516d8f737"
     ),

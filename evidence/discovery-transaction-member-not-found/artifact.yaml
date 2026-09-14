@@ -1,0 +1,272 @@
+schema_version: '1.4'
+capability:
+  id: member.transaction_investigation
+  version: 1.0.0
+  name: Investigate member transaction
+  description: Observe and verify that the supplied member does not exist. Stop without
+    choosing another member.
+  application_family: northstar_member_service
+  surface: web
+  risk: read_only
+  tags: []
+compatibility:
+  application_family: northstar_member_service
+  base_variant: standard
+  supported_variants:
+  - harbor
+  surface_contract: web.v1
+  entry_point: legacy_servicing
+  rendered_surface: true
+  fingerprint:
+    required_landmarks:
+    - kind: visual_text
+      value: Branch member directory
+    forbidden_landmarks: []
+inputs:
+  type: object
+  additional_properties: false
+  required:
+  - member_id
+  - account_id
+  - transaction_reference
+  properties:
+    member_id:
+      type: string
+      description: Invocation value for member id.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    account_id:
+      type: string
+      description: Invocation value for account id.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    transaction_reference:
+      type: string
+      description: Invocation value for transaction reference.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+outputs:
+  type: object
+  additional_properties: false
+  required: []
+  properties:
+    transaction_reference:
+      type: string
+      description: Reference of the located transaction, verified against the supplied
+        transaction_reference.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    account_id:
+      type: string
+      description: Identifier of the explicitly selected account, verified against
+        the supplied account_id.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    amount:
+      type: string
+      description: Amount shown in the actual transaction details.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    posted_date:
+      type: string
+      description: Posted date shown in the actual transaction details.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    description:
+      type: string
+      description: Transaction description shown in the actual transaction details.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    posting_status:
+      type: string
+      description: Posting status shown in the actual transaction details.
+      data_classification: operational
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+preconditions:
+- kind: route
+  pattern: /servicing
+steps:
+- id: step_01_type
+  name: Member ID / name / city
+  action:
+    kind: type
+    value:
+      source: input
+      path: member_id
+    clear: true
+  target:
+    description: Member ID / name / city
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Member ID / name / city
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_02_click
+  name: Search
+  action:
+    kind: click
+  target:
+    description: Search
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Search
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_03_assert
+  name: assert
+  action:
+    kind: assert
+    condition:
+      kind: rendered_text
+      value: No matching members. Refine the inquiry; no record was selected.
+      match: exact
+  preconditions: []
+  postconditions:
+  - kind: rendered_text
+    value: No matching members. Refine the inquiry; no record was selected.
+    match: exact
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+recoveries: []
+outcomes: []
+failures: []
+checkpoint:
+  id: transaction_investigation_verified
+  condition:
+    kind: all
+    conditions:
+    - kind: route
+      pattern: /servicing
+    - kind: rendered_text
+      value: No matching members. Refine the inquiry; no record was selected.
+      match: exact
+policy:
+  allowed_action_types:
+  - type
+  - click
+  - assert
+  allowed_entry_points:
+  - legacy_servicing
+  maximum_risk: read_only
+  allowed_route_patterns:
+  - /servicing
+  forbidden_text_inputs: []
+  output_redaction:
+    transaction_reference: last4
+    account_id: last4
+    amount: last4
+    posted_date: last4
+    description: last4
+    posting_status: last4
+provenance:
+  discovery_run_id: run_bc7c8925e68c4731aba0a1316a4c7ee3
+  provider: openai
+  model: gpt-5.6-luna
+  prompt_policy_version: 2.1.1
+  surface_adapter_version: web.v1
+  compiler_version: 2.0.1
+  created_at: '2026-09-14T21:57:51.013744Z'
+  target_fingerprint: 1466c4d3e067484d24867bac662c1467c52e128c4ffcae5c408374ff7359feb3
+  evidence_manifest_key: evidence://run_bc7c8925e68c4731aba0a1316a4c7ee3/manifest-evd_8b4f13a157ca4d45a6a00aa4892b2efd.bin
+  artifact_content_hash: sha256:64f2374615989c3bdcb535faac720688de4904d3f30aa8e2947a249aea666c15
