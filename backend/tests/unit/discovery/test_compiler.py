@@ -14,12 +14,13 @@ from replayforge.capabilities.models import (
     TypeAction,
 )
 from replayforge.capabilities.serialization import artifact_content_hash
-from replayforge.discovery.compiler import CompilationError, SavingsBalanceCompiler
+from replayforge.discovery.compiler import CompilationError
 from replayforge.discovery.models import RecordedDiscoveryStep
 from replayforge.policy.types import Risk
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, Viewport
+from tests.legacy_compiler import SavingsBalanceCompiler
 
 
 def observation(fingerprint: str) -> NormalizedObservation:

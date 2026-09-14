@@ -19,6 +19,9 @@ def test_domain_and_adapters_do_not_depend_on_runtime_composition() -> None:
                 modules = [node.module or ""]
             else:
                 continue
+            assert not any(
+                module == "tests" or module.startswith("tests.") for module in modules
+            ), f"production code imports a test fixture: {relative}"
             if any(
                 module == "replayforge.runtime" or module.startswith("replayforge.runtime.")
                 for module in modules

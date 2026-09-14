@@ -32,7 +32,6 @@ from replayforge.capabilities.serialization import (
     dump_artifact_yaml,
     load_artifact_yaml,
 )
-from replayforge.discovery.compiler import SavingsBalanceCompiler
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import (
     ActProposal,
@@ -82,6 +81,7 @@ from replayforge.surfaces.models import (
     Viewport,
 )
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
+from tests.legacy_compiler import SavingsBalanceCompiler
 
 pytestmark = pytest.mark.integration
 REPOSITORY = Path(__file__).resolve().parents[3]

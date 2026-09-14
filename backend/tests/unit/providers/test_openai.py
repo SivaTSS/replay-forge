@@ -11,7 +11,6 @@ from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 
 from replayforge.capabilities.models import InputValue, JsonValueType
-from replayforge.discovery.compiler import SavingsBalanceCompiler
 from replayforge.discovery.models import ActProposal, CompleteProposal, ProviderContext
 from replayforge.discovery.ports import ModelProviderError
 from replayforge.observability.model_calls import ModelCallMetric
@@ -41,6 +40,7 @@ from replayforge.surfaces.models import (
     NormalizedObservation,
     Viewport,
 )
+from tests.legacy_compiler import SavingsBalanceCompiler
 
 
 @dataclass
