@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import sleep
 from typing import Any, cast
 
 from pydantic import JsonValue
 
-from replayforge.capabilities.conditions import contains_identity
+from replayforge.capabilities.conditions import condition_outputs, contains_identity
 from replayforge.capabilities.models import (
     ApplicationFailure,
     AssertAction,
@@ -19,6 +19,7 @@ from replayforge.capabilities.models import (
     ExtractAction,
     InputValue,
     LiteralValue,
+    LocatorBundle,
     Recovery,
     SelectAction,
     Step,
@@ -45,6 +46,7 @@ from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import (
     ActionContext,
     EffectivePolicy,
+    PolicyDecision,
     PrincipalType,
     RunMode,
 )
@@ -59,7 +61,12 @@ from replayforge.runs.results import (
     SuccessResult,
     VerifiedCheckpoint,
 )
-from replayforge.surfaces.models import ActionStatus, NormalizedObservation, SurfaceError
+from replayforge.surfaces.models import (
+    ActionStatus,
+    NormalizedObservation,
+    ResolvedTarget,
+    SurfaceError,
+)
 from replayforge.surfaces.ports import SurfaceDriver, SurfaceSession
 
 
@@ -91,6 +98,8 @@ class ReplayContinuation:
     recovery_uses: dict[str, int]
     interrupted_step_index: int
     initial_fingerprint: str
+    retry_step: bool = False
+    retry_attempt: int = 1
 
 
 type ContinuationSink = Callable[[ReplayContinuation], None]
@@ -113,6 +122,7 @@ class ReplayEngine:
     sleeper: Callable[[float], None] = sleep
     continuation_sink: ContinuationSink | None = None
     compatibility_validator: Callable[[CapabilityArtifact, str], None] | None = None
+    _pause_points: dict[str, tuple[bool, int]] = field(default_factory=dict, repr=False)
 
     def execute(self, request: ReplayRequest) -> RunResult:
         try:
@@ -213,6 +223,83 @@ class ReplayEngine:
                 "resume_location_not_allowed",
                 "The retained session is outside the capability's allowed location.",
             )
+        # Human actions invalidate cached output values. Only current, policy-allowed reads
+        # can supply operands for resume checks; other outputs must be extracted again later.
+        conditions = (
+            *(step.preconditions if continuation.retry_step else ()),
+            *(step.postconditions if not continuation.retry_step else ()),
+            *(
+                o.detect
+                for o in continuation.request.artifact.outcomes
+                if o.code in step.outcome_refs
+            ),
+        )
+        needed = frozenset().union(*(condition_outputs(c) for c in conditions))
+        continuation.outputs.clear()
+        for output in sorted(needed):
+            extraction = next(
+                (
+                    prior
+                    for prior in reversed(
+                        continuation.request.artifact.steps[
+                            : continuation.interrupted_step_index + 1
+                        ]
+                    )
+                    if isinstance(prior.action, ExtractAction) and prior.action.output == output
+                ),
+                None,
+            )
+            if extraction is None or extraction.target is None:
+                raise ResumeValidationError(
+                    "resume_output_unavailable", "Fresh output is unavailable."
+                )
+            target = session.resolve(
+                self._resume_target(continuation, extraction),
+                2_000,
+            )
+            decision = self._step_policy(
+                continuation.request, session, extraction, observation, target
+            )
+            if decision.decision is not Decision.ALLOW:
+                raise ResumeValidationError(
+                    "resume_output_forbidden", "Fresh output is not permitted."
+                )
+            assert isinstance(extraction.action, ExtractAction)
+            continuation.outputs[output] = self._transform(
+                session.extract(target), extraction.action.transform
+            )
+        if continuation.retry_step:
+            if observation.fingerprint == continuation.initial_fingerprint:
+                raise ResumeValidationError(
+                    "resume_state_unchanged", "Restore the blocked interface first."
+                )
+            if not all(
+                session.evaluate(c, continuation.outputs, continuation.inputs)
+                for c in step.preconditions
+            ):
+                raise ResumeValidationError(
+                    "resume_checkpoint_mismatch", "Step readiness is not verified."
+                )
+            if step.target is not None:
+                session.resolve(
+                    self._resume_target(continuation, step),
+                    2_000,
+                )
+            self._attach_handoff_frame(continuation.request.run_id, session, "handoff-after")
+            self.recorder.record(
+                "resume_checkpoint_verified",
+                continuation.request.run_id,
+                step_id=step.id,
+                details={"disposition": "retry_step"},
+            )
+            return None
+        for condition in step.postconditions:
+            if contains_identity(condition) and not session.evaluate(
+                condition, continuation.outputs, continuation.inputs
+            ):
+                raise ResumeValidationError(
+                    "resume_identity_mismatch", "The selected record identity was not verified."
+                )
         outcome = self._detect_outcome(
             continuation.request.artifact,
             step,
@@ -256,6 +343,20 @@ class ReplayEngine:
         )
         return None
 
+    def _resume_target(self, continuation: ReplayContinuation, step: Step) -> LocatorBundle:
+        assert step.target is not None
+        try:
+            return bind_target_inputs(
+                step.target,
+                continuation.inputs,
+                continuation.request.artifact.inputs,
+                self.effective_policy.forbidden_field_classes,
+            )
+        except ContractValidationError as error:
+            raise ResumeValidationError(
+                "resume_target_forbidden", "The resume target binding is unavailable or forbidden."
+            ) from error
+
     def resume(
         self,
         continuation: ReplayContinuation,
@@ -273,7 +374,7 @@ class ReplayEngine:
             step_indexes = {
                 step.id: step_index for step_index, step in enumerate(request.artifact.steps)
             }
-            step_index = continuation.interrupted_step_index + 1
+            step_index = continuation.interrupted_step_index + (0 if continuation.retry_step else 1)
             while step_index < len(request.artifact.steps):
                 step = request.artifact.steps[step_index]
                 result = self._execute_step(
@@ -284,6 +385,11 @@ class ReplayEngine:
                     continuation.outputs,
                     continuation.recovery_uses,
                     automation_lease_version,
+                    attempt=(
+                        continuation.retry_attempt
+                        if step_index == continuation.interrupted_step_index
+                        else 1
+                    ),
                 )
                 if isinstance(result, RecoveryResume):
                     refreshed = self.lease_service.heartbeat(
@@ -364,51 +470,7 @@ class ReplayEngine:
                     effect_absent=True,
                 ) from error
             target = session.resolve(bound_target, step.timeout_ms) if bound_target else None
-            source = (
-                step.action.value
-                if isinstance(step.action, TypeAction)
-                else step.action.option
-                if isinstance(step.action, SelectAction)
-                else None
-            )
-            classification = (
-                binding_classification(
-                    request.artifact.inputs,
-                    source.path,
-                    self.effective_policy.forbidden_field_classes,
-                )
-                if isinstance(source, InputValue)
-                else None
-            )
-            if (
-                source is not None
-                and step.target is not None
-                and any(
-                    term.casefold() in step.target.description.casefold()
-                    for term in request.artifact.policy.forbidden_text_inputs
-                )
-            ):
-                classification = DataClassification.CREDENTIAL
-            decision = self.policy_evaluator.evaluate(
-                self.effective_policy,
-                ActionContext(
-                    principal_type=PrincipalType.AUTOMATION,
-                    principal_id="runtime",
-                    run_mode=RunMode.REPLAY,
-                    application_family=request.artifact.capability.application_family,
-                    tenant=request.tenant,
-                    origin=session.origin,
-                    route=observation.route,
-                    action_type=step.action.kind,
-                    target_description=step.target.description if step.target else step.name,
-                    declared_risk=step.risk,
-                    registered_target_risk=(
-                        target.registered_risk if target is not None else step.risk
-                    ),
-                    control_owner=AUTOMATION_OWNER.value,
-                    field_classification=classification,
-                ),
-            )
+            decision = self._step_policy(request, session, step, observation, target)
             self.recorder.record(
                 "policy_evaluated",
                 request.run_id,
@@ -417,12 +479,7 @@ class ReplayEngine:
             )
             if decision.decision is Decision.DENY:
                 return self._failure(
-                    request,
-                    "policy_blocked",
-                    decision.explanation,
-                    False,
-                    step.id,
-                    session=session,
+                    request, "policy_blocked", decision.explanation, False, step.id, session=session
                 )
             if decision.decision is Decision.REQUIRE_HUMAN_APPROVAL:
                 if not allow_intervention:
@@ -505,8 +562,6 @@ class ReplayEngine:
             )
             if declared_failure is not None:
                 return self._application_failure(request, session, step.id, declared_failure)
-            # A positively observed exceptional state is meaningful even when the primary
-            # action has no postcondition. Do not wait for a later target failure to recover.
             if allow_recovery:
                 recovery = self._attempt_recovery(
                     request, session, step, inputs, outputs, recovery_uses, lease_version
@@ -522,13 +577,7 @@ class ReplayEngine:
                         return self._business_outcome(request, outcome, inputs)
                     recovery = (
                         self._attempt_recovery(
-                            request,
-                            session,
-                            step,
-                            inputs,
-                            outputs,
-                            recovery_uses,
-                            lease_version,
+                            request, session, step, inputs, outputs, recovery_uses, lease_version
                         )
                         if allow_recovery
                         else None
@@ -542,13 +591,34 @@ class ReplayEngine:
                         return self._application_failure(
                             request, session, step.id, declared_failure
                         )
-                    return self._failure(
+                    return self._surface_failure(
                         request,
-                        "postcondition_mismatch",
-                        "The action completed but its declared effect was not observed.",
-                        False,
+                        session,
                         step.id,
-                        session=session,
+                        SurfaceError(
+                            "postcondition_mismatch",
+                            "The action completed but its declared effect was not observed.",
+                        ),
+                        lease_version,
+                        ExecutionDiagnostic(
+                            code="postcondition_mismatch",
+                            step_ordinal=next(
+                                (
+                                    i + 1
+                                    for i, s in enumerate(request.artifact.steps)
+                                    if s.id == step.id
+                                ),
+                                None,
+                            ),
+                            phase="after_dispatch" if dispatched else "before_dispatch",
+                            dispatch_state="attempted" if dispatched else "not_attempted",
+                            action_type=step.action.kind,
+                            expected_condition_kind=condition.kind,
+                            attempt=attempt,
+                            max_attempts=step.retry.max_attempts,
+                            recovery_checked=allow_recovery,
+                        ),
+                        allow_intervention=allow_intervention,
                     )
                 outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
                 if outcome is not None:
@@ -589,13 +659,7 @@ class ReplayEngine:
                 )
             if allow_recovery:
                 recovery = self._attempt_recovery(
-                    request,
-                    session,
-                    step,
-                    inputs,
-                    outputs,
-                    recovery_uses,
-                    lease_version,
+                    request, session, step, inputs, outputs, recovery_uses, lease_version
                 )
                 if recovery is not None:
                     return recovery
@@ -603,7 +667,9 @@ class ReplayEngine:
                 code=error.code,
                 phase="after_dispatch" if dispatched else "before_dispatch",
                 dispatch_state="attempted" if dispatched else "not_attempted",
-                step_ordinal=request.artifact.steps.index(step) + 1,
+                step_ordinal=next(
+                    (i + 1 for i, s in enumerate(request.artifact.steps) if s.id == step.id), None
+                ),
                 action_type=step.action.kind,
                 expected_count=bounded_count((error.expected or {}).get("count")),
                 observed_count=bounded_count((error.observed or {}).get("count")),
@@ -614,8 +680,73 @@ class ReplayEngine:
                 effect_absent=not dispatched or error.effect_absent,
             )
             return self._surface_failure(
-                request, session, step.id, error, lease_version, diagnostic
+                request,
+                session,
+                step.id,
+                error,
+                lease_version,
+                diagnostic,
+                allow_intervention=allow_intervention,
             )
+
+    def _step_policy(
+        self,
+        request: ReplayRequest,
+        session: SurfaceSession,
+        step: Step,
+        observation: NormalizedObservation,
+        target: ResolvedTarget | None,
+    ) -> PolicyDecision:
+        source = (
+            step.action.value
+            if isinstance(step.action, TypeAction)
+            else step.action.option
+            if isinstance(step.action, SelectAction)
+            else None
+        )
+        try:
+            classification = (
+                binding_classification(
+                    request.artifact.inputs,
+                    source.path,
+                    self.effective_policy.forbidden_field_classes,
+                )
+                if isinstance(source, InputValue)
+                else None
+            )
+        except ContractValidationError as error:
+            raise SurfaceError(
+                error.code, "Action binding is unavailable or forbidden.", effect_absent=True
+            ) from error
+        if (
+            source is not None
+            and step.target is not None
+            and any(
+                term.casefold() in step.target.description.casefold()
+                for term in request.artifact.policy.forbidden_text_inputs
+            )
+        ):
+            classification = DataClassification.CREDENTIAL
+        return self.policy_evaluator.evaluate(
+            self.effective_policy,
+            ActionContext(
+                principal_type=PrincipalType.AUTOMATION,
+                principal_id="runtime",
+                run_mode=RunMode.REPLAY,
+                application_family=request.artifact.capability.application_family,
+                tenant=request.tenant,
+                origin=session.origin,
+                route=observation.route,
+                action_type=step.action.kind,
+                target_description=step.target.description if step.target else step.name,
+                declared_risk=step.risk,
+                registered_target_risk=(
+                    target.registered_risk if target is not None else step.risk
+                ),
+                control_owner=AUTOMATION_OWNER.value,
+                field_classification=classification,
+            ),
+        )
 
     def _attempt_recovery(
         self,
@@ -835,6 +966,7 @@ class ReplayEngine:
         recovery_uses: dict[str, int],
         interrupted_step_index: int,
     ) -> None:
+        retry_step, retry_attempt = self._pause_points.pop(result.intervention_id, (False, 1))
         if self.continuation_sink is None:
             return
         observation = session.observe()
@@ -848,6 +980,8 @@ class ReplayEngine:
                 recovery_uses=dict(recovery_uses),
                 interrupted_step_index=interrupted_step_index,
                 initial_fingerprint=observation.fingerprint,
+                retry_step=retry_step,
+                retry_attempt=retry_attempt,
             )
         )
 
@@ -855,6 +989,8 @@ class ReplayEngine:
     def _assert_continuation(continuation: ReplayContinuation) -> None:
         if not 0 <= continuation.interrupted_step_index < len(continuation.request.artifact.steps):
             raise ValueError("continuation step index is outside the artifact")
+        if not 1 <= continuation.retry_attempt <= 5:
+            raise ValueError("continuation attempt is outside the retry budget")
 
     def _surface_failure(
         self,
@@ -864,16 +1000,64 @@ class ReplayEngine:
         error: SurfaceError,
         lease_version: int | None = None,
         diagnostic: ExecutionDiagnostic | None = None,
+        *,
+        allow_intervention: bool = True,
     ) -> RunResult:
-        if error.intervention_recommended and session is not None and lease_version is not None:
+        step = next((s for s in request.artifact.steps if s.id == step_id), None)
+        eligible = error.code in {
+            "target_absent",
+            "target_ambiguous",
+            "action_timeout",
+            "action_failed",
+        }
+        eligible |= (
+            error.code == "postcondition_mismatch"
+            and diagnostic is not None
+            and diagnostic.phase == "after_dispatch"
+        )
+        if (
+            allow_intervention
+            and request.allow_intervention
+            and step is not None
+            and (eligible or error.intervention_recommended)
+            and session is not None
+            and lease_version is not None
+        ):
+            try:
+                observation = session.observe()
+                decision = self._step_policy(request, session, step, observation, None)
+            except (SurfaceError, ContractValidationError):
+                return self._failure(
+                    request,
+                    error.code,
+                    error.safe_message,
+                    False,
+                    step_id,
+                    session=session,
+                    diagnostic=diagnostic,
+                )
+            if decision.decision is Decision.DENY:
+                return self._failure(
+                    request, "policy_blocked", decision.explanation, False, step_id, session=session
+                )
+            retry_step = diagnostic is not None and diagnostic.phase == "before_dispatch"
             return self._intervene(
                 request,
                 session,
                 step_id,
                 error.code,
-                session.observe(),
+                observation,
                 lease_version,
-                error.safe_message,
+                (
+                    "Restore the interface without performing this task step. "
+                    "Resume will resolve and retry the same step."
+                    if retry_step
+                    else "Inspect and complete or correct the interrupted action. "
+                    "Resume must verify its declared effect; it will not repeat the action."
+                ),
+                retry_step=retry_step,
+                retry_attempt=diagnostic.attempt if diagnostic else 1,
+                diagnostic=diagnostic,
             )
         return self._failure(
             request,
@@ -896,6 +1080,10 @@ class ReplayEngine:
         observation: NormalizedObservation,
         lease_version: int,
         explanation: str | None = None,
+        *,
+        retry_step: bool = False,
+        retry_attempt: int = 1,
+        diagnostic: ExecutionDiagnostic | None = None,
     ) -> InterventionRequiredResult | FailureResult:
         from replayforge.shared.ids import EntityKind, new_id
 
@@ -907,6 +1095,13 @@ class ReplayEngine:
                 False,
                 step_id=step_id,
                 session=session,
+            )
+        if diagnostic is not None:
+            self.recorder.record(
+                "execution_diagnostic",
+                request.run_id,
+                step_id=step_id,
+                details=diagnostic.safe_payload(),
             )
         self._attach_handoff_frame(request.run_id, session, "handoff-before")
         intervention_id = new_id(EntityKind.INTERVENTION)
@@ -933,6 +1128,7 @@ class ReplayEngine:
         )
         if routed_id != intervention_id:
             raise RuntimeError("intervention router must preserve the reserved identity")
+        self._pause_points[intervention_id] = (retry_step, retry_attempt)
         self.recorder.record("intervention_required", request.run_id, step_id=step_id)
         return InterventionRequiredResult(
             status="intervention_required",

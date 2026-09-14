@@ -6,7 +6,21 @@ from replayforge.capabilities.models import (
     Condition,
     IdentityMatchesCondition,
     NotCondition,
+    OutputEqualsCondition,
+    OutputValidCondition,
 )
+
+
+def condition_outputs(condition: Condition) -> frozenset[str]:
+    if isinstance(condition, AllCondition | AnyCondition):
+        return frozenset().union(*(condition_outputs(item) for item in condition.conditions))
+    if isinstance(condition, NotCondition):
+        return condition_outputs(condition.condition)
+    if isinstance(condition, IdentityMatchesCondition):
+        return frozenset({condition.extracted_output})
+    if isinstance(condition, OutputValidCondition | OutputEqualsCondition):
+        return frozenset({condition.output})
+    return frozenset()
 
 
 def contains_identity(condition: Condition) -> bool:

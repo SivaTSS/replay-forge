@@ -128,9 +128,9 @@ def main() -> None:
                 commands=(command,),
                 commit_sha=arguments.commit_sha,
             )
-            result = runtime.service.invoke(
-                case.capability_id,
-                record.artifact.capability.version,
+            # Evidence cases are unattended proof runs, never operator-assisted publication.
+            result = runtime.service.validate_artifact(
+                record.artifact,
                 case.invocation.tenant,
                 case.invocation.inputs,
             )

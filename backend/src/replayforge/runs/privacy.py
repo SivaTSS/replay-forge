@@ -67,7 +67,7 @@ _ENUM_FIELDS = {
         "unknown",
     },
     "decision": {"allow", "deny", "require_human_approval"},
-    "disposition": {"continue", "business_outcome"},
+    "disposition": {"continue", "business_outcome", "retry_step"},
     "proposal_kind": {"act", "complete", "escalate", "recorded_action", "branch"},
     "action_type": {
         "click",

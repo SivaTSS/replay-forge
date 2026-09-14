@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -176,6 +176,17 @@ class FakeSurfaceSession:
         self.closed = True
 
 
+def return_control(engine: ReplayEngine, continuation: ReplayContinuation) -> int:
+    session_id = str(continuation.session.session_id)
+    lease = engine.lease_service.repository.get(session_id)
+    claimed = engine.lease_service.claim(
+        session_id, lease.version, continuation.intervention_id, "operator-test"
+    )
+    returning = engine.lease_service.begin_resume(session_id, claimed.version, "operator-test")
+    engine.validate_resume(continuation)
+    return engine.lease_service.complete_resume(session_id, returning.version).version
+
+
 @dataclass
 class FakeSurfaceDriver:
     session: FakeSurfaceSession
@@ -289,10 +300,187 @@ def build_engine(
     return engine, recorder, router
 
 
+@pytest.mark.parametrize("code", ["target_absent", "target_ambiguous"])
+def test_blocked_resolution_restores_and_retries_same_step(
+    valid_artifact_data: dict[str, Any],
+    code: str,
+) -> None:
+    valid_artifact_data["steps"][0]["retry"] = {
+        "max_attempts": 2,
+        "backoff_ms": [0],
+        "retry_on": [code],
+        "require_effect_absent": True,
+    }
+    session = FakeSurfaceSession(
+        resolve_error=SurfaceError(
+            code,
+            "Blocked target.",
+            recoverable=True,
+            effect_absent=True,
+            expected={"count": 1},
+            observed={"count": 0 if code == "target_absent" else 2},
+        ),
+        resolve_failures_remaining=-1,
+    )
+    continuations: list[ReplayContinuation] = []
+    engine, recorder, _ = build_engine(session, continuation_sink=continuations)
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+    continuation = continuations[0]
+    assert continuation.retry_step and continuation.retry_attempt == 2
+    assert not session.closed and not session.executed_targets
+    with pytest.raises(SurfaceError):
+        engine.validate_resume(continuation)
+    session.resolve_failures_remaining = 0
+    version = return_control(engine, continuation)
+    assert isinstance(engine.resume(continuation, version), SuccessResult)
+    assert session.executed_targets == ["Member ID field", "Search button"]
+    assert recorder.events.count(("step_retry_scheduled", "search.enter_member_id")) == 1
+    assert not engine._pause_points
+
+
+@pytest.mark.parametrize("code", ["action_timeout", "action_failed"])
+def test_uncertain_dispatch_never_repeats_action(
+    valid_artifact_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    code: str,
+) -> None:
+    valid_artifact_data["steps"][1]["postconditions"] = [
+        {"kind": "text", "value": "Member Results"}
+    ]
+    original = FakeSurfaceSession.execute
+
+    def execute(
+        session: FakeSurfaceSession,
+        action: object,
+        target: ResolvedTarget | None,
+        inputs: dict[str, Any],
+    ) -> ActionReceipt:
+        receipt = original(session, action, target, inputs)
+        if target is not None and target.description == "Search button":
+            raise SurfaceError(code, "Effect uncertain.")
+        return receipt
+
+    monkeypatch.setattr(FakeSurfaceSession, "execute", execute)
+    session = FakeSurfaceSession()
+    continuations: list[ReplayContinuation] = []
+    engine, _, _ = build_engine(session, continuation_sink=continuations)
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+    assert not continuations[0].retry_step
+    session.postconditions_valid = False
+    with pytest.raises(ResumeValidationError, match="postcondition"):
+        engine.validate_resume(continuations[0])
+    session.postconditions_valid = True
+    version = return_control(engine, continuations[0])
+    assert isinstance(engine.resume(continuations[0], version), SuccessResult)
+    assert session.executed_targets.count("Search button") == 1
+
+
+def test_blocked_resolution_cannot_bypass_denied_location(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    session = FakeSurfaceSession(
+        route="/forbidden",
+        resolve_error=SurfaceError("target_absent", "Blocked target."),
+        resolve_failures_remaining=-1,
+    )
+    engine, _, router = build_engine(session)
+    result = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(result, FailureResult) and result.code == "policy_blocked"
+    assert not router.created and session.closed
+
+
+def test_resume_refreshes_output_operands_and_discards_unrelated_cache(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    session = FakeSurfaceSession()
+    continuations: list[ReplayContinuation] = []
+    valid_artifact_data["capability"]["risk"] = "sensitive"
+    valid_artifact_data["policy"]["maximum_risk"] = "sensitive"
+    steps = valid_artifact_data["steps"]
+    steps[1], steps[2] = steps[2], steps[1]
+    steps[2]["risk"] = "sensitive"
+    steps[2]["postconditions"] = [{"kind": "output_valid", "output": "available_balance"}]
+    engine, _, _ = build_engine(
+        session, maximum_risk=Risk.SENSITIVE, continuation_sink=continuations
+    )
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+    continuation = continuations[0]
+    continuation.outputs.update(available_balance="999.99", obsolete="stale")
+    session.extraction = "$42.50"
+    version = return_control(engine, continuation)
+    assert continuation.outputs == {"available_balance": "42.50"}
+    result = engine.resume(continuation, version)
+    assert isinstance(result, SuccessResult) and result.outputs == {"available_balance": "42.50"}
+
+
 def test_extraction_transforms_are_canonical() -> None:
     assert ReplayEngine._transform(" Savings ", "lowercase") == "savings"
     assert ReplayEngine._transform(" $1,420.57 ", "decimal") == "1420.57"
     assert ReplayEngine._transform(" unchanged ", "text") == " unchanged "
+
+
+def test_repeated_handoff_does_not_replenish_retry_budget(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["steps"][0]["retry"] = {
+        "max_attempts": 2,
+        "backoff_ms": [0],
+        "retry_on": ["target_absent"],
+        "require_effect_absent": True,
+    }
+    session = FakeSurfaceSession(
+        resolve_error=SurfaceError(
+            "target_absent",
+            "Blocked.",
+            recoverable=True,
+            effect_absent=True,
+        ),
+        resolve_failures_remaining=-1,
+    )
+    continuations: list[ReplayContinuation] = []
+    engine, recorder, _ = build_engine(session, continuation_sink=continuations)
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+    session.resolve_failures_remaining = 0
+    version = return_control(engine, continuations[0])
+    session.resolve_failures_remaining = -1
+    assert isinstance(engine.resume(continuations[0], version), InterventionRequiredResult)
+    assert continuations[-1].retry_attempt == 2
+    assert recorder.events.count(("step_retry_scheduled", "search.enter_member_id")) == 1
+
+
+def test_uncertain_dispatch_without_effect_contract_cannot_resume(
+    valid_artifact_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def execute(*args: object) -> ActionReceipt:
+        raise SurfaceError("action_timeout", "Effect uncertain.")
+
+    monkeypatch.setattr(FakeSurfaceSession, "execute", execute)
+    continuations: list[ReplayContinuation] = []
+    engine, _, _ = build_engine(FakeSurfaceSession(), continuation_sink=continuations)
+    assert isinstance(engine.execute(request_for(valid_artifact_data)), InterventionRequiredResult)
+    assert not continuations[0].retry_step
+    with pytest.raises(ResumeValidationError, match="no declared postcondition"):
+        engine.validate_resume(continuations[0])
+
+
+def test_recovery_resolution_error_stays_terminal(
+    valid_artifact_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    add_interstitial_recovery(valid_artifact_data)
+    original = FakeSurfaceSession.resolve
+
+    def resolve(session: FakeSurfaceSession, target: object, timeout_ms: int) -> ResolvedTarget:
+        if isinstance(target, LocatorBundle) and target.description == "Continue notice":
+            raise SurfaceError("target_absent", "Recovery blocked.", intervention_recommended=True)
+        return original(session, target, timeout_ms)
+
+    monkeypatch.setattr(FakeSurfaceSession, "resolve", resolve)
+    engine, _, router = build_engine(FakeSurfaceSession(interstitial_visible=True))
+    result = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(result, FailureResult) and result.code == "target_absent"
+    assert not router.created
 
 
 @pytest.mark.parametrize("identifier", ["12345", "54321"])
@@ -712,7 +900,7 @@ def test_target_ambiguity_returns_step_debug_context(
     )
     engine, _, _ = build_engine(session)
 
-    result = engine.execute(request_for(valid_artifact_data))
+    result = engine.execute(replace(request_for(valid_artifact_data), allow_intervention=False))
 
     assert isinstance(result, FailureResult)
     assert result.code == "target_ambiguous"
@@ -1070,7 +1258,7 @@ def test_unmatched_recovery_trigger_preserves_original_failure(
     session = FakeSurfaceSession(postconditions_valid=False)
     engine, recorder, _ = build_engine(session)
 
-    result = engine.execute(request_for(valid_artifact_data))
+    result = engine.execute(replace(request_for(valid_artifact_data), allow_intervention=False))
 
     assert isinstance(result, FailureResult)
     assert result.code == "postcondition_mismatch"
