@@ -541,6 +541,45 @@ def test_ocr_relative_region_clips_at_viewport_edges(tmp_path: Path) -> None:
     assert resolved.region == ScreenRegion(0, 0, 100, 80)
 
 
+@pytest.mark.parametrize("scale", [0.75, 1.0, 1.5])
+@pytest.mark.parametrize("buttons", [0, 1, 2])
+def test_relative_text_only_prefers_a_unique_bounded_control(
+    tmp_path: Path, scale: float, buttons: int
+) -> None:
+    def region(x: int, y: int, width: int, height: int) -> ScreenRegion:
+        return ScreenRegion(*(round(value * scale) for value in (x, y, width, height)))
+
+    frame = np.full((round(240 * scale), round(500 * scale), 3), 245, dtype=np.uint8)
+    # An enclosing row is not sufficient evidence that either repeated word is a button.
+    for box in [(10, 60, 480, 90), *[(x, 80, 115, 45) for x in (300, 180)[:buttons]]]:
+        bounds = region(*box)
+        cv2.rectangle(
+            frame,
+            (bounds.x, bounds.y),
+            (bounds.x + bounds.width, bounds.y + bounds.height),
+            (20, 80, 140),
+            2,
+        )
+    ok, encoded = cv2.imencode(".png", frame)
+    assert ok
+    tokens = (
+        VisualToken("Record 42", 0.99, region(20, 95, 100, 20)),
+        VisualToken("Open", 0.99, region(195, 95, 50, 20)),
+        VisualToken("Open", 0.99, region(315, 95, 50, 20)),
+    )
+    vision = semantic_vision(tmp_path, tokens)
+    candidate = OcrRelativeCandidate(
+        strategy="ocr_relative", anchor="Record 42", target_text="Open", relation="right_of"
+    )
+    viewport = Viewport(round(500 * scale), round(240 * scale))
+    if buttons == 1:
+        assert vision.resolve(candidate, encoded.tobytes(), viewport).region == tokens[2].region
+    else:
+        with pytest.raises(SurfaceError) as error:
+            vision.resolve(candidate, encoded.tobytes(), viewport)
+        assert error.value.code == "target_ambiguous"
+
+
 def test_ocr_relative_text_and_region_extraction(tmp_path: Path) -> None:
     tokens = (
         VisualToken("Account type", 0.99, ScreenRegion(30, 40, 100, 20)),

@@ -294,7 +294,7 @@ def create_app(services: ApiServices) -> FastAPI:
     @app.get("/api/v1/interventions", response_model=InterventionListResponse)
     def list_interventions(
         request: Request,
-        run_mode: InterventionRunMode = InterventionRunMode.REPLAY,
+        run_mode: InterventionRunMode | None = None,
     ) -> InterventionListResponse | JSONResponse:
         invoker = _intervention_invoker(request, services)
         if isinstance(invoker, JSONResponse):

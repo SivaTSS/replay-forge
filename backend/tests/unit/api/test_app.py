@@ -101,11 +101,13 @@ class FakeInterventionInvoker:
     transition: InterventionTransition
     frame: bytes = b"\x89PNG\r\n\x1a\nframe"
     resume_result: RunResult | None = None
+    listed_mode: object = "not_called"
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.transition
 
     def list_active(self, run_mode: object = None) -> tuple[InterventionTransition, ...]:
+        self.listed_mode = run_mode
         return (self.transition,)
 
     def claim(
@@ -405,18 +407,21 @@ def test_intervention_claim_returns_new_owner_and_lease_version() -> None:
     assert response.json()["lease_version"] == 3
 
 
-def test_intervention_inbox_returns_active_transition_context() -> None:
+@pytest.mark.parametrize("mode", [None, "replay", "discovery"])
+def test_intervention_inbox_returns_active_transition_context(mode: str | None) -> None:
     transition = intervention_transition()
+    invoker = FakeInterventionInvoker(transition)
     response = TestClient(
         create_app(
             ApiServices(
                 FakeReplayInvoker(),
-                intervention_invoker=FakeInterventionInvoker(transition),
+                intervention_invoker=invoker,
             )
         )
-    ).get("/api/v1/interventions", params={"run_mode": "replay"})
+    ).get("/api/v1/interventions", params={} if mode is None else {"run_mode": mode})
 
     assert response.status_code == 200
+    assert invoker.listed_mode == mode
     assert response.json()["items"][0]["intervention_id"] == str(transition.intervention.id)
     assert response.json()["items"][0]["trigger_code"] == "unexpected_dialog"
 

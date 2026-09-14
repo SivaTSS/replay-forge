@@ -190,6 +190,8 @@ class VisionGrounder:
                             for anchor in anchors
                         )
                     )
+                if len(related) > 1 and self.policy is not None:
+                    related = self._prefer_unique_control(related, png, viewport, started)
                 return self._unique_text_target(related, "ocr_relative_text", frame_hash)
             assert candidate.relative_region is not None
             if len(anchors) != 1:
@@ -202,17 +204,7 @@ class VisionGrounder:
         if isinstance(candidate, RenderedTextCandidate):
             matches = self._semantic_matching_tokens(png, candidate.value, candidate.match, started)
             if len(matches) > 1:
-                graph = self._layout_graph(png, viewport, started)
-                control_matches = tuple(
-                    match
-                    for match in matches
-                    if any(
-                        self._center_in(match.region, control.region)
-                        for control in graph.of_kind("control")
-                    )
-                )
-                if len(control_matches) == 1:
-                    matches = control_matches
+                matches = self._prefer_unique_control(matches, png, viewport, started)
             result = self._unique_text_target(matches, "rendered_text", frame_hash)
             self._check_deadline(started)
             return result
@@ -223,6 +215,23 @@ class VisionGrounder:
         if isinstance(candidate, RenderedGroupImageCandidate):
             return self._resolve_group_image(candidate, png, viewport, frame_hash, started)
         raise TypeError("unsupported visual locator candidate")
+
+    def _prefer_unique_control(
+        self, matches: tuple[VisualToken, ...], png: bytes, viewport: Viewport, started: float
+    ) -> tuple[VisualToken, ...]:
+        """Distinguish a bounded action from repeated plain text, never by row ordinal."""
+        graph = self._layout_graph(png, viewport, started)
+        controls = tuple(
+            control
+            for control in graph.of_kind("control")
+            if sum(self._center_in(match.region, control.region) for match in matches) == 1
+        )
+        contained = tuple(
+            match
+            for match in matches
+            if any(self._center_in(match.region, control.region) for control in controls)
+        )
+        return contained if len(contained) == 1 else matches
 
     def tokens(self, png: bytes) -> tuple[VisualToken, ...]:
         return self._tokens(png)
