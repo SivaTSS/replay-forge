@@ -1,23 +1,7 @@
 """Application-independent safety checks for replaying discovered scenario prefixes."""
 
-from replayforge.capabilities.models import (
-    AllCondition,
-    AnyCondition,
-    Condition,
-    IdentityMatchesCondition,
-    NotCondition,
-    Step,
-)
-
-
-def _contains_identity(condition: Condition) -> bool:
-    if isinstance(condition, IdentityMatchesCondition):
-        return True
-    if isinstance(condition, AllCondition | AnyCondition):
-        return any(_contains_identity(item) for item in condition.conditions)
-    if isinstance(condition, NotCondition):
-        return _contains_identity(condition.condition)
-    return False
+from replayforge.capabilities.conditions import contains_identity
+from replayforge.capabilities.models import AllCondition, Condition, Step
 
 
 def scenario_expected_condition(step: Step, proposed: Condition | None) -> Condition | None:
@@ -27,7 +11,7 @@ def scenario_expected_condition(step: Step, proposed: Condition | None) -> Condi
     learned program. Successful-path conditions without identity checks may legitimately differ
     on an exception branch, so they are not copied blindly.
     """
-    required = tuple(item for item in step.postconditions if _contains_identity(item))
+    required = tuple(item for item in step.postconditions if contains_identity(item))
     if proposed is not None and proposed not in required:
         required += (proposed,)
     if not required:

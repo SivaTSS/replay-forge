@@ -484,6 +484,56 @@ def test_known_not_found_is_business_outcome_before_missing_happy_path(
 
 
 @pytest.mark.parametrize("kind", ["outcomes", "failures", "recoveries"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_exception_branch_cannot_bypass_selected_record_identity(
+    valid_artifact_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    nested: bool,
+) -> None:
+    from replayforge.capabilities.conditions import contains_identity
+
+    if kind == "failures":
+        add_permission_failure(valid_artifact_data)
+    elif kind == "recoveries":
+        add_interstitial_recovery(valid_artifact_data)
+    guard: dict[str, Any] = {
+        "kind": "identity_matches",
+        "extracted_output": "available_balance",
+        "input_path": "member_id",
+    }
+    if nested:
+        guard = {"kind": "all", "conditions": [guard, {"kind": "text", "value": "Member Results"}]}
+    valid_artifact_data["steps"][0]["postconditions"].append(guard)
+    original = FakeSurfaceSession.wait_until
+
+    def wait(
+        session: FakeSurfaceSession,
+        condition: Condition,
+        outputs: dict[str, Any],
+        inputs: dict[str, Any],
+        timeout_ms: int,
+    ) -> bool:
+        return (
+            False
+            if contains_identity(condition)
+            else original(session, condition, outputs, inputs, timeout_ms)
+        )
+
+    monkeypatch.setattr(FakeSurfaceSession, "wait_until", wait)
+    session = FakeSurfaceSession(
+        member_not_found=kind == "outcomes",
+        permission_denied=kind == "failures",
+        interstitial_visible=kind == "recoveries",
+    )
+    engine, recorder, _ = build_engine(session)
+    result = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(result, FailureResult)
+    assert result.code == "postcondition_mismatch"
+    assert not any(event == "recovery_started" for event, _step in recorder.events)
+
+
+@pytest.mark.parametrize("kind", ["outcomes", "failures", "recoveries"])
 def test_multiple_matching_branches_fail_closed_before_any_correction(
     valid_artifact_data: dict[str, Any], kind: str
 ) -> None:

@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from pydantic import JsonValue
 
+from replayforge.capabilities.conditions import contains_identity
 from replayforge.capabilities.models import (
     ApplicationFailure,
     AssertAction,
@@ -473,6 +474,26 @@ class ReplayEngine:
                     )
             self.recorder.record("action_result", request.run_id, step_id=step.id)
 
+            # A negative result or correction cannot excuse a wrong selected record.
+            # Preserve whole composite guards; do not flatten OR/NOT conditions.
+            for condition in step.postconditions:
+                if not contains_identity(condition):
+                    continue
+                try:
+                    identity_verified = session.wait_until(
+                        condition, outputs, inputs, step.timeout_ms
+                    )
+                except SurfaceError:
+                    identity_verified = False
+                if not identity_verified:
+                    return self._failure(
+                        request,
+                        "postcondition_mismatch",
+                        "The selected record identity was not verified.",
+                        False,
+                        step.id,
+                        session=session,
+                    )
             outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
             if outcome is not None:
                 return self._business_outcome(request, outcome, inputs)
@@ -490,6 +511,8 @@ class ReplayEngine:
                 if recovery is not None:
                     return recovery
             for condition in step.postconditions:
+                if contains_identity(condition):
+                    continue
                 if not session.wait_until(condition, outputs, inputs, step.timeout_ms):
                     outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
                     if outcome is not None:

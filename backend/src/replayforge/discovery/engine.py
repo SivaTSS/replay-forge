@@ -394,68 +394,15 @@ class DiscoveryEngine:
                             "scenario_branch_missing",
                             "Scenario completion requires a verified branch marker.",
                         )
-                    try:
-                        artifact = self._compile(
-                            request,
-                            recordings,
-                            observation,
-                            draft,
-                            effective_policy,
-                            bool(getattr(session, "rendered_surface", False)),
-                            str(getattr(session, "base_variant", "standard")),
-                            str(getattr(session, "surface_contract", "web.v1")),
-                            tuple(getattr(session, "required_landmarks", ())),
-                            tuple(getattr(session, "forbidden_landmarks", ())),
-                        )
-                        artifact = redact_contract_descriptions(
-                            artifact, request.inputs, outputs, self.privacy_redactor
-                        )
-                        validate_artifact_privacy(
-                            artifact, request.inputs, self.privacy_redactor, outputs
-                        )
-                    except ArtifactPrivacyError as error:
-                        return self._failure(
-                            request,
-                            "artifact_privacy_rejected",
-                            str(error),
-                            privacy_rejection=ArtifactPrivacyDiagnostic(
-                                source=error.source, location=error.location
-                            ),
-                        )
-                    except EvidenceRejectedError:
-                        return self._failure(
-                            request,
-                            "artifact_privacy_rejected",
-                            "The compiled trace contains private or forbidden data.",
-                        )
-                    except ValueError:
-                        return self._failure(
-                            request,
-                            "artifact_compilation_failed",
-                            "The observed trace could not be compiled into a safe capability.",
-                        )
-                    if not session.wait_until(
-                        artifact.checkpoint.condition,
+                    return self._complete(
+                        request,
+                        session,
+                        recordings,
+                        observation,
+                        draft,
+                        effective_policy,
                         outputs,
-                        request.inputs,
-                        10_000,
-                    ):
-                        return self._failure(
-                            request,
-                            "completion_not_verified",
-                            "Model completion lacked deterministic checkpoint evidence.",
-                        )
-                    try:
-                        validate_object(artifact.outputs, outputs)
-                    except ContractValidationError as error:
-                        return self._failure(request, "completion_output_invalid", str(error))
-                    self.recorder.record("artifact_compiled", request.run_id)
-                    return DiscoverySuccess(
-                        status="success",
-                        run_id=request.run_id,
-                        artifact=artifact,
-                        evidence_manifest=self.recorder.evidence_manifest_key,
-                        branch=observed_branch,
+                        observed_branch,
                     )
 
                 pending_branch: ObservedBranch | None = None
@@ -615,6 +562,20 @@ class DiscoveryEngine:
                             "condition_kind": observed_branch.condition.kind,
                         },
                     )
+                    if request.scenario is not None and request.scenario.kind != "recovery":
+                        # A verified terminal marker ends this trace. Further model actions
+                        # could change the rejected request or mutate a negative result.
+                        renew_control()
+                        return self._complete(
+                            request,
+                            session,
+                            recordings,
+                            recording.observation_after,
+                            draft,
+                            effective_policy,
+                            outputs,
+                            observed_branch,
+                        )
                 history.append(history_item)
 
             return self._failure(request, "max_steps_exceeded", "Discovery step budget exhausted.")
@@ -629,6 +590,74 @@ class DiscoveryEngine:
         finally:
             if session is not None:
                 session.close()
+
+    def _complete(
+        self,
+        request: DiscoveryRequest,
+        session: SurfaceSession,
+        recordings: list[RecordedDiscoveryStep],
+        observation: NormalizedObservation,
+        draft: CapabilityDraftSpec | None,
+        effective_policy: EffectivePolicy,
+        outputs: dict[str, Any],
+        observed_branch: ObservedBranch | None,
+    ) -> DiscoverySuccess | FailureResult:
+        try:
+            artifact = self._compile(
+                request,
+                recordings,
+                observation,
+                draft,
+                effective_policy,
+                bool(getattr(session, "rendered_surface", False)),
+                str(getattr(session, "base_variant", "standard")),
+                str(getattr(session, "surface_contract", "web.v1")),
+                tuple(getattr(session, "required_landmarks", ())),
+                tuple(getattr(session, "forbidden_landmarks", ())),
+            )
+            artifact = redact_contract_descriptions(
+                artifact, request.inputs, outputs, self.privacy_redactor
+            )
+            validate_artifact_privacy(artifact, request.inputs, self.privacy_redactor, outputs)
+        except ArtifactPrivacyError as error:
+            return self._failure(
+                request,
+                "artifact_privacy_rejected",
+                str(error),
+                privacy_rejection=ArtifactPrivacyDiagnostic(
+                    source=error.source, location=error.location
+                ),
+            )
+        except EvidenceRejectedError:
+            return self._failure(
+                request,
+                "artifact_privacy_rejected",
+                "The compiled trace contains private or forbidden data.",
+            )
+        except ValueError:
+            return self._failure(
+                request,
+                "artifact_compilation_failed",
+                "The observed trace could not be compiled into a safe capability.",
+            )
+        if not session.wait_until(artifact.checkpoint.condition, outputs, request.inputs, 10_000):
+            return self._failure(
+                request,
+                "completion_not_verified",
+                "Completion lacked deterministic checkpoint evidence.",
+            )
+        try:
+            validate_object(artifact.outputs, outputs)
+        except ContractValidationError as error:
+            return self._failure(request, "completion_output_invalid", str(error))
+        self.recorder.record("artifact_compiled", request.run_id)
+        return DiscoverySuccess(
+            status="success",
+            run_id=request.run_id,
+            artifact=artifact,
+            evidence_manifest=self.recorder.evidence_manifest_key,
+            branch=observed_branch,
+        )
 
     def _plan_contract(
         self,

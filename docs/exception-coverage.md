@@ -80,6 +80,7 @@ be claimed; they are not fabricated by changing replay results.
 | Explicit positive branch marker | Infer a branch from the last visible text | Preserve the actual divergence point and reject speculation |
 | Optional negative-trace outputs | Require normal success outputs on every path | A rejected request has no legitimate success receipt to extract |
 | Exact replay disposition and recovery-event gate | Accept any successful validation run | Prevent unexecuted or misclassified branches from passing publication |
+| End terminal traces at the verified model-selected marker | Ask the model for another action after a terminal result | Prevent duplicate branch proposals or mutation after rejection; compilation, privacy, checkpoint, and fresh-replay gates still apply |
 | Retain composite identity guards and new assertions | Replace all postconditions for scenario convenience | Exception discovery must not weaken record selection checks |
 | Current-frame bounded-control disambiguation | Fixed offsets or first matching label | Distinguish an action from repeated status text while retaining ambiguity when multiple controls match |
 | Bounded OCR inference pool | Raise grounding deadlines or reduce screenshot fidelity | Default two intra-operation threads, one inter-operation thread; serialized inference retains current recognition and timing bounds |
@@ -123,6 +124,9 @@ Recovery renews its automation lease between corrective actions and passes the n
 version back to the primary loop. Matching multiple outcomes, failures, or recoveries within one
 category is `branch_ambiguous`, not permission to choose the first declaration. Existing failure
 precedence over outcomes remains unchanged.
+Replay verifies same-step identity guards before returning a negative disposition or starting
+recovery. A matching status label cannot excuse a mismatched selected record. Composite identity
+guards retain their original boolean semantics.
 
 Discovery also renews between model inference, grounding, execution, and condition checks.
 Each renewal checks the same owner and exact lease version. A single stage that outlasts the

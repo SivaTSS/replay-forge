@@ -113,7 +113,8 @@ def test_negative_trace_requires_no_invented_output_and_keeps_verified_marker() 
     assert result.branch.condition == condition
     assert result.artifact.steps[-1].action.kind == "assert"
     assert provider.calls[0].reference_steps == primary.steps
-    assert provider.calls[-1].branch_observed
+    assert len(provider.calls) == 2  # No further model action after a verified terminal marker.
+    assert len(provider.proposals) == 1
     assert surface.closed
 
 
