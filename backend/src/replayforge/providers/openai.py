@@ -132,8 +132,11 @@ record identity or restored state; none must be invented to report a legitimate 
 For a business outcome or application failure,
 complete immediately after its branch marker has been verified. For recovery, mark the blocker
 BEFORE correcting it, discover and execute only safe corrective actions, and assert a distinctive
-restored surface condition before completing. Restore any invocation-dependent form fields reset
-by navigation using symbolic inputs. Rejoin immediately before the next unexecuted reference step;
+restored surface condition before completing. Restore only invocation-dependent form fields that
+were actually set BEFORE the blocker and reset by correction, using symbolic inputs.
+recovery_resume_before identifies the first primary step that must remain UNEXECUTED. Complete
+when that step is ready to run, not after performing it or preparing subsequent task stages.
+Rejoin immediately before that next unexecuted reference step;
 do not perform the rest of the task or skip primary steps. Never change permissions, substitute a
 different customer/record, alter caller inputs, or bypass restrictions to recover."""
 
@@ -482,6 +485,25 @@ class ScenarioStartEnvelope(ProviderModel):
     proposal: ProviderRecordedActionProposal | EscalateProposal
 
 
+class ScenarioRecoveryEnvelope(ProviderModel):
+    """Discover corrective actions; do not continue the primary reference program."""
+
+    proposal: (
+        ProviderClickProposal
+        | ProviderTypeProposal
+        | ProviderExtractProposal
+        | ProviderSelectProposal
+        | ProviderPressKeysProposal
+        | ProviderScrollProposal
+        | ProviderWaitForProposal
+        | ProviderAssertProposal
+        | ProviderNavigateProposal
+        | ProviderSwitchContextProposal
+        | CompleteProposal
+        | EscalateProposal
+    )
+
+
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
 
 
@@ -826,6 +848,19 @@ class OpenAIModelProvider:
             "scenario_kind": context.scenario_kind,
             "branch_observed": context.branch_observed,
             "recorded_step_count": context.recorded_step_count,
+            "recovery_resume_before": (
+                {
+                    "id": context.recovery_resume_before.id,
+                    "action": context.recovery_resume_before.action.model_dump(mode="json"),
+                    "target": (
+                        context.recovery_resume_before.target.model_dump(mode="json")
+                        if context.recovery_resume_before.target
+                        else None
+                    ),
+                }
+                if context.recovery_resume_before
+                else None
+            ),
             "rendered_surface": context.rendered_surface,
             "reference_steps": [
                 {
@@ -872,6 +907,8 @@ class OpenAIModelProvider:
                         else ScenarioStartEnvelope
                     )
                     if context.scenario_kind is not None and not context.branch_observed
+                    else ScenarioRecoveryEnvelope
+                    if context.scenario_kind == "recovery" and context.branch_observed
                     else ProposalEnvelope
                 ),
                 max_output_tokens=self.policy.max_output_tokens,

@@ -223,6 +223,7 @@ class ProviderContext:
     scenario_kind: Literal["business_outcome", "application_failure", "recovery"] | None = None
     branch_observed: bool = False
     recorded_step_count: int = 0
+    recovery_resume_before: Step | None = None
     rendered_surface: bool = False
 
     def __post_init__(self) -> None:

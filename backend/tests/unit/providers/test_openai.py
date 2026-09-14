@@ -41,6 +41,7 @@ from replayforge.providers.openai import (
     ProviderTypeLocatorBundle,
     ProviderTypeProposal,
     ScenarioPrefixEnvelope,
+    ScenarioRecoveryEnvelope,
     ScenarioStartEnvelope,
 )
 from replayforge.providers.policy import ModelPolicy, load_model_policy
@@ -216,6 +217,31 @@ def test_scenario_prefix_schema_excludes_unmergeable_free_form_actions() -> None
     provider.decide(replace(context(), scenario_kind="business_outcome"))
     assert responses.request["text_format"] is ScenarioStartEnvelope
     assert "ProviderBranchProposal" not in to_strict_json_schema(ScenarioStartEnvelope)["$defs"]
+
+
+def test_recovery_schema_and_context_preserve_the_unexecuted_rejoin_boundary() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(
+            proposal=CompleteProposal(kind="complete", rationale="Correction verified")
+        )
+    )
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy(), FakeTelemetry())
+    next_step = sample_artifact().steps[1]
+    provider.decide(
+        replace(
+            context(),
+            scenario_kind="recovery",
+            branch_observed=True,
+            recovery_resume_before=next_step,
+        )
+    )
+    assert responses.request["text_format"] is ScenarioRecoveryEnvelope
+    schema = to_strict_json_schema(ScenarioRecoveryEnvelope)
+    assert "ProviderRecordedActionProposal" not in schema["$defs"]
+    assert "ProviderBranchProposal" not in schema["$defs"]
+    sent = json.loads(responses.request["input"][0]["content"][0]["text"])
+    assert sent["recovery_resume_before"]["id"] == next_step.id
+    assert sent["recovery_resume_before"]["action"] == next_step.action.model_dump(mode="json")
 
 
 def test_provider_requests_bounded_non_stored_structured_output() -> None:

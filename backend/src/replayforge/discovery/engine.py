@@ -377,6 +377,15 @@ class DiscoveryEngine:
                         scenario_kind=request.scenario.kind if request.scenario else None,
                         branch_observed=observed_branch is not None,
                         recorded_step_count=len(recordings),
+                        recovery_resume_before=(
+                            request.scenario.primary.steps[observed_branch.after_step_count]
+                            if request.scenario is not None
+                            and request.scenario.kind == "recovery"
+                            and observed_branch is not None
+                            and observed_branch.after_step_count
+                            < len(request.scenario.primary.steps)
+                            else None
+                        ),
                     )
                 )
                 renew_control()
