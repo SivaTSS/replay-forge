@@ -164,6 +164,13 @@ Discovery may observe a transient icon region to create a signature, but the com
 only rendered candidates. Schema `1.4` rejects persisted geometry; rendered-only registrations
 also reject legacy DOM targets recursively.
 
+Field-value association filters right-hand tokens before building text lines, so navigation on
+the same baseline cannot hide a value. It examines enclosing containers because segmentation
+can detect a label-only table column separately from its value cells. A plausible stacked value
+in a smaller container conflicts with an outer horizontal candidate and fails as ambiguous.
+This was chosen over taking the next text line or blindly using the smallest rectangle: both
+can return another field label as customer data. All regions come from the current frame.
+
 ### Current-frame visual signatures
 
 Repeated-row interfaces need more than a global icon match. Version `3.2.0` first resolves the rendered `Savings` label with OCR, identifies same-group components in the current frame, then compares each component with the hashed signature. Three identical account icons therefore remain safe: a global match is ambiguous, while the semantic group plus signature has one permitted match. The resulting click region is transient and tied to the current frame hash.

@@ -43,6 +43,18 @@ _COUNT_FIELDS = frozenset(
     }
 )
 _ENUM_FIELDS = {
+    "condition_kind": {
+        "route",
+        "text",
+        "visual_text",
+        "rendered_text",
+        "element",
+        "output_valid",
+        "identity_matches",
+        "all",
+        "any",
+        "not",
+    },
     "decision": {"allow", "deny", "require_human_approval"},
     "disposition": {"continue", "business_outcome"},
     "proposal_kind": {"act", "complete", "escalate"},

@@ -12,8 +12,11 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import Page, sync_playwright
 
-from replayforge.surfaces.models import VisualToken
-from replayforge.surfaces.vision import RapidOcrTextRecognizer
+from replayforge.capabilities.assets import LocalCapabilityAssetStore
+from replayforge.capabilities.models import RenderedFieldValueCandidate
+from replayforge.surfaces.models import Viewport, VisualToken
+from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
+from replayforge.surfaces.vision_policy import load_vision_policy
 
 pytestmark = pytest.mark.integration
 
@@ -177,6 +180,40 @@ def test_permission_dropdown_and_payoff_quote(terminal: Terminal) -> None:
     terminal.see("$7,832.25")
     terminal.click("Confirm operation")
     terminal.see("Payoff quote issued")
+
+
+@pytest.mark.parametrize(
+    ("tenant", "width", "height"), [("harbor", 1280, 800), ("summit", 1440, 900)]
+)
+def test_production_extraction_reads_payoff_values_not_neighboring_labels(
+    terminal: Terminal, tmp_path: Path, tenant: str, width: int, height: int
+) -> None:
+    terminal.page.set_viewport_size({"width": width, "height": height})
+    terminal.page.goto(f"http://127.0.0.1:3001/{tenant}/servicing")
+    terminal.page.locator("canvas").wait_for()
+    terminal.open_member()
+    terminal.click("Loan servicing", menu=True)
+    terminal.fill("Payoff date (YYYY-MM-DD)", "2026-09-20")
+    terminal.click("Calculate payoff")
+    terminal.click("Confirm operation")
+    vision = VisionGrounder(
+        terminal.ocr,
+        LocalCapabilityAssetStore(tmp_path / "assets", capture_enabled=False),
+        load_vision_policy(Path("config/vision-policy.yaml")),
+    )
+    frame = terminal.page.screenshot(scale="css")
+    expected = {
+        "Good through": "2026-09-20",
+        "Payoff amount": "$7,832.25",
+        "Confirmation reference": "HBR-000001" if tenant == "harbor" else "SUM-000001",
+    }
+    for label, value in expected.items():
+        target = vision.resolve(
+            RenderedFieldValueCandidate(strategy="rendered_field_value", label=label),
+            frame,
+            Viewport(width, height),
+        )
+        assert vision.extract(frame, target.region) == value
 
 
 def test_service_case_resolution(terminal: Terminal) -> None:

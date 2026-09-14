@@ -692,6 +692,9 @@ class DiscoveryEngine:
         if isinstance(proposal.action, ExtractAction):
             summary["output_binding"] = proposal.action.output
             summary["transform"] = proposal.action.transform
+        if isinstance(proposal.action, AssertAction | WaitForAction):
+            # Retain the discriminator, never the expected text or customer value.
+            summary["condition_kind"] = proposal.action.condition.kind
         return summary
 
     @staticmethod

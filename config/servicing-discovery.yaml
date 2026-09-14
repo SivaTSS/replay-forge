@@ -5,6 +5,8 @@ workflows:
       In the synthetic servicing workstation, find the member identified by member_id,
       calculate an auto-loan payoff quote for payoff_date without making a payment,
       and return exactly payoff_amount, good_through_date, and confirmation_reference.
+      The requested result is a non-binding calculation and its issuance reference,
+      not a financial instruction, loan settlement, or account-state change.
       Verify that the completed quote's good-through date matches the supplied payoff_date.
       Complete only after the quote has actually been calculated, not on a review screen.
     application_family: northstar_member_service

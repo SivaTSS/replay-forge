@@ -156,9 +156,10 @@ Replay re-resolves every action from a fresh frame and never calls the model.
 
 The richer workstation's [capture specification](../config/servicing-discovery.yaml) describes a
 loan-payoff discovery and model-free Summit validation. It is an executable capture recipe, not
-a discovered capability or proof of success. Its live run has not occurred: the environment
-requires explicit approval for sending that scenario's synthetic screenshots/member/loan values
-to the OpenAI Responses API. No new evidence bundle is claimed.
+a discovered capability or proof of success. Synthetic screenshot/member/loan data transmission
+was explicitly authorized on 2026-09-14. The first genuine attempt failed its final condition
+after a field-value association bug returned neighboring labels; the fix is covered by
+production-extraction tests on Harbor and Summit. No successful new bundle is claimed yet.
 
 ## Provider decision
 

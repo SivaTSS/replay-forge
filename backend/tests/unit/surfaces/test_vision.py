@@ -23,7 +23,12 @@ from replayforge.capabilities.models import (
     RenderedTextCandidate,
 )
 from replayforge.surfaces.models import ScreenRegion, SurfaceError, Viewport, VisualToken
-from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
+from replayforge.surfaces.vision import (
+    RapidOcrTextRecognizer,
+    VisionGrounder,
+    VisualLayoutGraph,
+    VisualNode,
+)
 from replayforge.surfaces.vision_policy import load_vision_policy
 
 
@@ -259,6 +264,81 @@ def test_rendered_field_value_unions_every_token_in_the_selected_value(tmp_path:
         vision.extract(frame, resolved.region, expected_frame_hash=resolved.frame_hash)
         == "USD 1,420.57"
     )
+
+
+@pytest.mark.parametrize("scale", [0.75, 1.0, 1.5])
+def test_field_value_ignores_left_navigation_on_the_same_baseline(
+    tmp_path: Path, scale: float
+) -> None:
+    def region(x: int, y: int, width: int, height: int) -> ScreenRegion:
+        return ScreenRegion(*(round(value * scale) for value in (x, y, width, height)))
+
+    value = region(370, 80, 110, 20)
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Navigation", 0.99, region(10, 80, 100, 20)),
+            VisualToken("Valid until", 0.99, region(170, 80, 100, 20)),
+            VisualToken("2026-10-02", 0.99, value),
+            VisualToken("Another label", 0.99, region(170, 115, 120, 20)),
+        ),
+    )
+    frame = blank_png(round(600 * scale), round(240 * scale))
+    target = vision.resolve(
+        RenderedFieldValueCandidate(strategy="rendered_field_value", label="Valid until"),
+        frame,
+        Viewport(round(600 * scale), round(240 * scale)),
+    )
+    assert target.region == value
+    assert vision.extract(frame, target.region) == "2026-10-02"
+
+
+def test_field_value_expands_beyond_a_label_only_table_column(tmp_path: Path) -> None:
+    label = VisualToken("Total", 0.99, ScreenRegion(30, 100, 50, 20))
+    value = VisualToken("42.50", 0.99, ScreenRegion(210, 100, 70, 20))
+    previous_label = VisualToken("Subtotal", 0.99, ScreenRegion(30, 65, 80, 20))
+    frame = blank_png()
+    vision = semantic_vision(tmp_path, (label, value, previous_label))
+    graph = VisualLayoutGraph(
+        vision.frame_hash(frame),
+        Viewport(400, 240),
+        20,
+        (
+            VisualNode("column", "container", ScreenRegion(20, 55, 160, 80)),
+            VisualNode("viewport", "container", ScreenRegion(0, 0, 400, 240)),
+        ),
+        (),
+    )
+    vision._graph_cache[graph.frame_hash] = graph
+    target = vision.resolve(
+        RenderedFieldValueCandidate(strategy="rendered_field_value", label="Total"),
+        frame,
+        graph.viewport,
+    )
+    assert target.region == value.region
+
+
+def test_field_value_does_not_escape_a_plausible_stacked_group(tmp_path: Path) -> None:
+    vision = semantic_vision(tmp_path, ())
+    graph = VisualLayoutGraph(
+        "frame",
+        Viewport(400, 240),
+        20,
+        (
+            VisualNode("card", "container", ScreenRegion(10, 40, 150, 100)),
+            VisualNode("viewport", "container", ScreenRegion(0, 0, 400, 240)),
+        ),
+        (),
+    )
+    with pytest.raises(SurfaceError, match="competing field value layouts"):
+        vision._field_value_tokens(
+            graph,
+            ScreenRegion(20, 50, 80, 20),
+            (
+                VisualToken("Stacked value", 0.99, ScreenRegion(20, 82, 100, 20)),
+                VisualToken("Neighbor", 0.99, ScreenRegion(250, 50, 80, 20)),
+            ),
+        )
 
 
 def test_rendered_field_value_unions_a_stacked_value_line(tmp_path: Path) -> None:

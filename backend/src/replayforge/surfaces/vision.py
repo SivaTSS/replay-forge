@@ -487,15 +487,13 @@ class VisionGrounder:
             raise self._cardinality_error(len(labels), "rendered field label")
         label = labels[0]
         graph = self._layout_graph(png, viewport, started)
-        container = self._anchor_container(graph, label.region, "phrase")
         tokens = tuple(
             token
             for token in self._tokens(png, started)
             if token.confidence >= policy.ocr.minimum_confidence
             and not self._center_in(token.region, label.region)
-            and self._contains(container.region, token.region)
         )
-        value_tokens = self._associated_value_tokens(label.region, tokens, graph.median_text_height)
+        value_tokens = self._field_value_tokens(graph, label.region, tokens)
         if not value_tokens:
             raise SurfaceError(
                 "target_absent",
@@ -906,6 +904,50 @@ class VisionGrounder:
         nearest_y = min(node.region.y for node in following)
         return tuple(node for node in following if abs(node.region.y - nearest_y) <= tolerance)
 
+    def _field_value_tokens(
+        self, graph: VisualLayoutGraph, label: ScreenRegion, tokens: tuple[VisualToken, ...]
+    ) -> tuple[VisualToken, ...]:
+        # Segmentation can identify a table's label column as a container without
+        # its adjacent value cells. Search enclosing containers, not just the first
+        # rectangle containing two labels. A plausible stacked value in a smaller
+        # group prevents silently escaping to an unrelated neighboring group.
+        containers = sorted(
+            (node for node in graph.of_kind("container") if self._contains(node.region, label)),
+            key=lambda node: node.region.width * node.region.height,
+        )
+        stacked: tuple[VisualToken, ...] = ()
+        for container in containers:
+            scoped = tuple(
+                token for token in tokens if self._contains(container.region, token.region)
+            )
+            horizontal = self._horizontal_value_tokens(label, scoped, graph.median_text_height)
+            if horizontal:
+                if stacked:
+                    raise self._cardinality_error(2, "competing field value layouts")
+                return horizontal
+            if not stacked:
+                stacked = self._associated_value_tokens(label, scoped, graph.median_text_height)
+        return stacked
+
+    def _horizontal_value_tokens(
+        self, label: ScreenRegion, tokens: tuple[VisualToken, ...], median_height: float
+    ) -> tuple[VisualToken, ...]:
+        # Filter per token BEFORE building lines. Unrelated navigation text to the
+        # left must not disqualify the actual value on the same rendered baseline.
+        horizontal = tuple(
+            token
+            for token in tokens
+            if token.region.x >= label.x + label.width
+            and self._axis_overlap_ratio(token.region, label, vertical=True)
+            >= self._required_policy().association.minimum_axis_overlap_ratio
+        )
+        if not horizontal:
+            return ()
+        groups = self._token_groups(list(horizontal), median_height)
+        if len(groups) != 1:
+            raise self._cardinality_error(len(groups), "rendered field value")
+        return groups[0]
+
     def _associated_value_tokens(
         self,
         label: ScreenRegion,
@@ -914,17 +956,9 @@ class VisionGrounder:
     ) -> tuple[VisualToken, ...]:
         policy = self._required_policy()
         lines = self._text_lines(tokens, median_height)
-        horizontal = [
-            line
-            for line in lines
-            if self._line_overlaps_region(line, label)
-            and min(token.region.x for token in line) >= label.x + label.width
-        ]
+        horizontal = self._horizontal_value_tokens(label, tokens, median_height)
         if horizontal:
-            groups = self._token_groups(horizontal[0], median_height)
-            if len(groups) != 1:
-                raise self._cardinality_error(len(groups), "rendered field value")
-            return groups[0]
+            return horizontal
         following = [
             line
             for line in lines
