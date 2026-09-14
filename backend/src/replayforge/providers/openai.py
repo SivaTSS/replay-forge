@@ -134,7 +134,10 @@ For extract actions, use each required output field's preferred_transform exactl
 outputs through stable field labels or structural accessors. A later extraction replaces the
 previous binding: use this when identity or state must be checked both before and after a change,
 not to repeat an already verified observation. Never put a displayed
-output value in an extraction locator (including ocr_relative target_text). Use rendered_field_value
+output value in an extraction locator (including ocr_relative target_text). For extraction targets,
+set description to the exact observed structural field label, not a paraphrase of the requested
+output or a description of its value. Do not add a state, value, or customer detail to that label.
+Use rendered_field_value
 for labeled values, with relation right_of or below when the screenshot establishes the value's
 direction from its label. This distinguishes horizontal table fields from stacked fields without
 coordinates. Never extract an undeclared output. Complete when remaining_output_fields is

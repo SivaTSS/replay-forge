@@ -149,6 +149,11 @@ redaction, not a metadata exemption: the resulting artifact is checked again and
 is recomputed. Selectors, target descriptions used by policy, examples, constraints, and observed
 conditions are never rewritten. Configured secrets are rejected before any description redaction.
 
+Extraction proposals are instructed to describe the observed field label exactly, rather than
+paraphrase the task or repeat its value. This avoids private data leaking into step metadata
+without rewriting policy-relevant descriptions after execution or exempting common words from
+the publication check. A prompt violation still fails closed.
+
 A failed suite exposes a typed `privacy_rejection` with the source category and schema-only
 location. Dictionary keys become `*`; rejected values and free-text failure messages stay out of
 suite snapshots. Capture errors include the suite ID so the failed run remains identifiable.
