@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import unicodedata
 from base64 import b64encode
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, cast
@@ -54,6 +55,13 @@ Return only the provided structured proposal. Use symbolic input paths, never li
 values. Supplied input values are omitted from this text context. Never assume a prefilled field
 matches an invocation input. When the goal uses an input as a form value, type or select its
 symbolic binding even if the field already displays a default value.
+Each visual token's input_bindings lists symbolic input paths whose entire value matches that
+token. Use those bindings to identify caller-selected records without guessing their values.
+An empty list means no exact input match; it is not evidence that the requested record is absent.
+When a required record binding is visible in a table, select its observed row action using
+input_text plus the action's text/relation. Selecting record context is part of the task, not an
+optional check after navigating away. A token match is only a targeting hint, never proof of
+uniqueness, ownership, or a completed action; the runtime still verifies those separately.
 When visual_tokens is non-empty, prefer rendered semantic candidates. For a visual
 typing or selection target, require a rendered labeled control; an OCR label is not itself an
 editable control. Use rendered_field_value for visual extraction, never text-click targeting.
@@ -520,6 +528,23 @@ class ScenarioRecoveryEnvelope(ProviderModel):
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
 
 
+def _visual_input_bindings(inputs: dict[str, Any]) -> dict[str, list[str]]:
+    """Annotate already-observed text with symbols, never add invocation values to a request."""
+    bindings: dict[str, list[str]] = {}
+
+    def visit(values: dict[str, Any], prefix: str = "") -> None:
+        for key, value in values.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                visit(value, path)
+            elif isinstance(value, str) and value.strip():
+                normalized = " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+                bindings.setdefault(normalized, []).append(path)
+
+    visit(inputs)
+    return bindings
+
+
 def _condition_payload(condition: dict[str, Any]) -> dict[str, Any]:
     kind = condition.get("kind")
     if kind == "route":
@@ -811,6 +836,7 @@ class OpenAIModelProvider:
                 "provider_frame_invalid",
                 "The visual observation is empty or exceeds the provider frame limit.",
             )
+        input_bindings = _visual_input_bindings(context.inputs)
         request = {
             "goal": context.goal,
             "input_fields": sorted(context.inputs),
@@ -845,6 +871,10 @@ class OpenAIModelProvider:
                     {
                         "text": token.text,
                         "confidence": round(token.confidence, 4),
+                        "input_bindings": input_bindings.get(
+                            " ".join(unicodedata.normalize("NFKC", token.text).casefold().split()),
+                            [],
+                        ),
                         "box": {
                             "x": token.region.x,
                             "y": token.region.y,

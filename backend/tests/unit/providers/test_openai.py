@@ -50,7 +50,9 @@ from replayforge.surfaces.models import (
     ActionableControl,
     ExtractableField,
     NormalizedObservation,
+    ScreenRegion,
     Viewport,
+    VisualToken,
 )
 from tests.artifacts import sample_artifact
 
@@ -243,6 +245,39 @@ def test_recovery_schema_and_context_preserve_the_unexecuted_rejoin_boundary() -
     assert sent["recovery_resume_before"]["id"] == next_step.id
     assert sent["recovery_resume_before"]["action"] == next_step.action.model_dump(mode="json")
     assert sent["reference_steps"] == []
+
+
+def test_visual_tokens_expose_exact_symbolic_bindings_not_unseen_values() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(proposal=CompleteProposal(kind="complete", rationale="Verified."))
+    )
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy())
+    original = context()
+    tokens = tuple(
+        VisualToken(text, 0.99, ScreenRegion(10, 10 + index * 20, 160, 15))
+        for index, text in enumerate(
+            ("\uff21\uff22-12", "AB-12", "Product AB-12 / Open", "AB-123", "A.*")
+        )
+    )
+    provider.decide(
+        replace(
+            original,
+            inputs={
+                "record": {"id": "ab-12"},
+                "alias": "AB-12",
+                "pattern": "A.*",
+                "unseen": "never-visible-sensitive-value",
+                "empty": " ",
+                "number": 12,
+            },
+            observation=replace(original.observation, visual_tokens=tokens),
+        )
+    )
+    sent = json.loads(responses.request["input"][0]["content"][0]["text"])
+    annotations = [token["input_bindings"] for token in sent["observation"]["visual_tokens"]]
+    assert annotations == [["record.id", "alias"], ["record.id", "alias"], [], [], ["pattern"]]
+    assert "never-visible-sensitive-value" not in json.dumps(sent)
+    assert responses.request["store"] is False
 
 
 def test_provider_requests_bounded_non_stored_structured_output() -> None:

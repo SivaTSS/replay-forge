@@ -76,13 +76,19 @@ sequenceDiagram
 - Input **field names**, not the supplied customer values in the text instruction.
 - Required and already captured output fields.
 - Current normalized route and viewport.
-- Local OCR tokens with confidence and bounding boxes.
+- Local OCR tokens with confidence, bounding boxes, and exact-match symbolic input bindings.
 - Headings, labels, frame titles, actionable controls, and extractable field labels when present.
 - Active-element summary and state fingerprint.
 - A current PNG screenshot.
 - At most 20 recent normalized actions.
 - OCR text from the screen before the last completed action, explicitly historical and transient.
 - Allowed action types and maximum risk.
+
+Symbolic annotations associate an already-visible OCR phrase with an input path without adding
+unseen invocation values to the request. They are targeting hints, not identity or uniqueness
+proof. Multiple occurrences remain ambiguous; embedded identifiers in composite labels are not
+exact matches. Discovery can choose another observed record-selection affordance, but cannot
+substitute a fixed row, literal customer identifier, or unverified default selection.
 
 ### What the model may return
 
