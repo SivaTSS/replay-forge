@@ -155,9 +155,8 @@ class VisionGrounder:
                     viewport,
                     started,
                 )
-            if len(anchors) != 1:
+            if not anchors:
                 raise self._cardinality_error(len(anchors), "OCR anchor")
-            anchor = anchors[0]
             if candidate.target_text is not None:
                 targets = self._matching_tokens(
                     png,
@@ -170,7 +169,9 @@ class VisionGrounder:
                 related = tuple(
                     token
                     for token in targets
-                    if self._has_relation(anchor, token, candidate.relation)
+                    if any(
+                        self._has_relation(anchor, token, candidate.relation) for anchor in anchors
+                    )
                 )
                 if len(related) != 1 and self.policy is not None:
                     semantic_targets = self._semantic_matches_in_region(
@@ -184,10 +185,16 @@ class VisionGrounder:
                     related = tuple(
                         token
                         for token in semantic_targets
-                        if self._has_relation(anchor, token, candidate.relation)
+                        if any(
+                            self._has_relation(anchor, token, candidate.relation)
+                            for anchor in anchors
+                        )
                     )
                 return self._unique_text_target(related, "ocr_relative_text", frame_hash)
             assert candidate.relative_region is not None
+            if len(anchors) != 1:
+                raise self._cardinality_error(len(anchors), "OCR anchor")
+            anchor = anchors[0]
             region = self._relative_region(anchor.region, candidate.relative_region, viewport)
             return VisualTargetData(region, "ocr_relative_region", anchor.confidence, frame_hash)
         if isinstance(candidate, ImageAnchorCandidate):

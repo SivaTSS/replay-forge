@@ -614,6 +614,55 @@ def test_ocr_below_rejects_multiple_matches_in_the_anchor_column(tmp_path: Path)
     assert error.value.code == "target_ambiguous"
 
 
+@pytest.mark.parametrize("scale", [0.75, 1.0, 1.5])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_relative_text_uses_unique_relation_not_global_anchor_uniqueness(
+    tmp_path: Path, scale: float, reverse: bool
+) -> None:
+    def token(text: str, x: int, y: int) -> VisualToken:
+        return VisualToken(text, 0.99, ScreenRegion(*(round(v * scale) for v in (x, y, 70, 20))))
+
+    tokens = (
+        token("ITEM-Q7", 30, 30),  # Search field repeats the row identity.
+        token("ITEM-Q7", 30, 110),
+        token("Inspect", 200, 110),
+        token("Inspect", 200, 180),
+    )
+    vision = VisionGrounder(
+        StubRecognizer(tuple(reversed(tokens)) if reverse else tokens),
+        LocalCapabilityAssetStore(tmp_path),
+    )
+    resolved = vision.resolve(
+        OcrRelativeCandidate(
+            strategy="ocr_relative", anchor="ITEM-Q7", target_text="Inspect", relation="right_of"
+        ),
+        b"frame",
+        Viewport(round(400 * scale), round(240 * scale)),
+    )
+    assert resolved.region == tokens[2].region
+
+
+def test_repeated_anchors_cannot_choose_between_distinct_related_targets(tmp_path: Path) -> None:
+    tokens = tuple(
+        VisualToken(text, 0.99, ScreenRegion(x, y, 70, 20))
+        for y in (30, 110)
+        for text, x in (("ITEM-Q7", 30), ("Inspect", 200))
+    )
+    vision = VisionGrounder(StubRecognizer(tokens), LocalCapabilityAssetStore(tmp_path))
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            OcrRelativeCandidate(
+                strategy="ocr_relative",
+                anchor="ITEM-Q7",
+                target_text="Inspect",
+                relation="right_of",
+            ),
+            b"frame",
+            Viewport(400, 240),
+        )
+    assert error.value.code == "target_ambiguous"
+
+
 def test_ocr_relative_reconstructs_split_anchor_and_target_phrases(tmp_path: Path) -> None:
     tokens = (
         VisualToken("Primary", 0.99, ScreenRegion(20, 50, 55, 20)),

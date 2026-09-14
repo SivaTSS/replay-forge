@@ -722,7 +722,7 @@ def test_ambiguous_retry_remembers_rejected_locator_and_bounds_equivalent_action
     feedback = provider.calls[1].action_history[-1]
     assert "Rejected proposal (not executed):" in feedback
     assert '"target":' in feedback
-    assert "Both the anchor and the related target must be unique" in feedback
+    assert "The relation across every matching anchor must identify one target" in feedback
     assert "private raw diagnostics" not in repr(provider.calls)
     assert len(provider.calls) == 3
 

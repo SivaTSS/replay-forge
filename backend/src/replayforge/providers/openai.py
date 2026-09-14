@@ -59,11 +59,12 @@ click target that OCR cannot name, you may provide one transient coordinates can
 its tight bounding box and set capture_group_label to the unique rendered label for its row/card;
 discovery converts that temporary region into a content-addressed image signature before
 recording it. Never use coordinates for type or extract.
-When actionable text repeats anywhere on screen, use ocr_relative with a unique nearby label as
+When actionable text repeats anywhere on screen, use ocr_relative with a nearby label as
 anchor, the action text as target_text, and the observed spatial relation. Never use coordinates
 for a text-labeled control.
-The anchor itself must occur exactly once. right_of requires row alignment; below requires
-column alignment. More than one matching target within that relation remains ambiguous.
+right_of requires row alignment; below requires column alignment. The anchor may repeat (for
+example in a search field and a result row), but the relation across all its occurrences must
+identify exactly one target. More than one matching target remains ambiguous.
 press_keys is one chord: modifier names first, then one supported key (for example Enter).
 Use type with an input binding for text, not press_keys.
 A is only a Control/Meta select-all shortcut.
@@ -501,14 +502,20 @@ def _preferred_transform(schema: ValueSchema) -> str:
 
 
 def _output_requirement(name: str, schema: ValueSchema) -> dict[str, object]:
-    return {
+    requirement: dict[str, object] = {
         "name": name,
         "type": schema.type.value,
-        "format": schema.format,
-        "const": schema.const,
-        "enum": list(schema.enum),
         "preferred_transform": _preferred_transform(schema),
     }
+    # Domain defaults mean "unconstrained", not JSON Schema's null-only constant
+    # or empty set of permitted values. Do not send contradictory instructions.
+    if schema.format is not None:
+        requirement["format"] = schema.format
+    if schema.const is not None:
+        requirement["const"] = schema.const
+    if schema.enum:
+        requirement["enum"] = list(schema.enum)
+    return requirement
 
 
 class ParsedResponsePort(Protocol):

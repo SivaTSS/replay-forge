@@ -137,6 +137,11 @@ table-row label is a stacked value, without storing offsets, screen dimensions, 
 rules. A genuinely model-driven transaction run exposed this ambiguity; the regression tests use
 unrelated part identifiers at three scales, and the unchanged failed-run screenshot verifies the fix.
 
+Named relative targets are resolved across all matching anchors and must identify exactly one
+target. A repeated identity in a search field and a result row need not be ambiguous when only
+the row has a related action. Multiple distinct related actions still fail closed; no nearest,
+first-row, or pixel-offset fallback is used. Region-offset locators still require one anchor.
+
 Discovery and replay share one pure extraction-transform implementation. `trim` removes only
 surrounding whitespace; only `decimal` removes dollar signs and grouping commas. `lowercase` uses
 Unicode lowercase, not case-folding. Separate implementations were rejected after an exact-output
@@ -280,6 +285,12 @@ runtime evidence remains intact. Unit regressions verify the schema-symbol and a
 redaction fixes, but these two live attempts do not establish end-to-end transaction success.
 
 ## Provider decision
+
+Output requirements omit absent `const`, `enum`, and `format` constraints. Sending the internal
+defaults `const: null` and `enum: []` incorrectly suggests a null-only value and no permitted
+values for a required string. Only actual constraints are sent; the model and replay validator
+therefore receive the same contract semantics. Structured output formatting alone does not
+guarantee semantic correctness ([OpenAI guidance](https://developers.openai.com/api/docs/guides/structured-outputs)).
 
 | Option | Decision | Reason |
 |---|---|---|

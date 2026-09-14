@@ -97,6 +97,7 @@ _STRATEGIES = frozenset(
         "rendered_labeled_control",
         "rendered_field_value",
         "rendered_group_image",
+        "input_text",
     }
 )
 

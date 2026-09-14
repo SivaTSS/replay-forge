@@ -342,8 +342,8 @@ class DiscoveryEngine:
                             + self._proposal_fingerprint(proposal)
                             + "\nPrevious proposal was not executed (target_ambiguous). "
                             "Choose a different uniquely identifiable target or anchor from the "
-                            "current screenshot. Both the anchor and the related target must be "
-                            "unique; repeating this locator will not resolve the ambiguity. "
+                            "current screenshot. The relation across every matching anchor must "
+                            "identify one target; repeating this locator cannot resolve ambiguity. "
                             "Escalate if no supported locator can distinguish the control."
                         )
                     elif error.code == "literal_input_target":
