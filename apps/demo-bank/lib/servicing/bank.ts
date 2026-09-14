@@ -269,7 +269,9 @@ export function execute(
     "Invalid operation reference.",
   );
   const fingerprint = JSON.stringify(command);
-  const completed = bank.completed[key];
+  const completed = Object.hasOwn(bank.completed, key)
+    ? bank.completed[key]
+    : undefined;
   if (completed) {
     requireRule(
       completed.fingerprint === fingerprint,
