@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -115,6 +116,7 @@ class PlaywrightSurfaceDriver:
     allow_transient_coordinates: bool = False
     viewport: Viewport = field(default_factory=lambda: Viewport(1280, 800))
     application_registry: ApplicationRegistry | None = None
+    frame_sink: Callable[[SurfaceFrame], None] | None = None
     browser: Browser | None = field(default=None, init=False)
     playwright: Playwright | None = field(default=None, init=False)
     active_session: PlaywrightSurfaceSession | None = field(default=None, init=False)
@@ -204,6 +206,7 @@ class PlaywrightSurfaceDriver:
             rendered_surface=launch.rendered_surface,
             viewport=self.viewport,
             route_aliases=registry.get(application_family).route_aliases,
+            frame_sink=self.frame_sink,
         )
         self.active_session = session
         if launch.rendered_surface:
@@ -288,6 +291,7 @@ class PlaywrightSurfaceSession:
     viewport: Viewport = field(default_factory=lambda: Viewport(1280, 800))
     route_aliases: dict[str, str] = field(default_factory=dict)
     session_id: EntityId = field(default_factory=lambda: new_id(EntityKind.SESSION))
+    frame_sink: Callable[[SurfaceFrame], None] | None = None
     _handles: dict[str, Locator] = field(default_factory=dict, init=False)
     _bundles: dict[str, LocatorBundle] = field(default_factory=dict, init=False)
     _visual_candidates: dict[str, VisualLocatorCandidate] = field(default_factory=dict, init=False)
@@ -436,7 +440,9 @@ class PlaywrightSurfaceSession:
 
     def capture_provider_frame(self) -> bytes:
         try:
-            return self.page.screenshot(type="png", full_page=False, scale="css")
+            return self._publish_frame(
+                self.page.screenshot(type="png", full_page=False, scale="css")
+            )
         except Exception as exc:
             raise SurfaceError(
                 "screenshot_failed", "The current UI frame could not be captured."
@@ -945,13 +951,22 @@ class PlaywrightSurfaceSession:
 
     def _capture_grounding_frame(self) -> bytes:
         try:
-            return self.page.screenshot(
-                type="png", full_page=False, scale="css", animations="disabled", caret="hide"
+            return self._publish_frame(
+                self.page.screenshot(
+                    type="png", full_page=False, scale="css", animations="disabled", caret="hide"
+                )
             )
         except Exception as error:
             raise SurfaceError(
                 "screenshot_failed", "The visual frame could not be captured."
             ) from error
+
+    def _publish_frame(self, content: bytes) -> bytes:
+        if self.frame_sink is not None:
+            # A disconnected or faulty observer must never change the business result.
+            with suppress(Exception):
+                self.frame_sink(SurfaceFrame(content, self._viewport()))
+        return content
 
     def _viewport(self) -> Viewport:
         viewport = self.page.viewport_size or {"width": 1280, "height": 800}

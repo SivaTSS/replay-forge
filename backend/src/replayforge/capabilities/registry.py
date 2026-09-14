@@ -8,6 +8,7 @@ import re
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -54,6 +55,8 @@ class CapabilityVersionRecord:
 
 
 class CapabilityRegistry(Protocol):
+    def all(self) -> tuple[CapabilityVersionRecord, ...]: ...
+
     def ready(self) -> bool: ...
 
     def publish(self, artifact: CapabilityArtifact) -> CapabilityVersionRecord: ...
@@ -84,6 +87,10 @@ class InMemoryCapabilityRegistry:
 
     def ready(self) -> bool:
         return True
+
+    def all(self) -> tuple[CapabilityVersionRecord, ...]:
+        with self._lock:
+            return tuple(deepcopy(record) for record in self._records.values())
 
     def publish(self, artifact: CapabilityArtifact) -> CapabilityVersionRecord:
         content_hash = artifact_content_hash(artifact)

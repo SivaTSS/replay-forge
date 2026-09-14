@@ -61,8 +61,6 @@ from replayforge.evidence.redaction import EvidenceRejectedError, StructuredReda
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
     AUTOMATION_OWNER,
-    InterventionContext,
-    InterventionRunMode,
 )
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import (
@@ -76,10 +74,8 @@ from replayforge.runs.ports import InterventionRouter, RunRecorder
 from replayforge.runs.results import (
     ArtifactPrivacyDiagnostic,
     FailureResult,
-    InterventionRequiredResult,
 )
 from replayforge.shared.clock import Clock
-from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import ActionStatus, NormalizedObservation, SurfaceError
 from replayforge.surfaces.ports import SurfaceDriver, SurfaceSession
 
@@ -132,7 +128,6 @@ class DiscoveryEngine:
 
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
         session: SurfaceSession | None = None
-        preserve_session = False
         started_at = self.clock.now()
         try:
             if self.policy_resolver is not None:
@@ -186,7 +181,6 @@ class DiscoveryEngine:
                         None,
                         observation,
                     )
-                    preserve_session = True
                     return result
 
                 proposal = self.model_provider.decide(
@@ -226,7 +220,6 @@ class DiscoveryEngine:
                         None,
                         observation,
                     )
-                    preserve_session = True
                     return result
                 if isinstance(proposal, CompleteProposal):
                     try:
@@ -306,7 +299,6 @@ class DiscoveryEngine:
                         None,
                         observation,
                     )
-                    preserve_session = True
                     return result
                 if proposal.confidence < request.minimum_confidence:
                     result = self._intervene(
@@ -317,7 +309,6 @@ class DiscoveryEngine:
                         None,
                         observation,
                     )
-                    preserve_session = True
                     return result
 
                 try:
@@ -388,9 +379,6 @@ class DiscoveryEngine:
                             "choose a different safe target."
                         )
                     continue
-                if isinstance(act_result, InterventionRequiredResult):
-                    preserve_session = True
-                    return act_result
                 if isinstance(act_result, FailureResult):
                     return act_result
                 recording, history_item = act_result
@@ -403,7 +391,7 @@ class DiscoveryEngine:
         except SurfaceError as error:
             return self._failure(request, error.code, error.safe_message)
         finally:
-            if session is not None and not preserve_session:
+            if session is not None:
                 session.close()
 
     def _plan_contract(
@@ -523,7 +511,7 @@ class DiscoveryEngine:
         effective_policy: EffectivePolicy,
         output_contract: ObjectContract,
         input_contract: ObjectContract | None,
-    ) -> tuple[RecordedDiscoveryStep, str] | FailureResult | InterventionRequiredResult:
+    ) -> tuple[RecordedDiscoveryStep, str] | FailureResult:
         if isinstance(proposal.action, AssertAction | WaitForAction):
             validate_condition_bindings(proposal.action.condition, outputs, request.inputs)
         value_source = (
@@ -727,36 +715,12 @@ class DiscoveryEngine:
         code: str,
         step_id: str | None,
         observation: NormalizedObservation,
-    ) -> InterventionRequiredResult:
-        intervention_id = new_id(EntityKind.INTERVENTION)
-        routed_id = self.intervention_router.open(
-            intervention_id=intervention_id,
-            run_id=request.run_id,
-            session_id=session.session_id,
-            expected_lease_version=lease_version,
-            code=code,
-            step_id=step_id,
-            observation=observation,
-            context=InterventionContext(
-                run_mode=InterventionRunMode.DISCOVERY,
-                application_family=request.application_family,
-                tenant=request.tenant,
-                task_summary="Discovery run requires operator intervention.",
-                step_id=step_id,
-                surface_route=observation.route,
-            ),
-        )
-        if routed_id != intervention_id:
-            raise RuntimeError("intervention router must preserve the reserved identity")
-        return InterventionRequiredResult(
-            status="intervention_required",
-            run_id=request.run_id,
-            intervention_id=intervention_id,
-            code=code,
-            step_id=step_id,
-            session_live=True,
-            control_owner="automation_paused",
-        )
+    ) -> FailureResult:
+        # Discovery is unattended. A blocker must never create a claimable session.
+        del session, lease_version, observation
+        return self._failure(
+            request, code, "Automated discovery stopped at a safety or progress boundary."
+        ).model_copy(update={"step_id": step_id})
 
     def _failure(
         self,

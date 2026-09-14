@@ -41,7 +41,7 @@ from replayforge.interventions.leases import (
 from replayforge.policy.evaluator import PolicyEvaluator
 from replayforge.policy.models import EffectivePolicy, PolicyLayer
 from replayforge.policy.types import DataClassification, Risk
-from replayforge.runs.results import FailureResult, InterventionRequiredResult
+from replayforge.runs.results import FailureResult
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import NormalizedObservation, ResolvedTarget, SurfaceError
@@ -496,7 +496,7 @@ def test_successful_loop_records_action_and_compiles_verified_artifact(
     assert session.closed is True
 
 
-def test_low_confidence_escalates_and_preserves_session(
+def test_low_confidence_stops_and_closes_discovery(
     valid_artifact_data: dict[str, Any],
 ) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
@@ -519,9 +519,9 @@ def test_low_confidence_escalates_and_preserves_session(
 
     result = engine.execute(make_request())
 
-    assert isinstance(result, InterventionRequiredResult)
+    assert isinstance(result, FailureResult)
     assert result.code == "low_model_confidence"
-    assert session.closed is False
+    assert session.closed is True
 
 
 def test_multiple_extractions_from_one_stable_view_are_not_stuck(
@@ -554,7 +554,7 @@ def test_multiple_extractions_from_one_stable_view_are_not_stuck(
     assert len(provider.calls) == 3
 
 
-def test_provider_can_explicitly_request_human_help(
+def test_provider_escalation_stops_without_human_takeover(
     valid_artifact_data: dict[str, Any],
 ) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
@@ -572,9 +572,9 @@ def test_provider_can_explicitly_request_human_help(
 
     result = engine.execute(make_request())
 
-    assert isinstance(result, InterventionRequiredResult)
+    assert isinstance(result, FailureResult)
     assert result.code == "unknown_dialog"
-    assert session.closed is False
+    assert session.closed is True
 
 
 def test_step_budget_stops_unbounded_discovery(
@@ -625,9 +625,9 @@ def test_repeated_observation_escalates_before_looping_forever(
 
     result = engine.execute(make_request(max_repeated_state=1))
 
-    assert isinstance(result, InterventionRequiredResult)
+    assert isinstance(result, FailureResult)
     assert result.code == "repeated_observation"
-    assert session.closed is False
+    assert session.closed is True
 
 
 def test_unverified_completion_is_failure(
@@ -737,7 +737,7 @@ def test_ambiguous_retry_remembers_rejected_locator_and_bounds_equivalent_action
 
     result = engine.execute(make_request())
 
-    assert isinstance(result, InterventionRequiredResult)
+    assert isinstance(result, FailureResult)
     assert result.code == "repeated_action"
     feedback = provider.calls[1].action_history[-1]
     assert "Rejected proposal (not executed):" in feedback
@@ -879,7 +879,7 @@ def test_verified_conditions_allow_static_screens_but_not_unbounded_repetition(
     )
     result = engine.execute(make_request(max_repeated_state=1))
     if repeat:
-        assert isinstance(result, InterventionRequiredResult)
+        assert isinstance(result, FailureResult)
         assert result.code == "repeated_action"
     else:
         assert isinstance(result, DiscoverySuccess)

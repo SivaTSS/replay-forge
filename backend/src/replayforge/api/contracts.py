@@ -51,6 +51,20 @@ class DiscoveryInvocation(ApiModel):
     )
 
 
+class ReplayLaunch(ReplayInvocation):
+    mode: Literal["replay"]
+    capability_id: str = Field(pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+
+
+class DiscoveryLaunch(DiscoveryInvocation):
+    mode: Literal["discovery"]
+    validation_tenants: tuple[str, ...] = Field(default=(), max_length=10)
+
+
+class LaunchRequest(ApiModel):
+    execution: ReplayLaunch | DiscoveryLaunch = Field(discriminator="mode")
+
+
 class DiscoverySuiteScenario(ApiModel):
     kind: Literal["business_outcome", "application_failure", "recovery"]
     goal: str = Field(min_length=10, max_length=1_000)

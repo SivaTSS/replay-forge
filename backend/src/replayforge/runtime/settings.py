@@ -27,6 +27,7 @@ class RuntimeSettings(BaseSettings):
     evidence_directory: Path = Path("evidence/runtime")
     demo_base_url: str = "http://127.0.0.1:3001"
     browser_headless: bool = True
+    viewer_presets_file: Path | None = Path("config/servicing-discovery.yaml")
     browser_viewport_width: int = 1280
     browser_viewport_height: int = 800
     browser_device_scale_factor: float = 1.0

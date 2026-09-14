@@ -73,6 +73,8 @@ from replayforge.runs.results import (
     RunResult,
 )
 from replayforge.runs.service import ReplayApplicationService, ReplayExecutor
+from replayforge.runs.viewing import ExecutionViewer, RunFeed, current_execution
+from replayforge.runtime.viewing import ExecutionController
 from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
 from replayforge.surfaces.models import HumanInput, SurfaceError, SurfaceFrame, Viewport
@@ -297,6 +299,7 @@ class RuntimeInterventionService:
     lock: Lock
     replay_continuations: dict[str, ManagedReplayContinuation] = field(default_factory=dict)
     replay_result_finalizer: Callable[[RunResult], RunResult] | None = None
+    run_feeds: dict[str, RunFeed] = field(default_factory=dict)
 
     def get(self, intervention_id: str) -> InterventionTransition:
         return self.coordinator.get(intervention_id)
@@ -380,6 +383,9 @@ class RuntimeInterventionService:
             str(started.intervention.run_id),
             details={"lease_version": resumed.lease.version},
         )
+        feed = self.run_feeds.get(str(started.intervention.run_id))
+        if feed is not None:
+            feed.manager.resume(feed)
         try:
             result = session.worker.call(lambda: managed.resume(resumed.lease.version, outcome))
         except BaseException:
@@ -400,6 +406,8 @@ class RuntimeInterventionService:
             with self.lock:
                 retained = self.live_sessions.pop(intervention_id)
                 self.live_sessions[result.intervention_id] = retained
+            if feed is not None:
+                feed.result(result.model_dump(mode="json"))
             return InterventionResume(resumed, result)
 
         try:
@@ -529,6 +537,9 @@ class RuntimeInterventionService:
             session = self.live_sessions.pop(intervention_id, None)
         if session is not None:
             session.close()
+        feed = self.run_feeds.pop(str(transition.intervention.run_id), None)
+        if feed is not None:
+            feed.result({"status": "terminated", "run_id": str(transition.intervention.run_id)})
         return transition
 
 
@@ -543,6 +554,7 @@ class LocalRuntime:
     live_sessions: dict[str, LiveBrowserSession]
     model_telemetry: ModelCallTelemetry
     _lock: Lock = field(repr=False)
+    execution_controller: ExecutionController | None = None
 
     @property
     def api_services(self) -> ApiServices:
@@ -551,9 +563,12 @@ class LocalRuntime:
             self.discovery_service,
             self.intervention_service,
             self.discovery_suite_service,
+            self.execution_controller,
         )
 
     def close(self) -> None:
+        if self.execution_controller is not None:
+            self.execution_controller.viewer.close()
         with self._lock:
             sessions = tuple(self.live_sessions.values())
             self.live_sessions.clear()
@@ -592,14 +607,20 @@ def build_runtime(settings: object) -> LocalRuntime:
     result_classifications: dict[str, dict[str, DataClassification]] = {}
     live_sessions: dict[str, LiveBrowserSession] = {}
     replay_continuations: dict[str, ManagedReplayContinuation] = {}
+    run_feeds: dict[str, RunFeed] = {}
     lock = Lock()
 
     def executor_factory(run_id: str, record: CapabilityVersionRecord) -> ReplayExecutor:
+        execution = current_execution.get()
+        feed = execution.bind(run_id) if execution is not None else None
+        if feed is not None:
+            run_feeds[run_id] = feed
         journal = InMemoryRunJournal(
             run_id,
             clock,
             StructuredRedactor(configured_secrets=configured_secrets),
             evidence_store,
+            event_sink=feed.event if feed is not None else None,
         )
         with lock:
             journals[run_id] = journal
@@ -620,6 +641,7 @@ def build_runtime(settings: object) -> LocalRuntime:
                 settings.browser_device_scale_factor,
             ),
             application_registry=application_registry,
+            frame_sink=feed.frame if feed is not None else None,
         )
         worker = SerialSessionWorker(run_id)
         engine: ReplayEngine
@@ -662,6 +684,9 @@ def build_runtime(settings: object) -> LocalRuntime:
 
     def finalize_replay(result: RunResult) -> RunResult:
         if isinstance(result, InterventionRequiredResult):
+            feed = run_feeds.get(result.run_id)
+            if feed is not None:
+                feed.result(result.model_dump(mode="json"))
             return result
         with lock:
             journal = journals[result.run_id]
@@ -669,7 +694,11 @@ def build_runtime(settings: object) -> LocalRuntime:
         manifest_key = journal.finalize(result.model_dump(mode="json"), classifications)
         with lock:
             result_classifications.pop(result.run_id, None)
-        return result.model_copy(update={"evidence_manifest": manifest_key})
+        finalized = result.model_copy(update={"evidence_manifest": manifest_key})
+        feed = run_feeds.pop(result.run_id, None)
+        if feed is not None:
+            feed.result(finalized.model_dump(mode="json"))
+        return finalized
 
     service = ReplayApplicationService(
         registry, executor_factory, (target_ready, application_registry.ready), finalize_replay
@@ -695,11 +724,14 @@ def build_runtime(settings: object) -> LocalRuntime:
     def discovery_factory(run_id: str) -> DiscoveryExecutor:
         if provider is None:
             raise RuntimeError("discovery provider is not configured")
+        execution = current_execution.get()
+        feed = execution.bind(run_id) if execution is not None else None
         journal = InMemoryRunJournal(
             run_id,
             clock,
             StructuredRedactor(configured_secrets=configured_secrets),
             evidence_store,
+            event_sink=feed.event if feed is not None else None,
         )
         with lock:
             journals[run_id] = journal
@@ -712,6 +744,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             settings.browser_headless,
             VisionGrounder(text_recognizer, capability_assets, settings.vision_policy),
             allow_transient_coordinates=True,
+            frame_sink=feed.frame if feed is not None else None,
             viewport=Viewport(
                 settings.browser_viewport_width,
                 settings.browser_viewport_height,
@@ -807,6 +840,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         lock,
         replay_continuations,
         finalize_replay,
+        run_feeds,
     )
 
     def validate_artifact(
@@ -844,4 +878,12 @@ def build_runtime(settings: object) -> LocalRuntime:
         live_sessions,
         model_telemetry,
         lock,
+        ExecutionController(
+            ExecutionViewer(),
+            registry,
+            application_registry,
+            service,
+            discovery_suite_service,
+            settings.viewer_presets_file,
+        ),
     )

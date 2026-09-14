@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
+from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -53,6 +55,7 @@ class InMemoryRunJournal:
     clock: Clock
     redactor: StructuredRedactor = field(default_factory=StructuredRedactor)
     evidence_store: EvidenceStore | None = None
+    event_sink: Callable[[dict[str, object]], None] | None = None
     _events: list[RunEvent] = field(init=False, default_factory=list)
     _evidence_records: list[EvidenceRecord] = field(init=False, default_factory=list)
     _attachments: list[EvidenceRecord] = field(init=False, default_factory=list)
@@ -128,6 +131,16 @@ class InMemoryRunJournal:
                 self._evidence_records.append(evidence_record)
                 self._manifest_key = manifest_record.key
             self._events.append(event)
+        if self.event_sink is not None:
+            with suppress(Exception):  # Viewing cannot invalidate durable audit recording.
+                self.event_sink(
+                    {
+                        "event_type": event.event_type,
+                        "step_id": event.step_id,
+                        "occurred_at": event.occurred_at.isoformat(),
+                        "details": deepcopy(event.details),
+                    }
+                )
 
     def attach_sanitized(
         self,

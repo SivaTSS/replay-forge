@@ -30,6 +30,7 @@ from replayforge.api.contracts import (
     TextInputPayload,
 )
 from replayforge.api.services import ApiServices
+from replayforge.api.viewing import viewing_router
 from replayforge.capabilities.registry import CapabilityNotFoundError
 from replayforge.capabilities.serialization import (
     ArtifactParseError,
@@ -58,6 +59,7 @@ from replayforge.interventions.service import (
     InterventionTransition,
 )
 from replayforge.runs.discovery_suite import DiscoverySuiteError
+from replayforge.runs.viewing import ViewingError
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import (
     HumanInput,
@@ -78,6 +80,17 @@ def create_app(services: ApiServices) -> FastAPI:
         docs_url="/api/docs",
         redoc_url=None,
     )
+    if services.execution_controller is not None:
+        app.include_router(viewing_router(services.execution_controller))
+
+    @app.exception_handler(ViewingError)
+    async def viewing_error(request: Request, error: ViewingError) -> JSONResponse:
+        del request
+        return JSONResponse(
+            {"code": error.code},
+            status_code=error.status,
+            headers={"Cache-Control": "no-store, private"},
+        )
 
     @app.middleware("http")
     async def correlation(request: Request, call_next: Any) -> Any:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from replayforge.api.contracts import LaunchRequest
 from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.discovery.models import DiscoveryResult
 from replayforge.interventions.models import (
@@ -16,6 +17,7 @@ from replayforge.interventions.models import (
 from replayforge.interventions.service import InterventionResume, InterventionTransition
 from replayforge.runs.discovery_suite import DiscoverySuite, ScenarioKind
 from replayforge.runs.results import RunResult
+from replayforge.runs.viewing import ExecutionViewer
 
 
 class ReplayInvoker(Protocol):
@@ -129,9 +131,19 @@ class InterventionInvoker(Protocol):
     ) -> InterventionTransition: ...
 
 
+class ExecutionController(Protocol):
+    @property
+    def viewer(self) -> ExecutionViewer: ...
+
+    def catalog(self) -> dict[str, Any]: ...
+
+    def start(self, request: LaunchRequest) -> dict[str, str]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class ApiServices:
     replay_invoker: ReplayInvoker
     discovery_invoker: DiscoveryInvoker | None = None
     intervention_invoker: InterventionInvoker | None = None
     discovery_suite_invoker: DiscoverySuiteInvoker | None = None
+    execution_controller: ExecutionController | None = None
