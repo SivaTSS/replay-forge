@@ -12,6 +12,7 @@ from threading import Lock
 from typing import Any, Literal, Protocol
 
 from replayforge.applications.registry import ApplicationRegistry
+from replayforge.capabilities.conditions import proves_distinct_surface
 from replayforge.capabilities.conditions import surface_conditions as _surface_conditions
 from replayforge.capabilities.models import (
     ApplicationFailure,
@@ -624,13 +625,11 @@ def _merge_scenarios(
                 RISK_RANK[step.risk] >= RISK_RANK[Risk.SENSITIVE] for step in recovery_source_steps
             ):
                 raise ValueError("recovery traces must remain read-only or reversible")
-            recovered_surface_keys = {
-                _condition_key(observed)
+            if not any(
+                proves_distinct_surface(postcondition, condition)
                 for corrective in recovery_source_steps
                 for postcondition in corrective.postconditions
-                for observed in _surface_conditions(postcondition)
-            }
-            if not recovered_surface_keys - {_condition_key(condition)}:
+            ):
                 raise ValueError("recovery trace lacks a distinct verified restored state")
             recovery_steps = tuple(
                 step.model_copy(

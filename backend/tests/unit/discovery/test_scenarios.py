@@ -6,6 +6,7 @@ from typing import cast
 
 import pytest
 
+from replayforge.capabilities.conditions import proves_distinct_surface
 from replayforge.capabilities.models import (
     AllCondition,
     AnyCondition,
@@ -70,6 +71,24 @@ def test_scenario_without_identity_can_replace_success_only_expectation() -> Non
         .model_copy(update={"postconditions": (TextCondition(kind="text", value="Success"),)})
     )
     assert scenario_expected_condition(step, None) is None
+
+
+def test_restoration_boolean_contract_cannot_succeed_on_the_original_blocker_alone() -> None:
+    blocked = TextCondition(kind="text", value="Blocked")
+    restored = TextCondition(kind="text", value="Restored")
+    assert not proves_distinct_surface(blocked, blocked)
+    assert not proves_distinct_surface(
+        AnyCondition(kind="any", conditions=(blocked, restored)), blocked
+    )
+    assert proves_distinct_surface(
+        AllCondition(kind="all", conditions=(blocked, restored)), blocked
+    )
+    assert proves_distinct_surface(
+        AnyCondition(
+            kind="any", conditions=(restored, NotCondition(kind="not", condition=blocked))
+        ),
+        blocked,
+    )
 
 
 def scenario_engine(

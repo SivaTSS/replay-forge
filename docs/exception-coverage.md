@@ -83,6 +83,7 @@ be claimed; they are not fabricated by changing replay results.
 | Explicit unexecuted recovery boundary | Ask vaguely to restore the workflow | The model sees the next primary action but cannot invoke reference actions during correction; fields not yet entered are not restoration work |
 | Verify rejoin readiness during discovery | Accept an acknowledgement message as restoration | The exact next target/preconditions must resolve; otherwise the model gets bounded corrective feedback. Informational warning text may legitimately remain after acknowledgement |
 | Restoration asserted in the corrective trace | Reuse the checkpoint's generic route or original blocker | A marker without correction cannot be recovery; unrelated checkpoint boilerplate cannot supply missing restored-state evidence |
+| Preserve restoration boolean meaning | Count any distinct term inside an OR | `blocked OR restored` can pass on the blocker alone and is rejected as restoration evidence |
 | Explicit positive branch marker | Infer a branch from the last visible text | Preserve the actual divergence point and reject speculation |
 | Optional negative-trace outputs | Require normal success outputs on every path | A rejected request has no legitimate success receipt to extract |
 | Exact replay disposition and recovery-event gate | Accept any successful validation run | Prevent unexecuted or misclassified branches from passing publication |

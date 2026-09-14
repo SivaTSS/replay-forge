@@ -27,3 +27,16 @@ def surface_conditions(condition: Condition) -> tuple[Condition, ...]:
     if isinstance(condition, NotCondition):
         return (condition,) if surface_conditions(condition.condition) else ()
     return ()
+
+
+def proves_distinct_surface(condition: Condition, blocked: Condition) -> bool:
+    """A true assertion must require something other than the original blocker.
+
+    An OR with the blocker as one arm is not restoration evidence merely because its
+    other arm mentions a healthy screen. AND needs one distinct fact; OR needs all arms.
+    """
+    if isinstance(condition, AllCondition):
+        return any(proves_distinct_surface(item, blocked) for item in condition.conditions)
+    if isinstance(condition, AnyCondition):
+        return all(proves_distinct_surface(item, blocked) for item in condition.conditions)
+    return bool(surface_conditions(condition)) and condition != blocked

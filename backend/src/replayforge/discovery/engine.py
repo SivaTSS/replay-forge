@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, cast
 
-from replayforge.capabilities.conditions import surface_conditions
+from replayforge.capabilities.conditions import proves_distinct_surface
 from replayforge.capabilities.models import (
     AssertAction,
     CapabilityArtifact,
@@ -411,10 +411,9 @@ class DiscoveryEngine:
                         and observed_branch is not None
                         and (
                             not any(
-                                item != observed_branch.condition
+                                proves_distinct_surface(condition, observed_branch.condition)
                                 for recorded in recordings[observed_branch.after_step_count + 1 :]
                                 for condition in recorded.verified_postconditions
-                                for item in surface_conditions(condition)
                             )
                             or not self._rejoin_ready(
                                 request, session, observed_branch, outputs, effective_policy
