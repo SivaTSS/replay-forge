@@ -14,6 +14,7 @@ from typing import cast
 
 from pydantic import JsonValue
 
+from replayforge.evidence.diagnostics import diagnostic_archive
 from replayforge.evidence.models import (
     MAX_ATTACHMENT_BYTES,
     MAX_EVENT_BYTES,
@@ -216,6 +217,32 @@ class InMemoryRunJournal:
             if self.evidence_store is None:
                 self._finalized = True
                 return f"evidence://{self.run_id}/manifest.json"
+            diagnostics = [e for e in self._events if e.event_type == "execution_diagnostic"]
+            if diagnostics:
+                trace_status = "unavailable"
+                try:
+                    if len(self._attachments) >= 100 or any(
+                        a.media_type == "application/zip" for a in self._attachments
+                    ):
+                        raise ValueError("diagnostic attachment slot unavailable")
+                    payload = diagnostic_archive(
+                        self.run_id, dict(diagnostics[-1].details), self.redactor
+                    )
+                    self._attachments.append(
+                        self.evidence_store.write(
+                            self.run_id, "execution-diagnostic", payload, RetentionClass.FAILURE
+                        )
+                    )
+                    trace_status = "captured"
+                except (OSError, RuntimeError, ValueError):
+                    # Optional diagnostics cannot change an already determined task result.
+                    pass
+                enriched = {**result, "diagnostic_trace": trace_status}
+                sanitized = self.redactor.sanitize_json(
+                    enriched,
+                    terminal_classifications(enriched, classifications or {}),
+                    run_salt=self.run_id,
+                )
             retention = (
                 RetentionClass.FAILURE
                 if result["status"] == "failure"

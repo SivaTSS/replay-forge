@@ -42,9 +42,15 @@ _COUNT_FIELDS = frozenset(
         "y",
         "character_count",
         "after_step_count",
+        "step_ordinal",
+        "expected_count",
+        "observed_count",
+        "max_attempts",
     }
 )
 _ENUM_FIELDS = {
+    "phase": {"before_dispatch", "after_dispatch", "completion", "unknown"},
+    "dispatch_state": {"not_attempted", "attempted", "unknown"},
     "condition_kind": {
         "route",
         "text",
@@ -58,6 +64,7 @@ _ENUM_FIELDS = {
         "all",
         "any",
         "not",
+        "unknown",
     },
     "decision": {"allow", "deny", "require_human_approval"},
     "disposition": {"continue", "business_outcome"},
@@ -71,6 +78,10 @@ _ENUM_FIELDS = {
         "wait_for",
         "assert",
         "extract",
+        "checkpoint",
+        "navigate",
+        "switch_context",
+        "unknown",
     },
     "declared_risk": {"read_only", "reversible", "sensitive", "irreversible"},
     "evidence_frame": {"captured", "unavailable", "not_applicable"},
@@ -120,7 +131,11 @@ def event_detail_classifications(details: dict[str, object]) -> dict[str, DataCl
                 and _IDENTIFIER.fullmatch(value) is not None
             )
             or (key in _COUNT_FIELDS and type(value) is int and 0 <= value <= 1_000_000)
-            or (key in {"effect_absent", "target_present"} and isinstance(value, bool))
+            or (
+                key
+                in {"effect_absent", "target_present", "retry_error_allowed", "recovery_checked"}
+                and isinstance(value, bool)
+            )
             or (key in _ENUM_FIELDS and isinstance(value, str) and value in _ENUM_FIELDS[key])
             or (
                 key == "expected_condition_kind"
@@ -159,6 +174,7 @@ def terminal_classifications(
         "capability",
         "checkpoint",
         "artifact_content_hash",
+        "diagnostic_trace",
     }
     classifications = {
         key: DataClassification.OPERATIONAL if key in operational else DataClassification.PERSONAL

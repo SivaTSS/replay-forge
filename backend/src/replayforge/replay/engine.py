@@ -33,6 +33,7 @@ from replayforge.capabilities.values import (
     resolve_input,
     validate_object,
 )
+from replayforge.evidence.diagnostics import ExecutionDiagnostic, bounded_count
 from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
@@ -331,6 +332,7 @@ class ReplayEngine:
         allow_recovery: bool = True,
         allow_intervention: bool = True,
     ) -> RunResult | RecoveryResume | None:
+        dispatched = False
         try:
             self.lease_service.assert_can_act(session.session_id, lease_version, AUTOMATION_OWNER)
             for condition in step.preconditions:
@@ -466,6 +468,7 @@ class ReplayEngine:
                     session.extract(target), step.action.transform
                 )
             else:
+                dispatched = True
                 receipt = session.execute(step.action, target, inputs)
                 if receipt.status is ActionStatus.FAILED:
                     raise SurfaceError(
@@ -596,7 +599,23 @@ class ReplayEngine:
                 )
                 if recovery is not None:
                     return recovery
-            return self._surface_failure(request, session, step.id, error, lease_version)
+            diagnostic = ExecutionDiagnostic(
+                code=error.code,
+                phase="after_dispatch" if dispatched else "before_dispatch",
+                dispatch_state="attempted" if dispatched else "not_attempted",
+                step_ordinal=request.artifact.steps.index(step) + 1,
+                action_type=step.action.kind,
+                expected_count=bounded_count((error.expected or {}).get("count")),
+                observed_count=bounded_count((error.observed or {}).get("count")),
+                attempt=attempt,
+                max_attempts=step.retry.max_attempts,
+                retry_error_allowed=error.code in step.retry.retry_on,
+                recovery_checked=allow_recovery,
+                effect_absent=not dispatched or error.effect_absent,
+            )
+            return self._surface_failure(
+                request, session, step.id, error, lease_version, diagnostic
+            )
 
     def _attempt_recovery(
         self,
@@ -844,6 +863,7 @@ class ReplayEngine:
         step_id: str | None,
         error: SurfaceError,
         lease_version: int | None = None,
+        diagnostic: ExecutionDiagnostic | None = None,
     ) -> RunResult:
         if error.intervention_recommended and session is not None and lease_version is not None:
             return self._intervene(
@@ -864,6 +884,7 @@ class ReplayEngine:
             error.expected,
             error.observed,
             session,
+            diagnostic,
         )
 
     def _intervene(
@@ -946,7 +967,28 @@ class ReplayEngine:
         expected: dict[str, object] | None = None,
         observed: dict[str, object] | None = None,
         session: SurfaceSession | None = None,
+        diagnostic: ExecutionDiagnostic | None = None,
     ) -> FailureResult:
+        step_index = next(
+            (i for i, step in enumerate(request.artifact.steps) if step.id == step_id), None
+        )
+        step = request.artifact.steps[step_index] if step_index is not None else None
+        diagnostic = diagnostic or ExecutionDiagnostic(
+            code=code,
+            step_ordinal=step_index + 1 if step_index is not None else None,
+            action_type=step.action.kind if step else "unknown",
+            expected_condition_kind=(
+                step.postconditions[0].kind if step and step.postconditions else "unknown"
+            ),
+            expected_count=bounded_count((expected or {}).get("count")),
+            observed_count=bounded_count((observed or {}).get("count")),
+        )
+        self.recorder.record(
+            "execution_diagnostic",
+            request.run_id,
+            step_id=step_id,
+            details=diagnostic.safe_payload(),
+        )
         evidence_frame = "not_applicable"
         if session is not None:
             try:
