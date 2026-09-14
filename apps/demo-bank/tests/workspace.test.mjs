@@ -109,3 +109,24 @@ test("relationship history includes resolved cases without labeling them open", 
   );
   assert.equal(cases.rows[0].cells[3], "Resolved");
 });
+
+test("new inquiry invalidates previous member context and pending instructions", () => {
+  const state = act(transferForm(), "review-transfer");
+  const inquiry = act(state, "nav:inquiry");
+  assert.equal(inquiry.memberId, "");
+  assert.equal(inquiry.accountId, "");
+  assert.equal(inquiry.pending, undefined);
+  assert.match(act(inquiry, "nav:transfers").error, /member_required/);
+  assert.equal(inquiry.bank, state.bank);
+});
+
+test("cancel preserves the reviewed form, but a new navigation discards it", () => {
+  const form = transferForm();
+  const review = act(form, "review-transfer");
+  const cancelled = act(review, "cancel");
+  assert.equal(cancelled.page, "transfers");
+  assert.deepEqual(cancelled.fields, form.fields);
+  assert.equal(cancelled.pending, undefined);
+  assert.equal(cancelled.bank, form.bank);
+  assert.equal(act(cancelled, "nav:transfers").fields.memo, undefined);
+});

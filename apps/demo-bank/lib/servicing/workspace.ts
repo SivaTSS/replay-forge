@@ -70,6 +70,7 @@ export interface Workspace {
     revision: number;
     receipt: Receipt;
     returnPage: Page;
+    returnFields: Record<string, string>;
   };
   receipt?: Receipt;
 }
@@ -111,6 +112,16 @@ function accountOptions(state: Workspace, loans = false): Option[] {
     .map((a) => ({ value: a.id, label: `${a.kind} ${a.id} / ${a.status}` }));
 }
 function enter(state: Workspace, page: Page): Workspace {
+  if (page === "inquiry") {
+    state = {
+      ...state,
+      memberId: "",
+      accountId: "",
+      selectedId: "",
+      receipt: undefined,
+      filter: { text: "", from: "", to: "", status: "All" },
+    };
+  }
   const deposits = accountOptions(state);
   const selected = deposits.some((a) => a.value === state.accountId)
     ? state.accountId
@@ -242,8 +253,13 @@ export function act(state: Workspace, action: string): Workspace {
         pending: undefined,
       };
     }
-    if (action === "cancel")
-      return enter(state, state.pending?.returnPage ?? "member");
+    if (action === "cancel") {
+      const pending = state.pending;
+      const returned = enter(state, pending?.returnPage ?? "member");
+      return pending
+        ? { ...returned, fields: { ...pending.returnFields } }
+        : returned;
+    }
     if (action === "confirm" && state.pending) {
       const result = execute(
         state.bank,
@@ -335,6 +351,7 @@ export function act(state: Workspace, action: string): Workspace {
         revision: state.bank.revision,
         receipt: preview.receipt,
         returnPage: state.page,
+        returnFields: { ...state.fields },
       },
       requestNumber: state.requestNumber + 1,
       error: "",
