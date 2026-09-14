@@ -1,0 +1,379 @@
+schema_version: '1.4'
+capability:
+  id: member.servicing_loan_payoff_quote
+  version: 1.0.0
+  name: Calculate auto-loan payoff quote
+  description: Observe the application's rejection of the invalid calendar date. Do
+    not correct or substitute the caller's date and do not issue a quote.
+  application_family: northstar_member_service
+  surface: web
+  risk: read_only
+  tags: []
+compatibility:
+  application_family: northstar_member_service
+  base_variant: standard
+  supported_variants:
+  - harbor
+  surface_contract: web.v1
+  entry_point: legacy_servicing
+  rendered_surface: true
+  fingerprint:
+    required_landmarks:
+    - kind: visual_text
+      value: Branch member directory
+    forbidden_landmarks: []
+inputs:
+  type: object
+  additional_properties: false
+  required:
+  - member_id
+  - payoff_date
+  properties:
+    member_id:
+      type: string
+      description: Invocation value for member id.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    payoff_date:
+      type: string
+      description: Invocation value for payoff date.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+outputs:
+  type: object
+  additional_properties: false
+  required: []
+  properties:
+    payoff_amount:
+      type: string
+      description: Payoff amount returned by the issued auto-loan payoff quote.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    good_through_date:
+      type: string
+      description: Good-through date returned by the issued auto-loan payoff quote.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    confirmation_reference:
+      type: string
+      description: Issuance reference returned by the completed payoff quote.
+      data_classification: operational
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+preconditions:
+- kind: route
+  pattern: /servicing
+steps:
+- id: step_01_type_member_id_name_city_search_input
+  name: Member ID / name / city search input
+  action:
+    kind: type
+    value:
+      source: input
+      path: member_id
+    clear: true
+  target:
+    description: Member ID / name / city search input
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Member ID / name / city
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_02_click_search_button
+  name: Search button
+  action:
+    kind: click
+  target:
+    description: Search button
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Search
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_03_click_open_button_for_the_single_member_inquir
+  name: Open button for the single member inquiry result
+  action:
+    kind: click
+  target:
+    description: Open button for the single member inquiry result
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Open
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_04_click_loan_servicing_navigation_control
+  name: Loan servicing navigation control
+  action:
+    kind: click
+  target:
+    description: Loan servicing navigation control
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Loan servicing
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_05_type_payoff_date_mm_input
+  name: Payoff date (YYYY-MM-DD) input
+  action:
+    kind: type
+    value:
+      source: input
+      path: payoff_date
+    clear: true
+  target:
+    description: Payoff date (YYYY-MM-DD) input
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Payoff date (YYYY-MM-DD)
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_06_click_calculate_payoff_button
+  name: Calculate payoff button
+  action:
+    kind: click
+  target:
+    description: Calculate payoff button
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Calculate payoff
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_07_assert_assert
+  name: assert
+  action:
+    kind: assert
+    condition:
+      kind: rendered_text
+      value: 'invalid_date: That calendar date does not exist.'
+      match: exact
+  preconditions: []
+  postconditions:
+  - kind: rendered_text
+    value: 'invalid_date: That calendar date does not exist.'
+    match: exact
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+recoveries: []
+outcomes: []
+failures: []
+checkpoint:
+  id: servicing_loan_payoff_quote_verified
+  condition:
+    kind: all
+    conditions:
+    - kind: route
+      pattern: /servicing
+    - kind: rendered_text
+      value: 'invalid_date: That calendar date does not exist.'
+      match: exact
+policy:
+  allowed_action_types:
+  - click
+  - type
+  - assert
+  allowed_entry_points:
+  - legacy_servicing
+  maximum_risk: read_only
+  allowed_route_patterns:
+  - /servicing
+  forbidden_text_inputs: []
+  output_redaction:
+    payoff_amount: last4
+    good_through_date: last4
+    confirmation_reference: last4
+provenance:
+  discovery_run_id: run_330b6a2f922d46a38572feacc2e47991
+  provider: openai
+  model: gpt-5.6-luna
+  prompt_policy_version: 2.0.0
+  surface_adapter_version: web.v1
+  compiler_version: 2.0.0
+  created_at: '2026-09-14T18:47:16.204489Z'
+  target_fingerprint: d3157b9290e562ecbb2fc1b487fa541b270abd5ea96f62d43cd00b3b0a84f74e
+  evidence_manifest_key: evidence://run_330b6a2f922d46a38572feacc2e47991/manifest-evd_ca4811e24bee466a91a077d7e0974a8e.bin
+  artifact_content_hash: sha256:8ec199d11def2539f9cbd2c0799639f92688028537146437018ce14361eaa01f

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 from email.message import Message
@@ -263,6 +264,12 @@ def test_verified_scenario_is_retained_if_a_later_scenario_fails(
     retained = tmp_path / "suite.verified_case.yaml"
     assert retained.is_file()
     assert stat.S_IMODE(retained.stat().st_mode) == 0o600
+    proof_file = retained.with_suffix(".proof.json")
+    proof = json.loads(proof_file.read_text())
+    assert proof["evidence_manifest"] == result["evidence_manifest"]
+    assert proof["run_id"] == result["run_id"]
+    assert "artifact" not in proof
+    assert stat.S_IMODE(proof_file.stat().st_mode) == 0o600
     assert not output.exists()
 
 

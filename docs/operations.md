@@ -21,6 +21,7 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | `GET` | `/health/ready` | Capability registry, application catalog, and every registered target are available |
 | `POST` | `/api/v1/discoveries` | Runs discovery synchronously; returns an unpublished draft (`published: false`) or failure |
 | `POST` | `/api/v1/discovery-suites` | Creates a draft suite and runs its primary discovery trace |
+| `POST` | `/api/v1/discovery-suites/from-published` | Extends an exact published version after fresh successful replay; retains original discovery provenance |
 | `GET` | `/api/v1/discovery-suites/{id}` | Reads sanitized suite status and coverage |
 | `POST` | `/api/v1/discovery-suites/{id}/scenarios` | Adds observed outcome, failure, or recovery evidence |
 | `GET` | `/api/v1/discovery-suites/{id}/scenarios/{code}/artifact` | Reads the verified scenario trace, without publishing it as a callable task |

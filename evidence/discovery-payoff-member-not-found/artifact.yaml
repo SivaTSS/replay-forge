@@ -1,0 +1,230 @@
+schema_version: '1.4'
+capability:
+  id: member.servicing_loan_payoff_quote
+  version: 1.0.0
+  name: Calculate auto-loan payoff quote
+  description: Observe and verify that the supplied member does not exist. Stop without
+    choosing another member.
+  application_family: northstar_member_service
+  surface: web
+  risk: read_only
+  tags: []
+compatibility:
+  application_family: northstar_member_service
+  base_variant: standard
+  supported_variants:
+  - harbor
+  surface_contract: web.v1
+  entry_point: legacy_servicing
+  rendered_surface: true
+  fingerprint:
+    required_landmarks:
+    - kind: visual_text
+      value: Branch member directory
+    forbidden_landmarks: []
+inputs:
+  type: object
+  additional_properties: false
+  required:
+  - member_id
+  - payoff_date
+  properties:
+    member_id:
+      type: string
+      description: Invocation value for member id.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    payoff_date:
+      type: string
+      description: Invocation value for payoff date.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+outputs:
+  type: object
+  additional_properties: false
+  required: []
+  properties:
+    payoff_amount:
+      type: string
+      description: Payoff amount returned by the issued auto-loan payoff quote.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    good_through_date:
+      type: string
+      description: Good-through date returned by the issued auto-loan payoff quote.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    confirmation_reference:
+      type: string
+      description: Issuance reference returned by the completed payoff quote.
+      data_classification: operational
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+preconditions:
+- kind: route
+  pattern: /servicing
+steps:
+- id: step_01_type_member_id_name_city_search_input
+  name: Member ID / name / city search input
+  action:
+    kind: type
+    value:
+      source: input
+      path: member_id
+    clear: true
+  target:
+    description: Member ID / name / city search input
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Member ID / name / city
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_02_click_search_button
+  name: Search button
+  action:
+    kind: click
+  target:
+    description: Search button
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Search
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_03_assert_assert
+  name: assert
+  action:
+    kind: assert
+    condition:
+      kind: rendered_text
+      value: No matching members. Refine the inquiry; no record was selected.
+      match: exact
+  preconditions: []
+  postconditions:
+  - kind: rendered_text
+    value: No matching members. Refine the inquiry; no record was selected.
+    match: exact
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+recoveries: []
+outcomes: []
+failures: []
+checkpoint:
+  id: servicing_loan_payoff_quote_verified
+  condition:
+    kind: all
+    conditions:
+    - kind: route
+      pattern: /servicing
+    - kind: rendered_text
+      value: No matching members. Refine the inquiry; no record was selected.
+      match: exact
+policy:
+  allowed_action_types:
+  - click
+  - type
+  - assert
+  allowed_entry_points:
+  - legacy_servicing
+  maximum_risk: read_only
+  allowed_route_patterns:
+  - /servicing
+  forbidden_text_inputs: []
+  output_redaction:
+    payoff_amount: last4
+    good_through_date: last4
+    confirmation_reference: last4
+provenance:
+  discovery_run_id: run_d3c8fb453e444d94adb7134fdaeed32b
+  provider: openai
+  model: gpt-5.6-luna
+  prompt_policy_version: 2.0.0
+  surface_adapter_version: web.v1
+  compiler_version: 2.0.0
+  created_at: '2026-09-14T18:44:39.570323Z'
+  target_fingerprint: 1466c4d3e067484d24867bac662c1467c52e128c4ffcae5c408374ff7359feb3
+  evidence_manifest_key: evidence://run_d3c8fb453e444d94adb7134fdaeed32b/manifest-evd_2fe729a9d90f4c37819e75758795f199.bin
+  artifact_content_hash: sha256:280ccfe1470e899727b82be5cc70dfc0ad4598a510d87c91b0281e24a177d9fb

@@ -33,10 +33,10 @@ flowchart TD
 
 ## Three-task coverage matrix
 
-These are **configured discovery cases, not claims of completed genuine evidence**. The current
-committed evidence proves the original three discoveries and the replay cases listed in
-[Verification](verification.md#scenario-matrix). New exception bundles must be linked there
-before any row below is described as genuinely proven.
+These are **configured cases, not claims of completed end-to-end proof**. The five payoff scenario
+discoveries have [genuine bundles](verification.md#scenario-matrix); their publication and replay
+proof must be evaluated separately. The transaction and card exception cases remain unproven.
+The same verification matrix distinguishes original discoveries from model-free replay evidence.
 
 | Task | Scenario | Required disposition | Invariants |
 |---|---|---|---|
@@ -97,7 +97,9 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
 
 Run `servicing_loan_payoff_quote` and `temporary_card_lock` separately to keep browser/model
 resource use bounded. Capture stops on an unsuccessful discovery or validation. Each successful
-scenario artifact is saved immediately with owner-only permissions, even if a later case fails.
+scenario artifact and its finalized run-manifest reference are saved immediately with owner-only
+permissions, even if a later case fails. The reference is separate because the artifact's
+provenance manifest can precede the terminal result.
 The primary artifact is saved only after publication. Private capture files are not submission
 evidence: export and verify sanitized bundles using the
 [evidence workflow](verification.md), including actual run IDs and the recording commit.

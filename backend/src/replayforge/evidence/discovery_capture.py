@@ -254,9 +254,12 @@ def validate_result(result: dict[str, Any]) -> CapabilityArtifact:
 
 
 def write_new_artifact(path: Path, artifact: CapabilityArtifact) -> None:
+    _write_new_private_file(path, dump_artifact_yaml(artifact).encode())
+
+
+def _write_new_private_file(path: Path, content: bytes) -> None:
     if not path.parent.is_dir():
         raise RuntimeError(f"artifact output directory does not exist: {path.parent}")
-    content = dump_artifact_yaml(artifact).encode()
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError as exc:
@@ -279,9 +282,20 @@ def capture_suite(
     suite_id: str | None = None,
 ) -> dict[str, str]:
     def retain_scenario(code: str, result: dict[str, Any]) -> None:
-        write_new_artifact(
-            artifact_output.with_name(f"{artifact_output.stem}.{code}.yaml"),
-            validate_result(result),
+        artifact = validate_result(result)
+        path = artifact_output.with_name(f"{artifact_output.stem}.{code}.yaml")
+        write_new_artifact(path, artifact)
+        _write_new_private_file(
+            path.with_suffix(".proof.json"),
+            json.dumps(
+                {
+                    "status": "success",
+                    "run_id": result["run_id"],
+                    "evidence_manifest": result["evidence_manifest"],
+                    "artifact_content_hash": artifact.provenance.artifact_content_hash,
+                },
+                sort_keys=True,
+            ).encode(),
         )
 
     response = invoke_suite(base_url, timeout_seconds, request, suite_id, retain_scenario)

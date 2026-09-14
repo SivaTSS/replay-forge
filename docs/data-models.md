@@ -137,7 +137,10 @@ and an unmasked live PNG. These authorized discovery frames are distinct from ma
 frames; they are not retained locally. A provider response is only a proposal. It becomes a recording
 after policy allows it, the adapter executes it, and deterministic postconditions pass.
 
-`DiscoverySuccess` binds a typed run ID to that run's evidence manifest. `DiscoverySuite` has its
+`DiscoverySuccess` binds a typed run ID to that run's evidence manifest. An extension of a
+published capability retains that original run and manifest; `primary_source` distinguishes it
+from new discovery. Extension requires fresh primary replay before scenario collection.
+`DiscoverySuite` has its
 own `sui_` identity and four states: `collecting`, `validated`, `published`, or `failed`. A suite can
 publish only a successful, validated artifact whose version matches the published version. There
 is no reviewer or approval state after discovery.

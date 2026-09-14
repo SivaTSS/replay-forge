@@ -68,6 +68,17 @@ attachment. An empty evidence directory fails verification.
 | [Loan payoff](../evidence/discovery-servicing-loan-payoff/manifest.json) | `member.servicing_loan_payoff_quote/1.0.1` | Issued quote and receipt; returned date matches requested date; Harbor/Summit validation |
 | [Temporary card lock](../evidence/discovery-servicing-card-lock/manifest.json) | `member.temporary_card_lock/1.0.1` | Reversible mutation, fresh pre/post card identity checks, exact final locked status, receipt; Harbor/Summit validation |
 
+The following are genuine **scenario discovery** bundles, extending the original payoff trace.
+They prove observed branch conditions and actions, not publication or successful recovery replay.
+
+| Payoff scenario discovery | Observed evidence |
+|---|---|
+| [Missing member](../evidence/discovery-payoff-member-not-found/manifest.json) | Lookup prefix and positively verified no-match state |
+| [Unavailable date](../evidence/discovery-payoff-quote-date-unavailable/manifest.json) | Requested date preserved; application's quote-window rejection observed |
+| [Invalid calendar date](../evidence/discovery-payoff-invalid-payoff-date/manifest.json) | Actual invalid-date rejection, without substituting a date |
+| [Restricted member](../evidence/discovery-payoff-member-restricted/manifest.json) | Restriction observed without changing permissions |
+| [Member notice recovery](../evidence/discovery-payoff-acknowledge-member-notice/manifest.json) | Blocker marked before correction; corrective actions and restored-state assertion recorded |
+
 | Model-free replay bundle | Result | Proof boundary |
 |---|---|---|
 | [Payoff success](../evidence/replay-servicing-payoff/manifest.json) | Verified success | Changed member and date; exact outputs checked before redacted export; no provider credentials |
