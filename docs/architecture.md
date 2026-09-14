@@ -99,9 +99,9 @@ interprets it, and a surface adapter executes its typed actions and conditions. 
 identity is not part of the Playwright adapter. Every driver receives an `ApplicationRegistry`;
 there is no hardcoded demo-bank fallback.
 
-The production discovery compiler is task-independent. The historical savings compiler lives only
-in [`backend/tests/legacy_compiler.py`](../backend/tests/legacy_compiler.py) to reproduce old fixtures;
-runtime composition cannot import it.
+The discovery compiler is task-independent. The old savings compiler and deployed fixtures have
+been removed. Unit tests use a synthetic contract outside the production registry; an empty
+registry can bootstrap its first discovery without seeding an application-specific capability.
 
 | Failure owner | Boundary behavior |
 |---|---|
@@ -168,7 +168,7 @@ task-independent engine plans each contract, records only actions that actually 
 then compiles a distinct artifact. Geometry-free OCR relationships disambiguate repeated `Open`
 actions by the current account-row text; label/control and label/value relationships survive stacked
 and horizontal layouts. New artifact targets store no coordinates or target-specific geometry; schema
-`1.4` rejects them recursively while legacy fixtures remain loadable.
+`1.4` rejects them recursively. Retired artifact schemas are no longer accepted.
 
 ## Decisions
 

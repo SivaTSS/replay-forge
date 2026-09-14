@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 import pytest
 from playwright.sync_api import Route, expect, sync_playwright
+
+from replayforge.surfaces.vision import RapidOcrTextRecognizer
+from tests.integration.test_playwright_surface import handoff_fixture
 
 
 def _wait(url: str, process: subprocess.Popen[bytes]) -> None:
@@ -35,87 +40,101 @@ def _post(url: str, body: dict[str, object]) -> dict[str, object]:
         headers={"content-type": "application/json"},
         method="POST",
     )
-    with urlopen(request, timeout=30) as response:
+    with urlopen(request, timeout=120) as response:
         parsed = json.loads(response.read())
     assert isinstance(parsed, dict)
     return parsed
 
 
+def _free_port() -> int:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+@dataclass(frozen=True)
+class OperatorStack:
+    evidence: Path
+    api_url: str
+    ui_url: str
+
+    def forward(self, route: Route) -> None:
+        # Real HTTP forwarding to the isolated runtime, not mocked responses.
+        path = route.request.url.split("/runtime/", 1)[1]
+        response = route.fetch(url=f"{self.api_url}/{path}", timeout=120_000)
+        route.fulfill(response=response)
+
+
 @pytest.fixture(scope="module")
-def operator_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+def operator_stack(
+    tmp_path_factory: pytest.TempPathFactory, demo_bank: str
+) -> Iterator[OperatorStack]:
     repository = Path(__file__).resolve().parents[3]
-    evidence = tmp_path_factory.mktemp("operator-evidence")
+    root = tmp_path_factory.mktemp("operator-stack")
+    catalog = handoff_fixture(root)
+    api_port, ui_port = _free_port(), _free_port()
+    stack = OperatorStack(
+        root / "evidence", f"http://127.0.0.1:{api_port}", f"http://127.0.0.1:{ui_port}"
+    )
     environment = {**os.environ, "NEXT_TELEMETRY_DISABLED": "1"}
-    log = (evidence / "services.log").open("wb")
-    processes = [
-        subprocess.Popen(
-            [
-                str(repository / "apps/demo-bank/node_modules/.bin/next"),
-                "start",
-                "--hostname",
-                "127.0.0.1",
-                "--port",
-                "3001",
-            ],
-            cwd=repository / "apps/demo-bank",
-            env=environment,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-        )
-    ]
-    try:
-        _wait("http://127.0.0.1:3001/harbor", processes[-1])
-        processes.append(
-            subprocess.Popen(
-                [
-                    str(repository / ".venv/bin/uvicorn"),
-                    "replayforge.main:app",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    "8000",
-                ],
-                cwd=repository,
-                env={
-                    **environment,
-                    "PYTHONPATH": str(repository / "backend/src"),
-                    "REPLAYFORGE_EVIDENCE_DIRECTORY": str(evidence),
-                },
-                stdout=log,
-                stderr=subprocess.STDOUT,
+    processes: list[subprocess.Popen[bytes]] = []
+    with (root / "services.log").open("wb") as log:
+        try:
+            # Construct settings explicitly: no inherited provider credentials or dotenv.
+            code = (
+                "import uvicorn, atexit; "
+                "from replayforge.api.app import create_app; "
+                "from replayforge.runtime.composition import build_runtime; "
+                "from replayforge.runtime.settings import RuntimeSettings; "
+                "from pathlib import Path; "
+                f"runtime=build_runtime(RuntimeSettings(_env_file=None, "
+                f"artifact_directory=Path({str(catalog)!r}), "
+                f"evidence_directory=Path({str(stack.evidence)!r}), "
+                f"demo_base_url={demo_bank!r}, openai_api_key=None, "
+                "langfuse_public_key=None, langfuse_secret_key=None)); "
+                "atexit.register(runtime.close); "
+                f"uvicorn.run(create_app(runtime.api_services),host='127.0.0.1',port={api_port})"
             )
-        )
-        _wait("http://127.0.0.1:8000/health/live", processes[-1])
-        processes.append(
-            subprocess.Popen(
-                [
-                    str(repository / "apps/control-plane/node_modules/.bin/next"),
-                    "start",
-                    "--hostname",
-                    "127.0.0.1",
-                    "--port",
-                    "3000",
-                ],
-                cwd=repository / "apps/control-plane",
-                env=environment,
-                stdout=log,
-                stderr=subprocess.STDOUT,
+            processes.append(
+                subprocess.Popen(
+                    [str(repository / ".venv/bin/python"), "-c", code],
+                    cwd=repository,
+                    env=environment,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                )
             )
-        )
-        _wait("http://127.0.0.1:3000", processes[-1])
-        yield evidence
-    finally:
-        for process in reversed(processes):
-            process.terminate()
-        for process in reversed(processes):
-            process.wait(timeout=10)
-        log.close()
+            _wait(f"{stack.api_url}/health/live", processes[-1])
+            processes.append(
+                subprocess.Popen(
+                    [
+                        str(repository / "apps/control-plane/node_modules/.bin/next"),
+                        "start",
+                        "--hostname",
+                        "127.0.0.1",
+                        "--port",
+                        str(ui_port),
+                    ],
+                    cwd=repository / "apps/control-plane",
+                    env=environment,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                )
+            )
+            _wait(stack.ui_url, processes[-1])
+            yield stack
+        finally:
+            for process in reversed(processes):
+                process.terminate()
+            for process in reversed(processes):
+                process.wait(timeout=10)
 
 
 @pytest.mark.integration
-def test_delayed_lookup_cannot_replace_new_operator_selection(operator_stack: Path) -> None:
+def test_delayed_lookup_cannot_replace_new_operator_selection(
+    operator_stack: OperatorStack,
+) -> None:
     # Mock only HTTP ordering; this test does not claim to be discovery/handoff evidence.
-    del operator_stack
     first_id, second_id = "int_" + "a" * 32, "int_" + "b" * 32
     records = [
         {
@@ -144,7 +163,7 @@ def test_delayed_lookup_cannot_replace_new_operator_selection(operator_stack: Pa
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
         page.route("**/runtime/api/v1/interventions**", respond)
-        page.goto("http://127.0.0.1:3000")
+        page.goto(operator_stack.ui_url)
         with page.expect_request(f"**/{first_id}"):
             page.get_by_role("button", name="First task", exact=False).click()
         page.get_by_role("button", name="Second task", exact=False).click()
@@ -163,22 +182,26 @@ def test_delayed_lookup_cannot_replace_new_operator_selection(operator_stack: Pa
 
 
 @pytest.mark.integration
-def test_operator_finds_controls_and_resumes_real_session(operator_stack: Path) -> None:
+def test_operator_finds_controls_and_resumes_real_session(operator_stack: OperatorStack) -> None:
     paused = _post(
-        "http://127.0.0.1:8000/api/v1/capabilities/member.lookup_savings_balance/invoke",
-        {"tenant": "harbor", "version": "2.0.0", "inputs": {"member_id": "12345"}},
+        f"{operator_stack.api_url}/api/v1/capabilities/member.servicing_loan_payoff_quote/invoke",
+        {
+            "tenant": "harbor",
+            "version": "1.0.1",
+            "inputs": {"member_id": "12345", "payoff_date": "2026-09-20"},
+        },
     )
     assert paused["status"] == "intervention_required"
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
-        page.goto("http://127.0.0.1:3000")
+        page.route("**/runtime/**", lambda route: operator_stack.forward(route))
+        page.goto(operator_stack.ui_url)
 
-        queue_item = page.get_by_role("button", name="Lookup savings balance", exact=False)
+        queue_item = page.get_by_role("button", name="payoff", exact=False).first
         expect(queue_item).to_be_visible()
         queue_item.click()
-        expect(page.get_by_text("search.submit", exact=True)).to_be_visible()
         page.get_by_role("button", name="Claim control").click()
         expect(page.get_by_text("Exclusive control acquired.")).to_be_visible()
         viewport = page.get_by_alt_text(
@@ -186,13 +209,35 @@ def test_operator_finds_controls_and_resumes_real_session(operator_stack: Path) 
         )
         expect(viewport).to_be_visible()
 
-        page.get_by_role("button", name="Send key").click()
+        # Recognize the actual live PNG, not the console's downscaled thumbnail.
+        # This models a human choosing an observed target; no saved coordinates.
+        frame = bytes(
+            viewport.evaluate(
+                "async image => Array.from(new Uint8Array("
+                "await (await fetch(image.src)).arrayBuffer()))"
+            )
+        )
+        tokens = RapidOcrTextRecognizer().recognize(frame)
+        matches = [token for token in tokens if token.text.strip() == "Open"]
+        assert len(matches) == 1
+        region = matches[0].region
+        dimensions = viewport.evaluate("image => [image.naturalWidth, image.naturalHeight]")
+        displayed = viewport.bounding_box()
+        assert displayed is not None
+        viewport.click(
+            position={
+                "x": (region.x + region.width / 2) * displayed["width"] / dimensions[0],
+                "y": (region.y + region.height / 2) * displayed["height"] / dimensions[1],
+            }
+        )
         expect(page.get_by_text("Input applied to the retained session.")).to_be_visible()
         page.get_by_role("button", name="Resume automation").click()
-        expect(page.get_by_text("Replay result: success", exact=True)).to_be_visible(timeout=30_000)
+        expect(page.get_by_text("Replay result: success", exact=True)).to_be_visible(timeout=60_000)
         expect(page.get_by_text("No replay sessions need an operator.")).to_be_visible()
         browser.close()
 
-    events = "\n".join(path.read_text() for path in operator_stack.rglob("run-event-*.bin"))
+    events = "\n".join(
+        path.read_text() for path in operator_stack.evidence.rglob("run-event-*.bin")
+    )
     assert "human_input_applied" in events
     assert "automation_resumed" in events

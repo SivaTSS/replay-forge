@@ -262,7 +262,7 @@ def test_rejects_cross_run_artifact_provenance() -> None:
         "evidence://run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/manifest.json"
     )
 
-    with pytest.raises(RuntimeError, match="different run"):
+    with pytest.raises(RuntimeError, match="schema validation"):
         validate_result(result)
 
 

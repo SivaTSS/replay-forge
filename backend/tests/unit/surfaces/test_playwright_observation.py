@@ -44,7 +44,7 @@ def test_rendered_readiness_requires_vision_before_browser_launch() -> None:
     )
     driver = PlaywrightSurfaceDriver("http://127.0.0.1:3001", application_registry=registry)
     with pytest.raises(SurfaceError) as error:
-        driver.open("northstar_member_service", "harbor", "visual_member_workbench")
+        driver.open("northstar_member_service", "harbor", "legacy_servicing")
     assert error.value.code == "vision_not_configured"
     assert driver.playwright is None
 

@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture
 def valid_artifact_data() -> dict[str, Any]:
     data: dict[str, Any] = {
-        "schema_version": "1.0",
+        "schema_version": "1.4",
         "capability": {
             "id": "member.lookup_savings_balance",
             "version": "1.0.0",
@@ -153,6 +153,7 @@ def valid_artifact_data() -> dict[str, Any]:
             },
         },
         "policy": {
+            "allowed_route_patterns": ["/members/search", "/accounts/*/details"],
             "allowed_action_types": ["type", "click", "extract"],
             "allowed_entry_points": ["member_search"],
             "maximum_risk": "read_only",
@@ -166,8 +167,8 @@ def valid_artifact_data() -> dict[str, Any]:
             "surface_adapter_version": "web.v1",
             "compiler_version": "1.0.0",
             "created_at": "2026-09-10T12:30:00Z",
-            "target_fingerprint": "sha256:" + "a" * 64,
-            "evidence_manifest_key": "evidence://discovery/example/manifest.json",
+            "target_fingerprint": "a" * 64,
+            "evidence_manifest_key": "evidence://run_0123456789abcdef0123456789abcdef/manifest.json",
         },
     }
     return deepcopy(data)

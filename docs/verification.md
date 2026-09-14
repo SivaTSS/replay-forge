@@ -2,300 +2,109 @@
 
 [Documentation index](README.md)
 
+Tests, genuine discovery, and committed evidence are distinct claims. Only a provider-backed
+recording is called discovery. The current distribution contains one target UI and three business
+capabilities; retired applications and their runs are not presented as current proof.
+
 ## One command
 
 ```bash
 bash scripts/verify.sh
 ```
 
-```mermaid
-%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-flowchart LR
-    subgraph Contracts[Contract checks]
-        direction TB
-        D[Documentation] --> P[Ruff and mypy]
-        P --> E[Evidence integrity]
-    end
-    subgraph Web[Web applications]
-        direction TB
-        T[TypeScript] --> B[Sequential builds]
-    end
-    subgraph Runtime[Runtime verification]
-        direction TB
-        U[Unit and Chromium tests] --> C[90% coverage gate]
-    end
-    Contracts --> Web
-    Web --> Runtime
-```
+The gate checks Markdown links and diagrams, formatting, types, evidence hashes, target business
+rules, both frontend builds, and sequential unit/Chromium tests. Domain coverage remains
+branch-aware on the unit suite with a 90% threshold and the checked-in adapter exclusions.
+Browser tests run without coverage tracing: instrumentation can push OCR past the production
+grounding deadline. The deadline is not increased for tests. Builds and browser tests run
+sequentially to bound memory use.
 
-The 90% branch-aware coverage gate covers deterministic domain code. Thin HTTP, provider, launch-registry,
-suite-orchestration, composition, and Playwright adapters are excluded from that percentage and
-covered by contract tests, real Chromium integration, and genuine discovery evidence. Unit and
-integration tests run in one coverage process so browser-executed domain paths count.
-
-For documentation-only changes, run the lightweight gate and its regression tests:
+For focused checks after dependencies and frontends have been built:
 
 ```bash
+uv run pytest backend/tests/unit -q
+PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
+uv run pytest backend/tests/integration -q
+uv run python scripts/verify_evidence_bundles.py evidence
 uv run python scripts/check_docs.py
-uv run python -m unittest discover -s scripts -p 'test_check_docs.py'
 ```
-
-These check local links and heading anchors, index coverage, the required report sections, fenced
-blocks, and shared Mermaid styling. They do not fetch external links or prove rendered layout.
-
-The documentation consistency pass also rendered all 21 diagrams with Mermaid `11.12.0` in
-Chromium, using both default and dark themes. No text extended beyond its SVG viewport; key
-architecture, replay, and handoff diagrams were visually inspected. Renderer versions and host
-themes can differ, so this is a recorded layout check, not a cross-viewer guarantee.
 
 ## What is proved where
 
-| Property | Test mechanism | Committed evidence |
+| Claim | Executable check | Boundary |
 |---|---|---|
-| Genuine model-guided discovery | Provider, engine, compiler tests; recorded runs | Five bundles: original fixture, three workbench tasks, and the richer workstation payoff |
-| Replay cannot import a model provider | Structural dependency test | `evidence/replay-success` |
-| Typed success and five outputs | Engine + composed integration | `evidence/replay-success` |
-| Legitimate negative answer | Outcome precedence tests | `evidence/replay-member-not-found` |
-| Finite recovery | Retry/recovery tests + Chromium | `evidence/replay-recovery` |
-| Known hard failure | Failure classification + masked screenshot checks | `evidence/replay-hard-failure` |
-| Same live browser handoff | Lease/runtime tests + captured frames | `evidence/human-handoff` |
-| Shared artifact across tenants | Chromium integration | `evidence/tenant-reuse` |
-| Canvas-only model-free replay | Chromium on Harbor and Summit | Automated `3.0.0`, `3.1.0`, and `3.2.0` integration tests |
-| Visual fail-closed behavior | OCR cardinality, same-scale peak detection, contextual template, asset integrity tests | Unit suite + `test_visual_portability.py` |
-| Visual portability | One artifact across two tenants, six CSS viewports, DPR `1–2` | Portability matrix plus six discovered-task/tenant combinations |
-| Artifact immutability and integrity | Registry/serialization tests | Artifact hash in every applicable bundle |
-| Redaction before retention | Redactor/journal/store tests | Manifest directives and sanitized payloads |
+| Real model discovery | Three bundles below | Screenshots and synthetic data; no scripted discovery |
+| Task-independent compilation | [Generic compiler tests](../backend/tests/unit/discovery/test_generic_compiler.py) | New task means goal and input contract, not a task adapter |
+| Model-free reuse | [Replay matrix](../backend/tests/integration/test_visual_portability.py) | Both tenants, changed member/inputs, 1440×900; provider credentials unset |
+| Single deployed UI | [Route tests](../backend/tests/integration/test_demo_routes.py) | Old paths return 404 |
+| Bank correctness | [Workstation tests](../backend/tests/integration/test_servicing_workstation.py), [interaction tests](../backend/tests/integration/test_servicing_interactions.py), target unit tests | Scripted application tests, not discovery |
+| Same-session handoff | [Session test](../backend/tests/integration/test_playwright_surface.py), [console test](../backend/tests/integration/test_operator_console.py) | Sensitive policy injected into a temporary copy of the genuine payoff artifact |
+| Error semantics | [Replay engine tests](../backend/tests/unit/replay/test_engine.py) | Declared outcomes, recoveries, ambiguous targets, safe retries, and failures |
+| Privacy | Artifact, journal, evidence, and provider unit suites | Classification/known-value guards and full-viewport masking; not a universal PII detector |
+| Empty-registry onboarding | [Runtime tests](../backend/tests/unit/runtime/test_composition.py) | No application-specific seed capability required |
 
-The expanded [demo-bank workstation](demo-bank.md) has separate domain/controller tests and
-screenshot-driven Chromium tests. These exercise the target application's business behavior.
-Separately, `member.servicing_loan_payoff_quote/1.0.1` was genuinely discovered on the workstation
-and passed automatic Harbor/Summit validation. Historical bundles remain tied to the earlier
-fixture routes; other workstation functions do not yet have discovered capabilities.
+The handoff fixture is explicitly marked `injected-handoff-test`, not `openai`. It adds a
+sensitive step and an observable resume condition to a temporary artifact. The operator then
+acts in the real retained browser and replay completes in that same session. This tests control
+transfer without falsely publishing a special model-discovered handoff capability.
 
-## Audit regression coverage
-
-| Correctness boundary | Regression proof |
-|---|---|
-| Condition actions execute their declared semantics | `test_condition_actions_cannot_succeed_without_their_condition` |
-| Ambiguity cannot prove absence | `test_absence_requires_proof_not_a_resolution_error` |
-| Nested input references and finite financial decimals | `test_nested_input_resolution_and_missing_optional_values`; value-contract cases |
-| Returned mappings cannot mutate registry state | `test_nested_mutation_cannot_change_published_content`; registration snapshot test |
-| Duplicate YAML cannot overwrite reviewed fields | `test_yaml_cannot_silently_overwrite_reviewed_fields` |
-| Nested secrets cannot hide under public objects | Discovery-contract and evidence-classification tests |
-| Policy runs before forbidden input | `test_input_policy_is_enforced_before_typing` |
-| Application contract changes stop before launch | `test_incompatible_registration_stops_before_surface_open` |
-| Shared readiness differs from tenant branding | Registered readiness tests plus actual Harbor/Summit Chromium replay |
-| Production compilation is task-independent | Dependency test rejects production imports from `tests`; old compiler is a fixture |
-| Discovery enforces its planned input contract and input classifications | `test_planned_input_contract_is_checked_before_any_action`; `test_discovery_input_classification_applies_before_typing` |
-| Validation errors cannot echo arbitrary property names | `test_request_validation_never_echoes_unknown_property_names` |
-| All reviewed policy YAML has unambiguous keys | Model/vision duplicate-budget rejection tests |
-| Late UI responses cannot change the selected task | `test_delayed_lookup_cannot_replace_new_operator_selection` |
-
-The genuine discovery bundles are historical executions tied to their recorded commits. They were
-verified, not regenerated or relabeled during the audit. Browser integration tests exercise today's
-runtime against those unchanged artifact contracts; synthetic test providers remain test fixtures.
-
-### Audit checkpoint: `a71b7b0`
-
-| Gate | Result |
-|---|---|
-| Unit suite | 608 passed, including discovery-input policy, registration, compiler-safety, and evidence-tampering regressions |
-| Integration suite | 48 passed, including real Chromium replay, portability, operator control, and response-ordering regression |
-| Configured domain coverage | 90.48%, with the existing branch-aware 90% threshold and exclusions unchanged |
-| Static checks | Ruff format/lint and strict mypy passed; both frontend typechecks and sequential production builds passed |
-| Historical evidence | All ten bundles verified; no genuine discovery was regenerated |
-
-The full 655-case Python run passed with coverage. After rebuilding the console, both operator
-browser cases passed, including one added response-ordering case: 656 distinct passing cases in
-total. That new case first reproduced the stale-selection bug against the previous console build.
-It mocks response timing; the separate handoff case drives the real retained browser session.
-Starlette emits one upstream AnyIO deprecation warning; no test is skipped to suppress it.
-
-### Initial demo workstation checkpoint
-
-| Gate | Result |
-|---|---|
-| Target domain and controller | 20 passing Node tests: money, ownership, permissions, atomic operations, review lifecycle, and case history |
-| Expanded target in Chromium | Six passing cases across focused runs: card lock/unlock, transfers, permission/payoff flow, case resolution, and two tenant/viewport combinations |
-| Preserved automation | The existing discovered temporary-card-lock capability replayed successfully on Harbor's unchanged workbench |
-| Application and capability contracts | 157 passing Python unit tests |
-| Static checks and build | Strict mypy, Ruff, demo TypeScript, and demo production build passed |
-| Documentation | 14 documents checked; seven checker tests passed; 21 diagrams rendered in light and dark themes |
-| Historical evidence | All ten bundles verified unchanged; no new discovery execution claimed |
-
-This is the scoped demo-expansion checkpoint, not a rerun of the full backend coverage matrix
-recorded above. Browser tests inspect screenshots and send real input; they do not read the target's
-React state. OCR limitations and the remaining fresh-discovery requirement are documented in the
-[demo-bank guide](demo-bank.md#verification-and-evidence-status).
-
-### Demo workflow audit: `90ab61c`
-
-The follow-up audit reproduced and corrected stale member context, discarded canceled forms,
-premature success wording, incomplete text editing, truncated controls/review values, inactive
-partially visible controls, a non-interactive scrollbar, and inherited request-key collisions.
-See the [defect and correction table](demo-bank.md#defects-corrected-in-the-workflow-audit).
-
-| Gate | Result |
-|---|---|
-| Domain, controller, and text editor | 32 passing tests, including the complete seeded tenant/member/role matrix and 100 consecutive funds-conserving transfers |
-| Instrumented Chromium interaction tests | 32 passing cases across Harbor and Summit; includes resize during a filled form at 800×600, 1024×768, and 1440×900 |
-| Independent screenshot/OCR tests | All six existing workstation cases passed against the audited build, without drawing instrumentation |
-| Preserved discovered workflows | Six successful model-free replays: transaction investigation, loan payoff, and temporary card lock on both Harbor and Summit |
-| Static checks and build | Strict mypy, Ruff, TypeScript, and the demo production build passed |
-| Retained evidence | All ten historical bundles verified unchanged |
-
-The fast browser suite observes actual canvas drawing calls and their viewport/clip visibility,
-then uses real input events. It does not read React state or the private hit map. The independent
-screenshot/OCR suite remains separate; neither suite substitutes for genuine model discovery.
-The audit covers the supported desktop Chromium target, not every possible browser or input method.
-
-### Privacy hardening checkpoint
-
-Verified on 2026-09-14 after the servicing workflow audit:
-
-| Check | Result | Boundary |
-|---|---|---|
-| Backend unit suite | 623 passed | Includes journal/terminal redaction, artifact leak rejection, keyed pseudonyms, and image capture policy |
-| Targeted Chromium privacy/failure tests | 5 passed | Includes closed-shadow-root synthetic personal text, fully masked screenshots, and retained failure evidence |
-| Additional Chromium regression tests | 6 passed | Scripted discovery, replay, business outcome, recovery, live control, and same-session resume; no model calls |
-| Static checks | Ruff and strict mypy passed | No claim of a newly rerun full browser matrix |
-| Historical evidence | Ten bundles verified unchanged | New policies do not retroactively rewrite old evidence |
-| Rich-workstation model discovery at this checkpoint | Not run | The initial egress request was denied; explicit authorization was subsequently granted on 2026-09-14, and the genuine attempts below supersede this status |
-
-Reproduce the new browser checks with `test_playwright_surface.py` and the selection
-`real_iframe_search_and_account_extraction or visual_evidence_masks or evidence_masks_unclassified or registered_artifact_classifies_permission_denial or real_output_failure_retains`.
-The capture recipe itself is not evidence; the later successful execution is recorded below.
-
-### Workstation discovery checkpoint
-
-The genuine run used runtime commit `a06fe8a`, the configured OpenAI model, real screenshots,
-and synthetic invocation values. Its exported 59-event record is not a scripted browser test.
-Suite finalization automatically validated both tenants and published the immutable `1.0.1`;
-the earlier value-bound `1.0.0` is excluded. Failed attempts are recorded in
-[Discovery](discovery.md#perception-decision), not relabeled as successes.
-
-Post-discovery verification includes the shared-transform correction in `36615e9`:
-
-| Gate | Result / scope |
-|---|---|
-| Backend units | 673 passed; one existing Starlette/AnyIO deprecation warning |
-| Model-free replay regression | Eight passed: all six historical discovered-task/tenant cases plus workstation payoff on both tenants with a different member/date at 1440×900 and no provider credentials |
-| Production visual grounding | Four search/navigation and two exact receipt-extraction Chromium checks passed during this series |
-| Target application | 33 domain/controller/editor tests, TypeScript, and production build passed |
-| Static and documentation | Ruff, strict mypy, local-link/Mermaid checks, and seven documentation-checker tests passed |
-| Evidence integrity | Eleven bundles verified; the ten historical bundles were not changed |
-
-This is a scoped runtime/privacy/discovery checkpoint, not a newly rerun full coverage matrix.
-The reuse tests assert the exact amount, requested date, and tenant-specific issuance reference;
-they first exposed the discovery/replay transform mismatch, then passed after its shared fix.
-The new discovery bundle intentionally contains no raw screenshots or customer output values.
-Its terminal record identifies the pre-publication draft; the bundled artifact is the suite's
-versioned, tenant-validated publication derived from that run, with its own hash.
-
-## Evidence bundle anatomy
-
-For a concrete review, open the [card-lock discovery manifest](../evidence/discovery-temporary-card-lock/manifest.json)
-and follow this chain:
-
-| Inspect | Establishes | Does not establish |
-|---|---|---|
-| `manifest.json` | Recorded commit, command, run ID, exact file set, and hashes | Signer authenticity or coverage of later code changes |
-| `events.jsonl` | Ordered, sanitized execution and policy records | A full model transcript or unredacted UI state |
-| `artifact.yaml` | Published task contract for a discovery bundle | Success on every future UI or tenant |
-| `result.json` | The recorded run's sanitized terminal result | A stronger checkpoint than the artifact actually declares |
-| Bundle verifier + current tests | Byte integrity plus current behavior against saved contracts | A new genuine discovery run |
-
-A discovery-suite result can contain the pre-publication draft. The bundle's `artifact` record and
-`artifact.yaml` identify the published contract; finalization and tenant validation can change its
-hash from the draft recorded in `result.json`. Those are different lifecycle objects, not two
-interchangeable copies of one artifact.
-
-```text
-evidence/<scenario>/
-├── manifest.json       command, commit, source manifest, hashes, redaction
-├── events.jsonl        ordered sanitized lifecycle events
-├── result.json         exactly one typed terminal result
-├── artifact.yaml       discovery scenario only
-└── screenshots/        selected masked frames where required
-```
-
-The runtime writes append-only evidence objects and successive manifest snapshots under ignored
-`evidence/runtime/`. Each completed run points to its final snapshot. Export tooling verifies that
-snapshot, copies only its declared content, and atomically publishes a reviewer bundle without
-overwriting an existing destination.
-
-`verify_evidence_bundles.py` checks:
-
-- Manifest schema.
-- An exact file set: no undeclared files or symlinks.
-- Every declared file's size and SHA-256.
-- JSON size limits and secret-like text scanning.
-- Event order and run identity.
-- Exactly one terminal result.
-- Artifact hash when present.
-- Attachment ownership, size, media type, and PNG/ZIP signatures.
-- Source-manifest hash and declared redaction metadata.
-
-SHA-256 detects a changed or omitted file relative to its manifest; it does not authenticate the
-author. A party able to replace both payloads and manifest can construct a different consistent
-bundle. Here, the Git commit containing the bundle supplies the reviewer-visible provenance anchor.
-Retention classes are recorded for policy and later lifecycle enforcement; this local slice does
-not delete evidence automatically.
+The current three published artifacts cover successful business flows. They do **not** declare
+a member-not-found outcome, a permission-denied detector, or an application recovery. Unknown
+states fail closed; richer branches require genuine scenario discovery and validation. Engine
+test coverage must not be confused with those branches having been discovered for this UI.
 
 ## Scenario matrix
 
-| Directory | Version | Tenant | Terminal state | Specific proof |
-|---|---:|---|---|---|
-| [discovery-success](../evidence/discovery-success/manifest.json) | compiled | Harbor | success | A real OpenAI/Luna loop produced an eight-step artifact |
-| [discovery-transaction-investigation](../evidence/discovery-transaction-investigation/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a 15-step, six-output artifact |
-| [discovery-loan-payoff](../evidence/discovery-loan-payoff/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced an 11-step, five-output artifact |
-| [discovery-temporary-card-lock](../evidence/discovery-temporary-card-lock/manifest.json) | `1.0.0` | Harbor + Summit validation | success | A real OpenAI/Luna loop produced a reversible 12-step, four-output artifact |
-| [discovery-servicing-loan-payoff](../evidence/discovery-servicing-loan-payoff/manifest.json) | `1.0.1` | Harbor + Summit validation | success | Real OpenAI/Luna discovery on the dense workstation: 11 steps, three receipt outputs, bound date equality |
-| [replay-success](../evidence/replay-success/manifest.json) | `1.0.0` | Harbor | success | Model-free outputs and final checkpoint |
-| [replay-member-not-found](../evidence/replay-member-not-found/manifest.json) | `1.0.0` | Harbor | business outcome | “No member” is not reported as a crash |
-| [replay-recovery](../evidence/replay-recovery/manifest.json) | `1.0.1` | Harbor | success | Known notice dismissed once, then resumed |
-| [replay-hard-failure](../evidence/replay-hard-failure/manifest.json) | `1.0.2` | Harbor | failure | Permission denial plus masked failure frame |
-| [human-handoff](../evidence/human-handoff/manifest.json) | `2.0.0` | Harbor | success | Pause, claim, input, fresh-state validation, continuation |
-| [tenant-reuse](../evidence/tenant-reuse/manifest.json) | `1.0.0` | Summit | success | Same artifact version and hash on a second tenant |
+| Genuine discovery bundle | Published capability | Proof |
+|---|---|---|
+| [Transaction investigation](../evidence/discovery-servicing-transaction/manifest.json) | `member.transaction_investigation/1.0.1` | Six fields; transaction and account identity comparisons; Harbor/Summit validation |
+| [Loan payoff](../evidence/discovery-servicing-loan-payoff/manifest.json) | `member.servicing_loan_payoff_quote/1.0.1` | Issued quote and receipt; returned date matches requested date; Harbor/Summit validation |
+| [Temporary card lock](../evidence/discovery-servicing-card-lock/manifest.json) | `member.temporary_card_lock/1.0.1` | Reversible mutation, fresh pre/post card identity checks, exact final locked status, receipt; Harbor/Summit validation |
 
-### Visual workbench matrix
+Each manifest records the actual run ID, recording commit, command, artifact identity, and hashes.
+Its primary result may identify the pre-publication draft: finalization adds validated tenants and
+allocates the immutable published version. That expected difference is not a forged result.
 
-`backend/tests/integration/test_visual_portability.py` runs immutable artifacts against the
-canvas-only workbench. The original portability matrix contains six viewport/DPR cells, two
-recoveries, and five declared/fail-closed outcomes. Six more cells replay the transaction, payoff,
-and card-lock artifacts on both Harbor and Summit. Artifact-shape tests reject DOM targets,
-coordinates, and relative regions. Every case runs without a model call.
+Failed or paused attempts stay in private runtime audit storage. They are not relabeled as success,
+and no manual UI action is substituted for model discovery.
 
-| Fixture | Expected terminal behavior |
-|---|---|
-| `normal` | Five typed outputs and verified checkpoint |
-| `delayed` | Existing condition polling handles the bounded delay |
-| `notice` | One recovery, then the remaining steps resume |
-| `missing` | `business_outcome/member_not_found` |
-| `restricted` | `failure/permission_denied` |
-| `duplicate_search` | `failure/target_ambiguous` before dispatch |
-| `changed_icon` | `failure/target_absent` |
-| `duplicate_field` | `failure/target_ambiguous` at `account.extract_available_balance` |
+## Evidence bundle anatomy
 
-No Playwright trace archive is committed. This is an explicit optional evidence cut. Historical
-screenshots retain limited visual context; new screenshot evidence is fully masked, so current
-failure diagnosis uses operational event codes and the authorized live viewport.
+```text
+scenario/
+├── artifact.yaml      Exact published executable contract
+├── events.jsonl       Ordered, sanitized run events
+├── result.json        Sanitized terminal result
+└── manifest.json      Provenance, command, redaction metadata, closed-set hashes
+```
+
+A run requiring richer evidence may also include masked screenshots or sanitized trace attachments.
+The current discovery bundles contain structured evidence; live screenshots sent to the model are
+not stored as public screenshots. Full-viewport masks prove retention policy, not visual page content.
+
+```bash
+uv run python scripts/export_evidence.py EVIDENCE_MANIFEST DESTINATION \
+  --scenario SCENARIO --artifact CAPABILITY_YAML \
+  --commit-sha RECORDING_COMMIT --command 'ACTUAL_COMMAND'
+```
+
+Export verifies the source manifest and writes a new bundle without overwriting existing evidence.
+The verifier rejects missing, changed, extra, or path-escaping files. Hash integrity is not signer
+authenticity or proof that a model understood the task.
 
 ## Testing decisions
 
-| Option | Decision | Reason |
+| Choice | Alternative | Reason |
 |---|---|---|
-| Mock-only browser tests | Rejected | Would not prove iframe, locator, navigation, or screenshot behavior |
-| Live-model tests on every CI run | Rejected | Non-deterministic, credentialed, and paid |
-| Unit fakes + real Chromium + committed live evidence | **Chosen** | Deterministic gates plus five genuine discovery bundles across the fixture and richer workstation surfaces |
-| Trust exported evidence files | Rejected | Closed-set validation and hashes expose changes relative to the committed manifest |
-| Store raw screenshots | Rejected | Evidence is masked before persistence |
-| Add S3-compatible storage | Rejected for this slice | Local durable files satisfy single-node execution and repository review; remote distribution adds no requirement coverage here |
+| Exact output assertions on changed inputs | Only assert HTTP success | Detect wrong record, stale input, and neighboring-field extraction |
+| Actual Chromium pointer/keyboard tests | Mock the application for end-to-end claims | Exercise rendering, focus, scrolling, and retained sessions |
+| Temporary explicit policy fixtures | Keep obsolete production demo artifacts | Isolate engine fault/handoff tests without maintaining a second UI |
+| Isolated operator test ports | Reuse fixed runtime/console ports | Avoid disrupting an operator's running services |
+| One heavy verification workload at a time | Unbounded parallel browsers/builds | Keep memory predictable |
 
 ## Secret audit
 
-`.env`, `.secrets/`, local Langfuse data, runtime evidence, dependencies, build output, and the
-assignment PDF are ignored. The audit checks tracked content and reachable Git history for
-configured credential values and high-confidence credential patterns without printing secret
-values. No matches were found. Pattern scans are a release check, not a proof that arbitrary
-sensitive text can always be recognized.
+Before publication, scan tracked files and reachable Git history for credential patterns and
+configured credential values without printing those values. Secret files, raw evidence, discovery
+captures, plans, and runtime state stay ignored. No scanner can certify the absence of every
+possible secret; combine scanning with diff review and classification tests.

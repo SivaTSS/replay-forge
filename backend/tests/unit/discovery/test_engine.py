@@ -441,7 +441,10 @@ def test_known_privacy_rejection_preserves_structured_safe_diagnostic(
 
 def test_successful_loop_records_action_and_compiles_verified_artifact(
     valid_artifact_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from replayforge.surfaces.models import ScreenRegion, VisualToken
+
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
     extract_step = artifact.steps[2]
     provider = QueueModelProvider(
@@ -459,12 +462,29 @@ def test_successful_loop_records_action_and_compiles_verified_artifact(
         ]
     )
     session = FakeSurfaceSession()
+    observe = session.observe
+
+    def observe_with_text() -> NormalizedObservation:
+        observation = observe()
+        return replace(
+            observation,
+            visual_tokens=(VisualToken(observation.fingerprint, 1.0, ScreenRegion(1, 1, 50, 15)),),
+        )
+
+    monkeypatch.setattr(session, "observe", observe_with_text)
     engine, compiler = build_discovery(session, provider, artifact)
 
     result = engine.execute(make_request())
 
     assert isinstance(result, DiscoverySuccess)
     assert result.artifact == artifact
+    assert provider.calls[0].previous_visual_text == ()
+    assert provider.calls[1].previous_visual_text == tuple(
+        token.text for token in provider.calls[0].observation.visual_tokens
+    )
+    assert provider.calls[1].previous_visual_text != tuple(
+        token.text for token in provider.calls[1].observation.visual_tokens
+    )
     assert len(compiler.calls) == 1
     assert len(compiler.calls[0]) == 1
     assert provider.calls[0].required_output_names == ("available_balance",)

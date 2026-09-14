@@ -20,6 +20,7 @@ from replayforge.policy.types import DataClassification
 from replayforge.runs.journal import InMemoryRunJournal
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
+from tests.artifacts import sample_artifact
 
 
 def _retained_run(tmp_path: Path) -> tuple[LocalEvidenceStore, InMemoryRunJournal]:
@@ -53,15 +54,9 @@ def _retained_run(tmp_path: Path) -> tuple[LocalEvidenceStore, InMemoryRunJourna
 
 
 def _request(journal: InMemoryRunJournal) -> EvidenceExportRequest:
-    artifact_path = (
-        Path(__file__).resolve().parents[4]
-        / "capabilities"
-        / "member.lookup_savings_balance"
-        / "1.0.0.yaml"
-    )
     return EvidenceExportRequest(
         scenario="replay-success",
-        artifact=load_artifact_yaml(artifact_path.read_text()),
+        artifact=sample_artifact(),
         source_manifest_key=journal.evidence_manifest_key,
         commands=("curl http://127.0.0.1:8000/api/v1/capabilities/example/invoke",),
         commit_sha="abcdef1",
@@ -167,7 +162,7 @@ def test_bundle_verifier_rejects_artifact_metadata_mismatch(tmp_path: Path) -> N
         verify_evidence_bundle(destination)
 
 
-def test_bundle_verifier_accepts_legacy_bundle_without_embedded_artifact(
+def test_bundle_verifier_rejects_bundle_without_embedded_artifact(
     tmp_path: Path,
 ) -> None:
     store, journal = _retained_run(tmp_path)
@@ -180,7 +175,8 @@ def test_bundle_verifier_accepts_legacy_bundle_without_embedded_artifact(
     (destination / "artifact.yaml").unlink()
     manifest_path.write_text(json.dumps(manifest))
 
-    assert verify_evidence_bundle(destination).run_id == journal.run_id
+    with pytest.raises(EvidenceBundleIntegrityError):
+        verify_evidence_bundle(destination)
 
 
 @pytest.mark.parametrize("attachment", ["screenshots/001.png", "trace.zip"])

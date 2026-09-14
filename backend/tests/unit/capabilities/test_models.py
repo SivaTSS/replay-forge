@@ -303,11 +303,13 @@ def test_geometry_free_candidate_rejects_layout_fields() -> None:
         )
 
 
-def test_schema_one_point_three_rejects_legacy_target(
+@pytest.mark.parametrize("version", ["1.0", "1.1", "1.2", "1.3"])
+def test_retired_artifact_schemas_are_rejected(
     valid_artifact_data: dict[str, Any],
+    version: str,
 ) -> None:
-    valid_artifact_data["schema_version"] = "1.3"
-    with pytest.raises(ValidationError, match="cannot contain DOM"):
+    valid_artifact_data["schema_version"] = version
+    with pytest.raises(ValidationError, match="schema_version"):
         CapabilityArtifact.model_validate(valid_artifact_data)
 
 

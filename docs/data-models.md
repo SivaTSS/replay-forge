@@ -99,7 +99,7 @@ effective contract. These boundaries share one parser and one rejection rule.
 
 Compatibility is checked against registration before launch and registered readiness landmarks
 on the live entry surface. Descriptive discovery fingerprints are not executable preconditions.
-See [Compatibility](heterogeneity-and-compatibility.md) for legacy-schema rules, vendor-version
+See [Compatibility](heterogeneity-and-compatibility.md) for current-schema rules, vendor-version
 handling, and the deliberately unimplemented overlay design.
 
 Actions and conditions are discriminated unions. For example, `type` requires a value source and a
@@ -108,7 +108,7 @@ checked on model proposals, recorded discovery steps, and final artifact steps.
 
 Schema `1.4` stores no coordinates. Rendered candidates describe text, labeled controls, fields,
 or image groups. The surface adapter derives a region from the current frame and viewport, uses it
-once, and discards it. Older `1.0`–`1.3` fixtures remain readable for compatibility.
+once, and discards it. Older `1.0`–`1.3` artifact schemas are rejected; no migration shim is retained.
 
 ## Discovery
 

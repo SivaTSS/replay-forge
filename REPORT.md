@@ -4,14 +4,13 @@
 
 ReplayForge turns a natural-language goal into a verified UI recording, publishes it as a typed
 capability, and executes later invocations without model decisions. The real target is one synthetic
-banking workbench with transaction investigation, dated loan payoff quoting, and temporary card
+bank servicing workstation with transaction investigation, dated loan payoff quoting, and temporary card
 locking. Its controls and values are painted on a canvas.
 
-The expanded [staff workstation](docs/demo-bank.md) adds connected balances, transfers, holds,
-card maintenance, and service cases. Its payoff workflow now has
-[genuine discovery evidence](evidence/discovery-servicing-loan-payoff/manifest.json) and automatic
-Harbor/Summit replay validation. Other workstation functions have application tests, not discovered
-capabilities. Historical evidence remains tied to the earlier fixtures.
+The [single staff workstation](docs/demo-bank.md) also supports connected balances, transfers,
+holds, and service cases. Three genuine discovery bundles cover transaction research, payoff
+quotation, and card locking on this UI; each passes automatic Harbor/Summit replay validation.
+Other functions have application tests, not published automation capabilities.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -54,16 +53,17 @@ Every required output must be extracted and referenced by the checkpoint; runtim
 output values before success. Registry snapshots isolate nested mutable mappings, while immutable
 file publication prevents replacing an existing version.
 
-Checks are only as strong as the artifact declares: the card-lock fixture validates string outputs
-and rendered labels, not an exact status value or an executed inverse. The
-[worked example](docs/capability-and-replay.md#worked-example-temporary-card-lock) makes that boundary explicit.
+Checks are only as strong as the artifact declares. Transaction replay compares both account and
+transaction identities; payoff replay compares the returned date with the input. Card locking
+checks identity and the exact final status. The
+[worked example](docs/capability-and-replay.md#worked-example-temporary-card-lock) states the proof boundary.
 
 Discovery validates supplied inputs against its planned contract before acting and applies the same
 bound-input classification rules as replay, including forbidden parent-object classifications.
 
 YAML was chosen for reviewability, typed models for enforceable semantics, and canonical SHA-256
 for content identity. The generic compiler accepts executed, verified trace steps rather than an
-arbitrary model-written program. Historical task-specific compilation exists only in test fixtures.
+arbitrary model-written program. The old task-specific compiler has been removed; synthetic contracts remain only in unit fixtures.
 See [Data models](docs/data-models.md) and [Replay contract](docs/capability-and-replay.md).
 
 ## 3. Determinism & error handling
@@ -96,7 +96,7 @@ content-addressed visual signatures. DOM locators remain optional. Recorded coor
 relative regions were rejected because window resizing and responsive reflow invalidate them.
 
 One artifact runs across Harbor and Summit, which vary typography, branding, row order, and layout.
-The visual matrix exercises six viewport sizes and DPR 1–2. Discovery-suite validation adds tenant
+The current replay matrix changes the member, task inputs, and viewport on both tenants. Discovery-suite validation adds tenant
 support only after deterministic execution succeeds.
 
 Before replay, application registration must match the artifact's surface contract; schema 1.4 also
@@ -112,7 +112,7 @@ automated release detection, and an overlay repository are not implemented.
 
 Desktop can reuse PNG grounding but needs OS capture/input, focus/window identity, and desktop
 policy semantics. Registration rejects unsupported desktop contracts today.
-[Compatibility](docs/heterogeneity-and-compatibility.md) records the extension and legacy rules.
+[Compatibility](docs/heterogeneity-and-compatibility.md) records the admission rules and extension seams.
 
 ## 5. Escalation & handoff
 
@@ -141,8 +141,7 @@ inserted after discovery.
 Evidence is redacted before storage. Nested output classifications are preserved; credentials,
 personal values, and financial data are removed or masked. New screenshot evidence masks the full
 viewport; fixture selectors cannot establish that other pixels are public. New image-signature
-capture is disabled by default, with a loopback-only synthetic opt-in. Historical evidence is
-unchanged. Live operator frames and authorized
+capture is disabled by default, with a loopback-only synthetic opt-in. Live operator frames and authorized
 discovery frames are transient. Provider requests use `store=false`; local Langfuse records model-call
 metrics.
 
@@ -155,8 +154,10 @@ deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines th
 ## 7. Cuts
 
 Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
-assignment requests. Five genuine discovery bundles and six replay/handoff bundles preserve the
-end-to-end evidence; tests exercise current code against immutable artifacts.
+assignment requests. Three genuine discovery bundles preserve the current UI's provenance. Tests exercise model-free
+reuse and real same-session handoff; policy-injection fixtures are explicitly separate from discovery.
+The current artifacts do not declare application-specific negative-outcome or recovery branches;
+those engine mechanisms have independent regression tests, not fabricated discovery evidence.
 
 | Deliberate cut | Reason / next condition |
 |---|---|

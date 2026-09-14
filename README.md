@@ -12,20 +12,15 @@ flowchart LR
     R -. sensitive or stuck .-> H([Same-session human handoff])
 ```
 
-The demo's front door is a [dated servicing workstation](docs/demo-bank.md) with member and account
-inquiry, transaction research, internal transfers, card maintenance, holds, payoff quotes, service
-cases, and a journal. Open `http://127.0.0.1:3001/harbor/servicing` after starting the target. This
-expanded application has its own business-rule and UI tests and a
-[genuine payoff discovery](evidence/discovery-servicing-loan-payoff/manifest.json), automatically
-validated on Harbor and Summit. Earlier evidence and capability versions remain tied to their
-original fixture routes; other workstation workflows are not yet discovered.
+There is one demo application: a [dated servicing workstation](docs/demo-bank.md) with member
+and account inquiry, transaction research, transfers, card maintenance, holds, payoff quotes,
+service cases, and an activity journal. Open `http://127.0.0.1:3001/harbor/servicing`.
 
-The earlier canvas-only member workbench supports three non-trivial servicing tasks: investigate an exact
-transaction, calculate a dated loan payoff quote, and temporarily lock a selected card. Discovery
-creates a separate typed capability for each goal; the runtime and compiler contain no task names,
-route constants, output names, or required action order. These artifacts store semantic target identity,
-never coordinates or relative regions, and are resolved again from each current frame. The earlier
-savings-balance versions remain immutable regression and handoff fixtures.
+Three genuine discoveries exercise different business operations on that same UI: transaction
+investigation, loan-payoff quotation, and temporary card lock. Each artifact is independently
+validated on Harbor and Summit. The runtime contains no task-specific compiler, navigation
+recipe, record ID, or recorded click coordinates. Old demo routes, capabilities, and evidence
+are not part of the current distribution.
 
 ## What is real
 
@@ -63,18 +58,7 @@ Start the runtime in another terminal:
 PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run uvicorn replayforge.main:app --host 127.0.0.1 --port 8000
 ```
 
-Invoke the visual-first artifact:
-
-```bash
-curl --fail-with-body --silent --show-error \
-  -H 'content-type: application/json' \
-  -d '{"tenant":"harbor","version":"3.2.0","inputs":{"member_id":"12345"}}' \
-  http://127.0.0.1:8000/api/v1/capabilities/member.lookup_savings_balance/invoke
-```
-
-Expected: `status: success`, five validated outputs, and checkpoint `savings_balance_verified`.
-
-To replay the genuinely discovered task on the richer servicing workstation:
+Replay a genuinely discovered task on the servicing workstation:
 
 ```bash
 curl --fail-with-body --silent --show-error \
@@ -87,29 +71,18 @@ Expected: an issued quote for `$9,035.70`, good through `2026-09-21`, and refere
 These inputs differ from discovery. The artifact verifies the date equality during every replay;
 the browser regression independently checks all three exact outputs. No model is needed.
 
-## Exercise each runtime result
+## Three discovered workflows
 
-| Behavior | How to run | Expected |
+| Capability | Required inputs | Verified result |
 |---|---|---|
-| Canvas-only visual workbench | `3.2.0`, member `12345` | `success` without DOM targets |
-| Reflow + DPR portability | `3.2.0`, six CSS viewports, DPR `1–2` | Same artifact succeeds across compact cards and wide table layouts |
-| Cross-tenant visual workbench | `3.2.0`, tenant `summit` | Same artifact resolves the reordered Savings row |
-| Delayed result | `3.2.0`, member `13579` | Bounded wait, then `success` |
-| Known notice | `3.2.0`, member `67890` | One bounded recovery, then `success` |
-| Visual ambiguity | `3.2.0`, member `33333` | `failure/target_ambiguous` before a click |
-| Changed visual target | `3.2.0`, member `44444` | `failure/target_absent` |
-| Duplicate field label | `3.2.0`, member `55555` | `failure/target_ambiguous` at the affected extraction |
-| Happy path | `1.0.0`, member `12345` | `success` |
-| Business outcome | `1.0.0`, member `99999` | `business_outcome/member_not_found` |
-| Second tenant | `1.0.0`, tenant `summit` | Same artifact succeeds |
-| Known recovery | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_recovery_run.py` | Interstitial dismissed once, then `success` |
-| Hard failure | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_hard_failure_run.py` | `failure/permission_denied` + masked frame |
-| Human handoff | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_handoff_run.py` | Claim, same-session input, resume, `success` |
+| `member.transaction_investigation` | `member_id`, `account_id`, `transaction_reference` | Six fields; exact account and transaction identity comparisons |
+| `member.servicing_loan_payoff_quote` | `member_id`, `payoff_date` | Issued quote, date, reference; returned date equals input |
+| `member.temporary_card_lock` | `member_id`, `card_id`, `reason` | Selected card, exact locked status, completion reference |
 
-All versions in this table refer to `member.lookup_savings_balance`. Omitting `version` selects
-the latest publication for that capability, currently `3.2.0` in the committed registry.
-Request `2.0.0` for handoff, `3.0.0` for the original visual-terminal fixture, or `3.1.0`
-for its prior repeated-row fixture.
+All use the single registered entry `legacy_servicing`; “legacy” describes the dated
+workstation, not a second application. The [goal-only specifications](config/servicing-discovery.yaml)
+contain inputs and requested outcomes—not click sequences or selectors.
+See [verification](docs/verification.md) for precise evidence and error-handling boundaries.
 
 ## Operator console
 
@@ -119,10 +92,11 @@ Start it after the target and runtime:
 npm_config_cache=/tmp/replayforge-npm-cache npx --yes pnpm@10.15.1 --filter @replayforge/control-plane dev --hostname 127.0.0.1 --port 3000
 ```
 
-Open `http://127.0.0.1:3000` and invoke savings-balance version `2.0.0` using the replay command
-above. The paused replay appears in the active-intervention inbox with its capability, tenant,
-interrupted step, route, and pause reason. Select it, claim the retained browser, provide the
-manual input, and choose **Resume automation**. Direct ID lookup remains available for debugging.
+Open `http://127.0.0.1:3000`. When a replay pauses, select its inbox entry, claim the
+retained browser, complete the interrupted step, and choose **Resume automation**. Successful
+ordinary replays do not require an operator. The browser regression injects a sensitive boundary
+into a temporary copy of the payoff artifact to test this path; it does not publish a fake
+discovery or keep a special handoff capability in the production registry.
 
 The console polls because this slice needs a minimal real handoff, not continuous co-browsing. Every transition uses an exclusive, expiring, monotonically versioned lease. Heartbeats preserve active ownership; an abandoned expired claim can be reclaimed without allowing an active lease to be stolen. Operator IDs are local caller-supplied labels, not authentication.
 
@@ -147,7 +121,7 @@ Restart the runtime so it loads the credentials, keep the demo bank running, the
 cross-tenant validate, finalize, and write all configured workflow artifacts:
 
 ```bash
-UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_demo_workflows.py
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_demo_workflows.py --spec config/servicing-discovery.yaml --timeout-seconds 600
 ```
 
 Then invoke the latest published card-lock capability without a model call:
@@ -155,7 +129,7 @@ Then invoke the latest published card-lock capability without a model call:
 ```bash
 curl --fail-with-body --silent --show-error \
   -H 'content-type: application/json' \
-  -d '{"tenant":"harbor","inputs":{"member_id":"12345","card_last4":"0110"}}' \
+  -d '{"tenant":"harbor","inputs":{"member_id":"12345","card_id":"12345-D1","reason":"Synthetic precautionary lock"}}' \
   http://127.0.0.1:8000/api/v1/capabilities/member.temporary_card_lock/invoke
 ```
 

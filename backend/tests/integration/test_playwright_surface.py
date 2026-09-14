@@ -1,528 +1,129 @@
-from __future__ import annotations
+"""Optional DOM adapter and same-session handoff; no synthetic discovery claims."""
 
-import json
-from dataclasses import dataclass, field
 from pathlib import Path
-from threading import Lock
-from typing import cast
 
 import cv2
 import numpy as np
 import pytest
+from playwright.sync_api import sync_playwright
 
-from replayforge.applications.registry import load_application_registry
 from replayforge.capabilities.models import (
-    ClickAction,
     FrameLocator,
-    IdentityMatchesCondition,
     InputValue,
-    LiteralValue,
     LocatorBundle,
     LocatorCandidate,
     LocatorScope,
     LocatorStrategy,
-    MatchMode,
-    OutputValidCondition,
-    RouteCondition,
-    SelectAction,
-    TextCondition,
+    RenderedTextCondition,
     TypeAction,
 )
-from replayforge.capabilities.registry import LocalCapabilityRegistry
 from replayforge.capabilities.serialization import (
     artifact_content_hash,
     dump_artifact_yaml,
     load_artifact_yaml,
 )
-from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
-from replayforge.discovery.models import (
-    ActProposal,
-    CompleteProposal,
-    DiscoveryProposal,
-    DiscoverySuccess,
-    ProviderContext,
-)
-from replayforge.discovery.ports import ModelProvider
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.interventions.leases import (
-    ControlLeaseService,
-    InMemoryControlLeaseRepository,
-)
-from replayforge.interventions.models import (
-    HumanInputCommand,
-    InterventionContext,
-    InterventionRunMode,
-)
-from replayforge.interventions.router import InMemoryInterventionRouter
-from replayforge.interventions.service import InterventionCoordinator
-from replayforge.policy.evaluator import PolicyEvaluator
-from replayforge.policy.models import EffectivePolicy, PolicyLayer
+from replayforge.interventions.models import HumanInputCommand
 from replayforge.policy.types import Risk
-from replayforge.runs.journal import InMemoryRunJournal
-from replayforge.runs.results import (
-    BusinessOutcomeResult,
-    FailureResult,
-    InterventionRequiredResult,
-    SuccessResult,
-)
-from replayforge.runtime.composition import (
-    LiveBrowserSession,
-    RuntimeInterventionService,
-    build_runtime,
-)
+from replayforge.runs.results import FailureResult, InterventionRequiredResult, SuccessResult
+from replayforge.runtime.composition import build_runtime
 from replayforge.runtime.settings import RuntimeSettings
-from replayforge.runtime.worker import SerialSessionWorker
 from replayforge.shared.clock import SystemClock
-from replayforge.shared.ids import EntityKind, new_id
-from replayforge.surfaces.models import (
-    HumanKey,
-    HumanKeyInput,
-    HumanPointerInput,
-    HumanTextInput,
-    Viewport,
-)
-from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
-from tests.legacy_compiler import SavingsBalanceCompiler
+from replayforge.surfaces.models import HumanPointerInput
+from replayforge.surfaces.playwright import PlaywrightSurfaceSession
+from replayforge.surfaces.vision import RapidOcrTextRecognizer
 
 pytestmark = pytest.mark.integration
 REPOSITORY = Path(__file__).resolve().parents[3]
 
 
-def playwright_driver(base_url: str) -> PlaywrightSurfaceDriver:
-    return PlaywrightSurfaceDriver(
-        base_url,
-        application_registry=load_application_registry(REPOSITORY / "config/applications.yaml"),
-    )
+def test_generic_dom_frame_adapter_and_private_screenshot_retention() -> None:
+    """In-memory HTML tests the optional adapter, not a second demo application."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        context = browser.new_context()
+        page = context.new_page()
+        page.set_content(
+            '<iframe title="Inventory panel" srcdoc="&lt;label&gt;Reference'
+            '&lt;input&gt;&lt;/label&gt;"></iframe>'
+        )
+        session = PlaywrightSurfaceSession(context, page, "inventory", "test", {})
+        try:
+            bundle = LocatorBundle(
+                description="Reference input",
+                scope=LocatorScope(
+                    frame_path=(
+                        FrameLocator(
+                            locator=LocatorCandidate(
+                                strategy=LocatorStrategy.TITLE, value="Inventory panel"
+                            )
+                        ),
+                    )
+                ),
+                candidates=(LocatorCandidate(strategy=LocatorStrategy.LABEL, value="Reference"),),
+            )
+            session.execute(
+                TypeAction(kind="type", value=InputValue(source="input", path="reference")),
+                session.resolve(bundle, 2_000),
+                {"reference": "private-test-reference"},
+            )
+            field = page.frame_locator("iframe").get_by_label("Reference")
+            assert field.input_value() == "private-test-reference"
+            retained = session.capture_sanitized_evidence_frame()
+            pixels = cv2.imdecode(np.frombuffer(retained.content, np.uint8), cv2.IMREAD_COLOR)
+            assert pixels is not None and np.all(pixels == (39, 24, 17))
+            assert retained.redaction_directives == ("mask:full-viewport",)
+        finally:
+            session.close()
+            browser.close()
 
 
-def in_member_frame(target: LocatorBundle) -> LocatorBundle:
-    return target.model_copy(
+def handoff_fixture(tmp_path: Path) -> Path:
+    """Inject a policy boundary into a copy, never the published discovery trace."""
+    source = REPOSITORY / "capabilities/member.servicing_loan_payoff_quote/1.0.1.yaml"
+    artifact = load_artifact_yaml(source.read_text())
+    steps = list(artifact.steps)
+    steps[2] = steps[2].model_copy(
         update={
-            "scope": LocatorScope(
-                frame_path=(
-                    FrameLocator(
-                        locator=LocatorCandidate(
-                            strategy=LocatorStrategy.TITLE, value="Member operations"
-                        )
-                    ),
-                )
-            )
-        }
-    )
-
-
-@dataclass
-class ScriptedDiscoveryProvider:
-    proposals: list[DiscoveryProposal]
-    calls: list[ProviderContext] = field(default_factory=list)
-    provider_name: str = "scripted-integration"
-    model_name: str = "not-a-model"
-
-    def decide(self, context: ProviderContext) -> DiscoveryProposal:
-        self.calls.append(context)
-        return self.proposals.pop(0)
-
-
-def test_live_surface_discovery_compiles_verified_artifact(demo_bank: str) -> None:
-    repository = Path(__file__).resolve().parents[3]
-    seed = load_artifact_yaml(
-        (repository / "capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
-    )
-    proposals: list[DiscoveryProposal] = [
-        ActProposal(
-            kind="act",
-            action=step.action,
-            target=step.target,
-            rationale=f"Exercise the visible {step.name} control.",
-            expected_effect=f"Complete {step.name} and expose the next state.",
-            declared_risk=step.risk,
-            confidence=1.0,
-        )
-        for step in seed.steps
-    ]
-    proposals.append(
-        CompleteProposal(
-            kind="complete",
-            rationale="Every required output is visible and deterministically verified.",
-        )
-    )
-    provider = ScriptedDiscoveryProvider(proposals)
-    driver = playwright_driver(demo_bank)
-    clock = SystemClock()
-    run_id = str(new_id(EntityKind.RUN))
-    lease_service = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
-    engine = DiscoveryEngine(
-        surface_driver=driver,
-        model_provider=cast(ModelProvider, provider),
-        artifact_compiler=SavingsBalanceCompiler(clock),
-        policy_evaluator=PolicyEvaluator(clock),
-        effective_policy=EffectivePolicy.intersect(
-            PolicyLayer(
-                name="integration",
-                allowed_origins=frozenset({demo_bank}),
-                allowed_route_patterns=frozenset(
-                    {"/members/search", "/accounts/:account_id/details"}
-                ),
-                allowed_action_types=frozenset({"type", "click", "extract"}),
-                maximum_risk=Risk.READ_ONLY,
-            )
-        ),
-        lease_service=lease_service,
-        recorder=InMemoryRunJournal(run_id, clock),
-        intervention_router=InMemoryInterventionRouter(clock, lease_service),
-        clock=clock,
-    )
-    try:
-        result = engine.execute(
-            DiscoveryRequest(
-                run_id=run_id,
-                goal="Look up the synthetic member and return the current savings balance.",
-                application_family="northstar_member_service",
-                tenant="harbor",
-                entry_point="member_search",
-                inputs={"member_id": "12345"},
-            )
-        )
-
-        assert isinstance(result, DiscoverySuccess)
-        assert result.artifact.provenance.provider == "scripted-integration"
-        assert result.artifact.provenance.artifact_content_hash == artifact_content_hash(
-            result.artifact
-        )
-        assert result.artifact.steps[0].action == seed.steps[0].action
-        assert len(provider.calls) == len(seed.steps) + 1
-        assert all(call.screenshot_png.startswith(b"\x89PNG\r\n\x1a\n") for call in provider.calls)
-        assert provider.calls[0].observation.frame_titles == ("Member operations",)
-        assert {
-            (control.role, control.name, control.count)
-            for control in provider.calls[0].observation.actionable_controls
-        } >= {
-            ("textbox", "Member ID", 1),
-            ("button", "Search", 1),
-        }
-        assert provider.calls[0].required_output_names == (
-            "member_id",
-            "account_type",
-            "currency",
-            "available_balance",
-            "as_of",
-        )
-    finally:
-        driver.close()
-
-
-def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Path) -> None:
-    driver = playwright_driver(demo_bank)
-    session = driver.open("northstar_member_service", "harbor", "member_search")
-    try:
-        observation = session.observe()
-        assert observation.route == "/members/search"
-        assert observation.frame_titles == ("Member operations",)
-        assert {(control.role, control.name) for control in observation.actionable_controls} >= {
-            ("textbox", "Member ID"),
-            ("button", "Search"),
-        }
-        assert session.capture_provider_frame().startswith(b"\x89PNG\r\n\x1a\n")
-        sanitized_frame = session.capture_sanitized_evidence_frame()
-        assert sanitized_frame.content.startswith(b"\x89PNG\r\n\x1a\n")
-        assert sanitized_frame.redaction_directives == ("mask:full-viewport",)
-        frame = driver.capture_active_frame()
-        assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
-        assert frame.viewport == Viewport(1280, 800)
-        member_field = in_member_frame(
-            LocatorBundle(
-                description="Member ID field",
-                candidates=(LocatorCandidate(strategy=LocatorStrategy.LABEL, value="Member ID"),),
-            )
-        )
-        member_target = session.resolve(member_field, 5_000)
-        assert member_target.registered_risk is Risk.READ_ONLY
-        session.execute(
-            TypeAction(kind="type", value=InputValue(source="input", path="member_id")),
-            member_target,
-            {"member_id": "12345"},
-        )
-        search = in_member_frame(
-            LocatorBundle(
-                description="Search button",
-                candidates=(
-                    LocatorCandidate(
-                        strategy=LocatorStrategy.ROLE_NAME,
-                        role="button",
-                        name="Search",
-                    ),
-                ),
-            )
-        )
-        search_target = session.resolve(search, 5_000)
-        assert search_target.registered_risk is Risk.READ_ONLY
-        session.execute(ClickAction(kind="click"), search_target, {})
-        details = in_member_frame(
-            LocatorBundle(
-                description="Savings details link",
-                candidates=(
-                    LocatorCandidate(
-                        strategy=LocatorStrategy.ROLE_NAME,
-                        role="link",
-                        name="View details",
-                    ),
-                ),
-            )
-        )
-        details_target = session.resolve(details, 5_000)
-        assert details_target.registered_risk is Risk.READ_ONLY
-        session.execute(ClickAction(kind="click"), details_target, {})
-        assert session.wait_until(
-            RouteCondition(kind="route", pattern="/accounts/*/details"), {}, {}, 5_000
-        )
-        details_observation = session.observe()
-        assert {(field.label, field.count) for field in details_observation.extractable_fields} == {
-            ("Member ID", 1),
-            ("Account type", 1),
-            ("Currency", 1),
-            ("Available balance", 1),
-            ("As of", 1),
-            ("Status", 1),
-        }
-        balance = in_member_frame(
-            LocatorBundle(
-                description="Available balance",
-                candidates=(
-                    LocatorCandidate(
-                        strategy=LocatorStrategy.RELATIVE_TEXT,
-                        anchor="Available balance",
-                        relation="following_value",
-                        element="dd",
-                    ),
-                ),
-            )
-        )
-        assert session.extract(session.resolve(balance, 5_000)) == "$1,420.57"
-        outputs = {"member_id": "12345"}
-        inputs = {"member_id": "12345"}
-        assert session.evaluate(
-            OutputValidCondition(kind="output_valid", output="member_id"), outputs, inputs
-        )
-        assert session.evaluate(
-            IdentityMatchesCondition(
-                kind="identity_matches",
-                extracted_output="member_id",
-                input_path="member_id",
+            "risk": Risk.SENSITIVE,
+            "postconditions": (
+                RenderedTextCondition(kind="rendered_text", value="Account relationships"),
             ),
-            outputs,
-            inputs,
-        )
-        screenshot = tmp_path / "account-details.png"
-        session.screenshot(screenshot)
-        assert screenshot.stat().st_size > 1_000
-    finally:
-        session.close()
-        driver.close()
-
-
-def test_visual_evidence_masks_the_rendered_canvas(demo_bank: str) -> None:
-    driver = playwright_driver(demo_bank)
-    session = driver.open("northstar_member_service", "harbor", "visual_member_search")
-    try:
-        frame = session.capture_sanitized_evidence_frame()
-
-        assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
-        assert frame.redaction_directives == ("mask:full-viewport",)
-    finally:
-        session.close()
-        driver.close()
-
-
-def test_evidence_masks_unclassified_text_outside_fixture_selectors(demo_bank: str) -> None:
-    driver = playwright_driver(demo_bank)
-    session = driver.open("northstar_member_service", "harbor", "member_search")
-    try:
-        session.page.evaluate("""() => {
-            const banner = document.createElement('aside');
-            banner.style.cssText = 'position:fixed;top:0;left:0;z-index:999999;background:white';
-            banner.attachShadow({mode:'closed'}).textContent =
-                'Synthetic Person synthetic@example.invalid';
-            document.body.append(banner);
-        }""")
-        live = session.capture_provider_frame()
-        retained = session.capture_sanitized_evidence_frame()
-        pixels = cv2.imdecode(np.frombuffer(retained.content, dtype=np.uint8), cv2.IMREAD_COLOR)
-        assert pixels is not None and np.all(pixels == (39, 24, 17))
-        assert retained.content != live
-        assert retained.redaction_directives == ("mask:full-viewport",)
-    finally:
-        session.close()
-        driver.close()
-
-
-def test_real_iframe_selects_known_runtime_scenario(demo_bank: str) -> None:
-    driver = playwright_driver(demo_bank)
-    session = driver.open("northstar_member_service", "harbor", "member_search")
-    try:
-        scenario = in_member_frame(
-            LocatorBundle(
-                description="Runtime scenario selector",
-                candidates=(
-                    LocatorCandidate(
-                        strategy=LocatorStrategy.LABEL,
-                        value="Runtime scenario",
-                    ),
-                ),
-            )
-        )
-        session.execute(
-            SelectAction(
-                kind="select",
-                option=LiteralValue(source="literal", value="Known interstitial"),
+        }
+    )
+    fixture = artifact.model_copy(
+        update={
+            "steps": tuple(steps),
+            "capability": artifact.capability.model_copy(update={"risk": Risk.SENSITIVE}),
+            "policy": artifact.policy.model_copy(update={"maximum_risk": Risk.SENSITIVE}),
+            "provenance": artifact.provenance.model_copy(
+                update={
+                    "provider": "injected-handoff-test",
+                    "model": "not-a-discovery",
+                    "artifact_content_hash": None,
+                }
             ),
-            session.resolve(scenario, 5_000),
-            {},
-        )
-        member_field = in_member_frame(
-            LocatorBundle(
-                description="Member ID field",
-                candidates=(LocatorCandidate(strategy=LocatorStrategy.LABEL, value="Member ID"),),
+        }
+    )
+    fixture = fixture.model_copy(
+        update={
+            "provenance": fixture.provenance.model_copy(
+                update={"artifact_content_hash": artifact_content_hash(fixture)}
             )
-        )
-        session.execute(
-            TypeAction(kind="type", value=InputValue(source="input", path="member_id")),
-            session.resolve(member_field, 5_000),
-            {"member_id": "12345"},
-        )
-        search = in_member_frame(
-            LocatorBundle(
-                description="Search button",
-                candidates=(
-                    LocatorCandidate(
-                        strategy=LocatorStrategy.ROLE_NAME,
-                        role="button",
-                        name="Search",
-                    ),
-                ),
-            )
-        )
-        session.execute(ClickAction(kind="click"), session.resolve(search, 5_000), {})
-
-        assert session.wait_until(
-            TextCondition(kind="text", value="Important notice", match=MatchMode.EXACT),
-            {},
-            {},
-            5_000,
-        )
-    finally:
-        session.close()
-        driver.close()
+        }
+    )
+    root = tmp_path / "capabilities"
+    path = root / fixture.capability.id / f"{fixture.capability.version}.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(dump_artifact_yaml(fixture))
+    return root
 
 
-def test_registered_artifact_replays_end_to_end(demo_bank: str, tmp_path: Path) -> None:
-    repository = Path(__file__).resolve().parents[3]
+def test_missing_record_fails_closed_with_masked_evidence(demo_bank: str, tmp_path: Path) -> None:
     runtime = build_runtime(
         RuntimeSettings(
-            artifact_directory=repository / "capabilities",
-            evidence_directory=tmp_path / "evidence",
-            demo_base_url=demo_bank,
-        )
-    )
-    try:
-        result = runtime.service.invoke(
-            "member.lookup_savings_balance",
-            "1.0.0",
-            "harbor",
-            {"member_id": "12345"},
-        )
-
-        assert isinstance(result, SuccessResult)
-        assert result.outputs == {
-            "member_id": "12345",
-            "account_type": "savings",
-            "currency": "USD",
-            "available_balance": "1420.57",
-            "as_of": "2026-09-10T12:30:00Z",
-        }
-        assert result.checkpoint.verified
-        event_types = [event.event_type for event in runtime.journals[result.run_id].events()]
-        assert event_types[0] == "replay_started"
-        assert event_types[-1] == "checkpoint_verified"
-        manifest_path = tmp_path / "evidence" / result.evidence_manifest.removeprefix("evidence://")
-        manifest = json.loads(manifest_path.read_text())
-        assert manifest["run_id"] == result.run_id
-        assert len(manifest["events"]) == len(event_types)
-        terminal_path = (
-            tmp_path / "evidence" / manifest["terminal_result"]["key"].removeprefix("evidence://")
-        )
-        terminal = json.loads(terminal_path.read_text())
-        assert terminal["status"] == "success"
-        assert terminal["outputs"]["member_id"].startswith("customer_")
-        assert {key: value for key, value in terminal["outputs"].items() if key != "member_id"} == {
-            "account_type": "[REDACTED_FINANCIAL]",
-            "as_of": "2026-09-10T12:30:00Z",
-            "available_balance": "[REDACTED_FINANCIAL]",
-            "currency": "[REDACTED_FINANCIAL]",
-        }
-        verification = verify_run_manifest(
-            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
-            result.evidence_manifest,
-        )
-        assert verification.terminal_result_verified
-        assert runtime.live_sessions == {}
-    finally:
-        runtime.close()
-
-
-@pytest.mark.parametrize("tenant", ["harbor", "summit"])
-def test_visual_artifact_replays_without_dom_targets(
-    demo_bank: str, tmp_path: Path, tenant: str
-) -> None:
-    repository = Path(__file__).resolve().parents[3]
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=repository / "capabilities",
-            capability_asset_directory=repository / "capabilities/_assets",
-            evidence_directory=tmp_path / "evidence",
-            demo_base_url=demo_bank,
-        )
-    )
-    try:
-        artifact = load_artifact_yaml(
-            (repository / "capabilities/member.lookup_savings_balance/3.0.0.yaml").read_text()
-        )
-        assert all(not step.target.candidates for step in artifact.steps if step.target)
-
-        result = runtime.service.invoke(
-            "member.lookup_savings_balance",
-            "3.0.0",
-            tenant,
-            {"member_id": "12345"},
-        )
-
-        assert isinstance(result, SuccessResult)
-        assert result.outputs == {
-            "member_id": "12345",
-            "account_type": "savings",
-            "currency": "USD",
-            "available_balance": "1420.57",
-            "as_of": "2026-09-10T12:30:00Z",
-        }
-        assert result.checkpoint.verified
-    finally:
-        runtime.close()
-
-
-def test_durably_published_visual_artifact_replays_after_fresh_runtime(
-    demo_bank: str, tmp_path: Path
-) -> None:
-    repository = Path(__file__).resolve().parents[3]
-    artifact = load_artifact_yaml(
-        (repository / "capabilities/member.lookup_savings_balance/3.2.0.yaml").read_text()
-    )
-    publication_root = tmp_path / "capabilities"
-    published = LocalCapabilityRegistry(publication_root).publish_next(artifact)
-
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=publication_root,
-            capability_asset_directory=repository / "capabilities/_assets",
+            artifact_directory=REPOSITORY / "capabilities",
             evidence_directory=tmp_path / "evidence",
             demo_base_url=demo_bank,
             openai_api_key=None,
@@ -531,385 +132,81 @@ def test_durably_published_visual_artifact_replays_after_fresh_runtime(
         )
     )
     try:
-        assert not runtime.discovery_service.ready()
-        loaded = runtime.service.registry.get(
-            artifact.capability.id, published.artifact.capability.version
-        )
-        assert loaded.content_hash == published.content_hash
-
         result = runtime.service.invoke(
-            artifact.capability.id,
-            published.artifact.capability.version,
-            "harbor",
-            {"member_id": "12345"},
-        )
-
-        assert isinstance(result, SuccessResult)
-        assert result.outputs["available_balance"] == "1420.57"
-        assert result.checkpoint.verified
-    finally:
-        runtime.close()
-
-
-def test_registered_artifact_recovers_from_known_interstitial(
-    demo_bank: str, tmp_path: Path
-) -> None:
-    repository = Path(__file__).resolve().parents[3]
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=repository / "capabilities",
-            evidence_directory=tmp_path / "evidence",
-            demo_base_url=demo_bank,
-        )
-    )
-    try:
-        result = runtime.service.invoke(
-            "member.lookup_savings_balance",
+            "member.servicing_loan_payoff_quote",
             "1.0.1",
             "harbor",
-            {"member_id": "12345"},
+            {"member_id": "00000", "payoff_date": "2026-09-20"},
         )
-
-        assert isinstance(result, SuccessResult)
-        assert result.outputs["available_balance"] == "1420.57"
-        assert result.checkpoint.verified
-        events = runtime.journals[result.run_id].events()
-        recovery_events = [event for event in events if event.event_type.startswith("recovery_")]
-        assert [event.event_type for event in recovery_events] == [
-            "recovery_started",
-            "recovery_completed",
-        ]
-        assert recovery_events[0].step_id == "search.submit"
-        assert recovery_events[0].details == {
-            "recovery_id": "dismiss_known_notice",
-            "use": 1,
-        }
-        assert recovery_events[1].details == {
-            "recovery_id": "dismiss_known_notice",
-            "resume_at": "account.open_savings",
-        }
-        verification = verify_run_manifest(
-            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
-            result.evidence_manifest,
+        assert isinstance(result, FailureResult), result
+        assert result.code == "target_absent"
+        artifact = load_artifact_yaml(
+            (REPOSITORY / "capabilities/member.servicing_loan_payoff_quote/1.0.1.yaml").read_text()
         )
-        assert verification.terminal_result_verified
+        assert result.step_id == artifact.steps[2].id
+        verified = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()), result.evidence_manifest
+        )
+        assert verified.terminal_result_verified
+        assert verified.attachment_count >= 1
         assert runtime.live_sessions == {}
     finally:
         runtime.close()
 
 
-def test_registered_artifact_returns_real_member_not_found_outcome(
+def test_replay_resumes_after_same_session_handoff_on_workstation(
     demo_bank: str, tmp_path: Path
 ) -> None:
-    repository = Path(__file__).resolve().parents[3]
     runtime = build_runtime(
         RuntimeSettings(
-            artifact_directory=repository / "capabilities",
+            artifact_directory=handoff_fixture(tmp_path),
             evidence_directory=tmp_path / "evidence",
             demo_base_url=demo_bank,
+            openai_api_key=None,
+            langfuse_public_key=None,
+            langfuse_secret_key=None,
         )
     )
     try:
-        result = runtime.service.invoke(
-            "member.lookup_savings_balance",
-            "1.0.0",
+        paused = runtime.service.invoke(
+            "member.servicing_loan_payoff_quote",
+            "1.0.1",
             "harbor",
-            {"member_id": "99999"},
+            {"member_id": "12345", "payoff_date": "2026-09-20"},
         )
-
-        assert isinstance(result, BusinessOutcomeResult)
-        assert result.code == "member_not_found"
-        assert result.details == {"member_id": "***9999"}
-        verification = verify_run_manifest(
-            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
-            result.evidence_manifest,
-        )
-        assert verification.terminal_result_verified
-    finally:
-        runtime.close()
-
-
-def test_registered_artifact_classifies_permission_denial_with_masked_evidence(
-    demo_bank: str, tmp_path: Path
-) -> None:
-    repository = Path(__file__).resolve().parents[3]
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=repository / "capabilities",
-            evidence_directory=tmp_path / "evidence",
-            demo_base_url=demo_bank,
-        )
-    )
-    try:
-        result = runtime.service.invoke(
-            "member.lookup_savings_balance",
-            "1.0.2",
-            "harbor",
-            {"member_id": "12345"},
-        )
-
-        assert isinstance(result, FailureResult)
-        assert result.code == "permission_denied"
-        assert result.step_id == "search.submit"
-        assert result.expected == {"state": "member_results"}
-        assert result.observed == {"state": "permission_denied"}
-        verification = verify_run_manifest(
-            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
-            result.evidence_manifest,
-        )
-        assert verification.attachment_count == 1
-        manifest_path = tmp_path / "evidence" / result.evidence_manifest.removeprefix("evidence://")
-        manifest = json.loads(manifest_path.read_text())
-        attachment = manifest["attachments"][0]
-        assert attachment["retention_class"] == "failure"
-        assert attachment["redaction_directives"] == ["mask:full-viewport"]
-        assert runtime.live_sessions == {}
-    finally:
-        runtime.close()
-
-
-def test_real_output_failure_retains_masked_state_before_teardown(
-    demo_bank: str, tmp_path: Path
-) -> None:
-    repository = Path(__file__).resolve().parents[3]
-    artifact = load_artifact_yaml(
-        (repository / "capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
-    )
-    properties = dict(artifact.outputs.properties)
-    properties["available_balance"] = properties["available_balance"].model_copy(
-        update={"pattern": "^999\\.99$"}
-    )
-    modified = artifact.model_copy(
-        update={
-            "outputs": artifact.outputs.model_copy(update={"properties": properties}),
-            "provenance": artifact.provenance.model_copy(update={"artifact_content_hash": None}),
-        }
-    )
-    modified = modified.model_copy(
-        update={
-            "provenance": modified.provenance.model_copy(
-                update={"artifact_content_hash": artifact_content_hash(modified)}
-            )
-        }
-    )
-    artifact_path = tmp_path / "capabilities/member.lookup_savings_balance/1.0.0.yaml"
-    artifact_path.parent.mkdir(parents=True)
-    artifact_path.write_text(dump_artifact_yaml(modified))
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=tmp_path / "capabilities",
-            evidence_directory=tmp_path / "evidence",
-            demo_base_url=demo_bank,
-        )
-    )
-    try:
-        result = runtime.service.invoke(
-            "member.lookup_savings_balance",
-            "1.0.0",
-            "harbor",
-            {"member_id": "12345"},
-        )
-
-        assert isinstance(result, FailureResult)
-        assert result.code == "output_validation_failed"
-        verification = verify_run_manifest(
-            LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
-            result.evidence_manifest,
-        )
-        assert verification.attachment_count == 1
-        manifest_path = tmp_path / "evidence" / result.evidence_manifest.removeprefix("evidence://")
-        manifest = json.loads(manifest_path.read_text())
-        attachment = manifest["attachments"][0]
-        assert attachment["retention_class"] == "failure"
-        assert attachment["redaction_directives"] == ["mask:full-viewport"]
-        screenshot = (
-            tmp_path / "evidence" / attachment["key"].removeprefix("evidence://")
-        ).read_bytes()
-        assert screenshot.startswith(b"\x89PNG\r\n\x1a\n")
-        assert runtime.live_sessions == {}
-    finally:
-        runtime.close()
-
-
-def test_human_input_controls_original_browser_session(demo_bank: str) -> None:
-    clock = SystemClock()
-    driver = playwright_driver(demo_bank)
-    worker = SerialSessionWorker("handoff-integration")
-    session = worker.call(
-        lambda: driver.open("northstar_member_service", "harbor", "member_search")
-    )
-    leases = ControlLeaseService(InMemoryControlLeaseRepository(), clock)
-    router = InMemoryInterventionRouter(clock, leases)
-    run_id = str(new_id(EntityKind.RUN))
-    intervention_id = str(new_id(EntityKind.INTERVENTION))
-    initial = leases.create_for_automation(str(session.session_id))
-    observation = worker.call(session.observe)
-    router.open(
-        intervention_id=intervention_id,
-        run_id=run_id,
-        session_id=str(session.session_id),
-        expected_lease_version=initial.version,
-        code="unexpected_dialog",
-        step_id="search.member_id",
-        observation=observation,
-        context=InterventionContext(
-            run_mode=InterventionRunMode.REPLAY,
-            application_family="northstar_member_service",
-            tenant="harbor",
-            task_summary="Look up savings balance.",
-            surface_route=observation.route,
-            capability_id="member.lookup_savings_balance",
-            capability_version="2.0.0",
-            capability_name="Lookup savings balance",
-        ),
-    )
-    journal = InMemoryRunJournal(run_id, clock)
-    service = RuntimeInterventionService(
-        InterventionCoordinator(router, leases),
-        {intervention_id: LiveBrowserSession(worker, driver)},
-        {run_id: journal},
-        Lock(),
-    )
-    opened = service.get(intervention_id)
-    claimed = service.claim(intervention_id, opened.lease.version, "operator-7")
-
-    try:
-        member_field = worker.call(
-            lambda: session.page.frame_locator('iframe[title="Member operations"]')
-            .get_by_label("Member ID", exact=True)
-            .bounding_box()
-        )
-        assert member_field is not None
-        frame = service.viewport(intervention_id, claimed.lease.version, "operator-7")
+        assert isinstance(paused, InterventionRequiredResult), paused
+        service = runtime.intervention_service
+        opened = service.get(paused.intervention_id)
+        session_id = opened.intervention.session_id
+        claimed = service.claim(paused.intervention_id, opened.lease.version, "operator-test")
+        frame = service.viewport(paused.intervention_id, claimed.lease.version, "operator-test")
+        # Simulate a human selecting the sole Open action in the filtered list.
+        tokens = RapidOcrTextRecognizer().recognize(frame.content)
+        matches = [token for token in tokens if token.text.strip() == "Open"]
+        assert len(matches) == 1
+        region = matches[0].region
         service.send_input(
-            intervention_id,
+            paused.intervention_id,
             claimed.lease.version,
-            "operator-7",
+            "operator-test",
             HumanInputCommand(
                 client_sequence=frame.next_client_sequence,
                 source_frame_sequence=frame.sequence,
                 viewport=frame.viewport,
                 action=HumanPointerInput(
-                    int(member_field["x"] + member_field["width"] / 2),
-                    int(member_field["y"] + member_field["height"] / 2),
+                    region.x + region.width // 2, region.y + region.height // 2
                 ),
             ),
         )
-        frame = service.viewport(intervention_id, claimed.lease.version, "operator-7")
-        service.send_input(
-            intervention_id,
-            claimed.lease.version,
-            "operator-7",
-            HumanInputCommand(
-                client_sequence=frame.next_client_sequence,
-                source_frame_sequence=frame.sequence,
-                viewport=frame.viewport,
-                action=HumanTextInput("67890"),
-            ),
+        completed = service.begin_resume(
+            paused.intervention_id, claimed.lease.version, "operator-test"
         )
-
-        assert (
-            worker.call(
-                lambda: session.page.frame_locator('iframe[title="Member operations"]')
-                .get_by_label("Member ID", exact=True)
-                .input_value()
-            )
-            == "67890"
-        )
-        assert driver.active_session is session
-        assert str(driver.active_session.session_id) == str(session.session_id)
-        events = journal.events()
-        assert [event.event_type for event in events] == [
-            "human_input_dispatched",
-            "human_input_applied",
-            "human_input_dispatched",
-            "human_input_applied",
-        ]
-        assert "67890" not in repr(events)
-    finally:
-        service.terminate(
-            intervention_id,
-            service.get(intervention_id).lease.version,
-            "operator-7",
-            "Integration test complete.",
-        )
-
-
-def test_replay_resumes_after_validated_same_session_handoff(
-    demo_bank: str, tmp_path: Path
-) -> None:
-    repository = Path(__file__).resolve().parents[3]
-    artifact = load_artifact_yaml(
-        (repository / "capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
-    )
-    steps = list(artifact.steps)
-    steps[1] = steps[1].model_copy(update={"risk": Risk.SENSITIVE})
-    modified = artifact.model_copy(
-        update={
-            "capability": artifact.capability.model_copy(update={"risk": Risk.SENSITIVE}),
-            "steps": tuple(steps),
-            "policy": artifact.policy.model_copy(update={"maximum_risk": Risk.SENSITIVE}),
-            "provenance": artifact.provenance.model_copy(update={"artifact_content_hash": None}),
-        }
-    )
-    modified = modified.model_copy(
-        update={
-            "provenance": modified.provenance.model_copy(
-                update={"artifact_content_hash": artifact_content_hash(modified)}
-            )
-        }
-    )
-    artifact_path = tmp_path / "capabilities/member.lookup_savings_balance/1.0.0.yaml"
-    artifact_path.parent.mkdir(parents=True)
-    artifact_path.write_text(dump_artifact_yaml(modified))
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=tmp_path / "capabilities",
-            evidence_directory=tmp_path / "evidence",
-            demo_base_url=demo_bank,
-        )
-    )
-
-    try:
-        paused = runtime.service.invoke(
-            "member.lookup_savings_balance",
-            "1.0.0",
-            "harbor",
-            {"member_id": "12345"},
-        )
-        assert isinstance(paused, InterventionRequiredResult)
-        open_transition = runtime.intervention_service.get(paused.intervention_id)
-        claimed = runtime.intervention_service.claim(
-            paused.intervention_id, open_transition.lease.version, "operator-7"
-        )
-        frame = runtime.intervention_service.viewport(
-            paused.intervention_id, claimed.lease.version, "operator-7"
-        )
-        runtime.intervention_service.send_input(
-            paused.intervention_id,
-            claimed.lease.version,
-            "operator-7",
-            HumanInputCommand(
-                client_sequence=frame.next_client_sequence,
-                source_frame_sequence=frame.sequence,
-                viewport=frame.viewport,
-                action=HumanKeyInput(HumanKey.ENTER),
-            ),
-        )
-
-        completed = runtime.intervention_service.begin_resume(
-            paused.intervention_id, claimed.lease.version, "operator-7"
-        )
-
-        assert isinstance(completed.result, SuccessResult)
-        assert completed.result.outputs["member_id"] == "12345"
-        assert completed.result.outputs["available_balance"] == "1420.57"
-        assert completed.result.checkpoint.verified
-        assert completed.transition.intervention.status.value == "resolved"
-        event_types = [event.event_type for event in runtime.journals[paused.run_id].events()]
-        assert "human_input_applied" in event_types
-        assert "resume_checkpoint_verified" in event_types
-        assert "automation_resumed" in event_types
+        assert isinstance(completed.result, SuccessResult), completed.result
+        assert completed.result.outputs["payoff_amount"] == "$7,832.25"
+        assert completed.transition.intervention.session_id == session_id
+        events = runtime.journals[paused.run_id].events()
+        expected = {"human_input_applied", "resume_checkpoint_verified", "automation_resumed"}
+        assert expected <= {event.event_type for event in events}
         assert runtime.live_sessions == {}
         verification = verify_run_manifest(
             LocalEvidenceStore(tmp_path / "evidence", SystemClock()),
@@ -917,17 +214,5 @@ def test_replay_resumes_after_validated_same_session_handoff(
         )
         assert verification.terminal_result_verified
         assert verification.attachment_count == 2
-        manifest_path = (
-            tmp_path / "evidence" / completed.result.evidence_manifest.removeprefix("evidence://")
-        )
-        manifest = json.loads(manifest_path.read_text())
-        assert [entry["retention_class"] for entry in manifest["attachments"]] == [
-            "human_audit",
-            "human_audit",
-        ]
-        assert all(
-            entry["redaction_directives"] == ["mask:full-viewport"]
-            for entry in manifest["attachments"]
-        )
     finally:
         runtime.close()

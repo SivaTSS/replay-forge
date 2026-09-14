@@ -953,11 +953,11 @@ def _is_geometry_free_candidate(candidate: VisualLocatorCandidate) -> bool:
 
 def _validate_geometry_free_target(target: LocatorBundle) -> None:
     if target.candidates:
-        raise ValueError("schema 1.3 visual targets cannot contain DOM or coordinate locators")
+        raise ValueError("rendered-surface targets cannot contain DOM or coordinate locators")
     if not target.visual_candidates:
-        raise ValueError("schema 1.3 visual targets require rendered candidates")
+        raise ValueError("rendered-surface targets require rendered candidates")
     if not all(_is_geometry_free_candidate(candidate) for candidate in target.visual_candidates):
-        raise ValueError("schema 1.3 visual targets require geometry-free rendered candidates")
+        raise ValueError("rendered-surface targets require geometry-free rendered candidates")
 
 
 def _validate_geometry_free_condition(condition: Condition) -> None:
@@ -1010,7 +1010,7 @@ def _validate_no_persisted_coordinates(artifact: CapabilityArtifact) -> None:
 
 
 class CapabilityArtifact(ArtifactModel):
-    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4"]
+    schema_version: Literal["1.4"]
     capability: CapabilityMetadata
     compatibility: Compatibility
     inputs: ObjectContract
@@ -1026,19 +1026,16 @@ class CapabilityArtifact(ArtifactModel):
 
     @model_validator(mode="after")
     def validate_semantics(self) -> Self:
-        if self.schema_version == "1.3":
+        _validate_no_persisted_coordinates(self)
+        if not self.policy.allowed_route_patterns:
+            raise ValueError("schema 1.4 artifacts require non-empty route patterns")
+        if self.compatibility.rendered_surface:
             _validate_geometry_free_visual_contract(self)
-        if self.schema_version == "1.4":
-            _validate_no_persisted_coordinates(self)
-            if not self.policy.allowed_route_patterns:
-                raise ValueError("schema 1.4 artifacts require non-empty route patterns")
-            if self.compatibility.rendered_surface:
-                _validate_geometry_free_visual_contract(self)
-            if re.fullmatch(r"[0-9a-f]{64}", self.provenance.target_fingerprint) is None:
-                raise ValueError("schema 1.4 artifacts require a SHA-256 target fingerprint")
-            expected_evidence_prefix = f"evidence://{self.provenance.discovery_run_id}/"
-            if not self.provenance.evidence_manifest_key.startswith(expected_evidence_prefix):
-                raise ValueError("schema 1.4 provenance evidence must belong to its discovery run")
+        if re.fullmatch(r"[0-9a-f]{64}", self.provenance.target_fingerprint) is None:
+            raise ValueError("schema 1.4 artifacts require a SHA-256 target fingerprint")
+        expected_evidence_prefix = f"evidence://{self.provenance.discovery_run_id}/"
+        if not self.provenance.evidence_manifest_key.startswith(expected_evidence_prefix):
+            raise ValueError("schema 1.4 provenance evidence must belong to its discovery run")
         if self.capability.application_family != self.compatibility.application_family:
             raise ValueError("capability and compatibility application families must match")
         if self.capability.risk is not self.policy.maximum_risk:

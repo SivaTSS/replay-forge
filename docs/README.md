@@ -62,8 +62,7 @@ Capability and replay. [REPORT.md](../REPORT.md) is the required seven-part desi
 | Evidence bundle | Sanitized records proving a particular execution; not input to replay |
 
 “Reviewed configuration” means checked-in application or budget policy, not approval of
-each discovery result. New task artifacts use schema `1.4`; older immutable fixtures retain
-their documented legacy semantics.
+each discovery result. All three published task artifacts use schema `1.4`.
 
 ## Status vocabulary
 
@@ -83,10 +82,10 @@ Every page uses these labels consistently:
 |---|---|---|
 | Browser discovery | Implemented, Evidenced | OpenAI + screenshots + local OCR; DOM facts optional |
 | Browser replay | Implemented, Evidenced | Rendered semantic candidates first, optional DOM locators second; no model dependency |
-| Same-session handoff | Implemented, Evidenced | Polling PNG viewport and bounded HTTP input |
+| Same-session handoff | Implemented, Tested | Polling PNG viewport and bounded HTTP input |
 | Two tenant variants | Implemented, Evidenced | One artifact supports `harbor` and `summit` |
 | Persistence | Implemented for required durable objects | Atomic capability/assets and evidence on disk; live operational state in memory |
-| Canvas/non-DOM browser control | Implemented, Tested | Canvas-only visual-terminal and visual-workbench; OCR, frame-local relations, canonical signatures |
+| Canvas/non-DOM browser control | Implemented, Tested | One canvas-only servicing workstation; OCR, frame-local relations, canonical signatures |
 | Native desktop control | Designed | Surface ports exist; no OS adapter executes them |
 | Full operations UI | Cut | The UI is an intervention console only |
 | Distributed runtime | Cut | One process; one thread-affine worker per browser run |

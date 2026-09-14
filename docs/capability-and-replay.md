@@ -10,15 +10,10 @@ Discovery is temporary. The YAML artifact is the durable contract interpreted in
 verified trace → generic compiler → validated capability → immutable publication
 ```
 
-An artifact contains no Python, JavaScript, selector callback, or model transcript. New schema `1.4`
-targets also reject persisted coordinates and relative geometry. The task-independent discovery examples are
-[`member.transaction_investigation`](../capabilities/member.transaction_investigation/1.0.0.yaml),
-[`member.loan_payoff_quote`](../capabilities/member.loan_payoff_quote/1.0.0.yaml), and
-[`member.temporary_card_lock`](../capabilities/member.temporary_card_lock/1.0.0.yaml). The last
-demonstrates a task classified as reversible; its exact proof boundary is described below. The earlier
-[`member.lookup_savings_balance/3.2.0`](../capabilities/member.lookup_savings_balance/3.2.0.yaml)
-remains the visual portability and failure fixture. All use the same Pydantic definition in
-[`capabilities/models.py`](../backend/src/replayforge/capabilities/models.py).
+An artifact contains no Python, JavaScript, selector callback, or model transcript. All three
+published capabilities use schema `1.4`, which rejects persisted coordinates and relative geometry.
+They share the definition in [capabilities/models.py](../backend/src/replayforge/capabilities/models.py).
+The [evidence inventory](verification.md#scenario-matrix) binds each to its genuine discovery.
 
 Publication is the durability boundary. A validated discovery allocates the next semantic version,
 computes its canonical hash, and atomically exposes a complete YAML file at
@@ -50,24 +45,18 @@ flowchart LR
     G0 --> V[Provenance + SHA-256]
 ```
 
-For `member.lookup_savings_balance/3.2.0`, the external contract is:
+Every required output must be bound by a main-flow extraction and checked by the final checkpoint.
+Artifact validation rejects a missing binding or check before a browser opens.
 
-```text
-input  member_id: 5–10 digits
-output member_id, account_type, currency, available_balance, as_of
-result success | business_outcome | failure | intervention_required
-```
+| Capability | Inputs | Outputs | Risk |
+|---|---|---|---|
+| `member.transaction_investigation` | member ID, account ID, transaction reference | reference, account ID, amount, posted date, description, posting status | read-only |
+| `member.servicing_loan_payoff_quote` | member ID, payoff date | payoff amount, good-through date, confirmation reference | read-only |
+| `member.temporary_card_lock` | member ID, full card ID, reason | card ID, lock status, confirmation reference | reversible |
 
-Every required output must be bound by a main-flow extraction and checked by the final checkpoint. Artifact validation rejects a missing binding or check before a browser opens.
-
-The generic compiler has also produced three related banking tasks with distinct contracts,
-without task-specific code:
-
-| Capability | Inputs | Outputs | Steps | Risk |
-|---|---|---|---:|---|
-| `member.transaction_investigation` | member, merchant, date, amount | reference, merchant, posted date, amount, currency, status | 15 | read-only |
-| `member.loan_payoff_quote` | member, payoff date | principal, interest, payoff amount, currency, good-through date | 11 | read-only |
-| `member.temporary_card_lock` | member, card suffix | card suffix, lock status, effective time, confirmation reference | 12 | reversible |
+These contracts came from independent model planning and verified UI actions, not task adapters.
+Their [goal-only specifications](../config/servicing-discovery.yaml) state the requested business
+result without providing navigation instructions.
 
 Input references support dotted object paths for typing, selection, identity checks, and
 business-outcome details. Decimal strings must represent finite values. Missing or invalid inputs
@@ -79,30 +68,23 @@ them again with application policy.
 
 ## Worked example: temporary card lock
 
-This is a reading guide to the committed
-[`member.temporary_card_lock/1.0.0`](../capabilities/member.temporary_card_lock/1.0.0.yaml), not
-pseudocode or a newly generated run. Its [discovery manifest](../evidence/discovery-temporary-card-lock/manifest.json)
-links the recording commit, command, run identity, and file hashes.
+The [current card-lock discovery](../evidence/discovery-servicing-card-lock/manifest.json)
+uses the same servicing UI as the other two capabilities.
 
-| Stage | Actual artifact | Why it matters |
+| Stage | Recorded responsibility | Why it matters |
 |---|---|---|
-| Admit | Schema `1.4`; `web.v1`; `visual_member_workbench`; Harbor and Summit | Task semantics are separate from registered application facts |
-| Bind input | `member_id` and `card_last4`, both required strings | Steps reference input paths; discovery values are not recorded literals |
-| Find the card | Steps 1–6: member search → Checking → Card controls → card search | The repeated `Open` target is bound to the rendered Checking row, not a row index |
-| Mutate | Steps 7–8: `Review temporary lock` → `Confirm temporary lock` | The confirm step declares `reversible` risk and still passes independent policy evaluation |
-| Extract | Steps 9–12: `card_last4`, `lock_status`, `effective_at`, `confirmation_reference` | Label-to-value targets resolve from the current frame; each extraction checks its output contract |
-| Complete | `temporary_card_lock_verified`: route, four rendered labels, and four valid outputs | Success requires the recorded checkpoint, not merely dispatching the confirm click |
+| Admit | Registered rendered entry; Harbor and Summit | Application facts remain separate from the task |
+| Select | Bind member and full card ID through input references | No copied IDs, row indices, or saved click coordinates |
+| Verify | Extract selected identity and compare with input before mutation | Do not operate merely because a card page is visible |
+| Change | Enter reason, review, confirm temporary lock | Risk is evaluated at each action; review alone is not completion |
+| Verify result | Extract completed identity, exact locked status, and reference | A prior observation or a confirmation click cannot substitute for the result |
+| Complete | Verify all declared conditions and typed outputs | Success is a checked state, not the model's assertion |
 
-The labels “Review temporary lock” and “Confirm temporary lock” belong to the target application's
-workflow; they do not introduce a human reviewer into discovery.
-
-**Proof boundary:** this version's outputs are strings without semantic enums or constants. Its
-checkpoint does not assert `lock_status == Locked`, match the returned suffix to the input, or
-execute an unlock-and-restore cycle. The UI exposes an inverse operation, but that is not proof
-of transactional rollback. The artifact also declares no recovery, business-outcome, or failure
-branches; those mechanisms are demonstrated by the separate savings-balance fixtures. A stronger
-task-specific completion contract would require a new validated artifact version, not a rewritten
-historical evidence bundle.
+“Review” is the target application's confirmation screen, not a human approval stage in discovery.
+The UI exposes an inverse, but discovery does not execute an unlock-and-restore cycle or establish
+transactional rollback. The three current capabilities do not contain application-specific recovery,
+failure, or negative-outcome branches. Those interpreter mechanisms are tested independently;
+they are not falsely attributed to these discoveries.
 
 ## Targeting
 
@@ -118,7 +100,7 @@ target:
       match: exact
 ```
 
-The geometry-free `3.2.0` artifact uses the same shape for all durable targets:
+Durable labeled-value targets use the same generic shape:
 
 ```yaml
 target:
@@ -185,7 +167,11 @@ can return another field label as customer data. All regions come from the curre
 
 ### Current-frame visual signatures
 
-Repeated-row interfaces need more than a global icon match. Version `3.2.0` first resolves the rendered `Savings` label with OCR, identifies same-group components in the current frame, then compares each component with the hashed signature. Three identical account icons therefore remain safe: a global match is ambiguous, while the semantic group plus signature has one permitted match. The resulting click region is transient and tied to the current frame hash.
+Repeated-row interfaces need more than a global icon match. The optional signature resolver
+first resolves a rendered group label, identifies same-group components in the current frame,
+then compares each with a content-addressed signature. Its click region is transient and tied
+to the frame hash. This mechanism has synthetic vision tests; the three current discoveries use
+text/label relationships and do not need any committed image assets.
 
 | Repeated-icon option | Decision | Reason |
 |---|---|---|
@@ -198,15 +184,6 @@ Repeated-row interfaces need more than a global icon match. Version `3.2.0` firs
 The [vision policy](../config/vision-policy.yaml) owns the canonical signature size, similarity
 floor, uniqueness margin, and pixel/time budgets. DPR variation is handled by CSS-pixel screenshots
 and canonical normalization—not by storing a scale range in the artifact.
-
-### Legacy compatibility
-
-Immutable schema `1.0`–`1.3` fixtures remain loadable. Savings versions `3.0.0` and `3.1.0`
-retain recorded relative regions and image-anchor strategies; they are not the current compiler's
-output. Legacy template matching extracts bounded spatial peaks per scale and merges detections
-of the same physical icon. A close second match returns `target_ambiguous`; it never chooses the
-first match. [Registration compatibility](heterogeneity-and-compatibility.md#what-is-enforced)
-defines which legacy semantics are accepted.
 
 ## Replay pipeline
 
@@ -250,29 +227,17 @@ broken target lookup is not proof that an element is absent.
 | Business outcome | Workflow completed with a legitimate negative answer | No member exists | `business_outcome/member_not_found` |
 | Recoverable condition | A declared finite repair is safe | Known training notice | Recovery events, then continue |
 | Application failure | Target rendered a known terminal error | Permission denied | `failure/permission_denied` |
-| Mechanical failure | Automation could not resolve or act | Two savings links | `failure/target_ambiguous` |
+| Mechanical failure | Automation could not resolve or act | Two indistinguishable actions | `failure/target_ambiguous` |
 | Verification failure | Action ran but evidence does not prove the effect | Wrong member on detail page | `failure/checkpoint_mismatch` |
-| Safety pause | Action needs a person | Sensitive search submit in `2.0.0` | `intervention_required` |
+| Safety pause | Action needs a person | Sensitive action requiring an operator | `intervention_required` |
 
 Retry requires a named recoverable error, remaining attempts, and proof that the prior effect is
 absent. Recoveries are named and bounded, cannot invoke nested recoveries, and cannot contain
 sensitive actions. Exact limits are in [Constraints and policy](constraints-and-policy.md#execution-bounds).
 
-## Savings-balance fixture versions
-
-| Version | Purpose | Additional behavior |
-|---|---|---|
-| `1.0.0` | Normal model-free replay | Eight read-only steps; member-not-found outcome |
-| `1.0.1` | Recovery demonstration | Selects a known interstitial; dismisses it once |
-| `1.0.2` | Hard-failure demonstration | Selects permission denial; classifies expected/observed state |
-| `2.0.0` | Handoff demonstration | Marks search submission sensitive; policy pauses before click |
-| `3.0.0` | Visual-first demonstration | Full canvas-only flow using OCR, relative geometry, and one image anchor |
-| `3.1.0` | Prior visual portability fixture | Richer repeated-row canvas with contextual relative template |
-| `3.2.0` | Geometry-free responsive replay | Semantic candidates, frame-local graph, canonical signature, six viewport/DPR cases, delayed response, recovery, and declared visual failures |
-
-Omitting `version` resolves the latest publication for the requested capability ID. For the
-committed savings-balance fixtures, that is `3.2.0`; other task capabilities currently have `1.0.0`.
-Use savings `2.0.0` explicitly for handoff and `3.0.0` for the original visual-terminal fixture.
+Omitting `version` resolves the latest publication for that capability ID. Pin an explicit version
+for reproducible invocations. Old demo capabilities are intentionally absent from this distribution;
+the repository is not maintaining a migration path for deployed users.
 
 ## Schema and version decisions
 

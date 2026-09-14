@@ -37,7 +37,7 @@ def test_repeated_capture_uses_distinct_private_exports(
         [
             str(SCRIPT),
             "--spec",
-            str(ROOT / "config/demo-discovery.yaml"),
+            str(ROOT / "config/servicing-discovery.yaml"),
             "--workflow",
             "temporary_card_lock",
             "--output-directory",

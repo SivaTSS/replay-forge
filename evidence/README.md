@@ -1,65 +1,26 @@
 # Evidence
 
-These reviewer bundles were exported from runtime evidence produced through the public API against
-real Chromium. The exporter never overwrites a bundle. Each `manifest.json` binds the scenario to
-its command, commit, artifact where applicable, verified source manifest, redaction directives, and
-SHA-256 file hashes.
+Three genuine model discoveries target the single servicing workstation:
 
-```text
-runtime action
-  → redaction / screenshot masking
-  → ignored evidence/runtime store
-  → source-manifest verification
-  → immutable reviewer bundle below
-  → independent hash verification
-```
+| Bundle | Business task |
+|---|---|
+| [discovery-servicing-transaction](discovery-servicing-transaction/manifest.json) | Investigate a transaction and verify account/transaction identities |
+| [discovery-servicing-loan-payoff](discovery-servicing-loan-payoff/manifest.json) | Issue a non-binding dated payoff quote |
+| [discovery-servicing-card-lock](discovery-servicing-card-lock/manifest.json) | Temporarily lock the selected card and verify the result |
 
-| Bundle | Terminal result | What it proves |
-|---|---|---|
-| [`discovery-success`](discovery-success/) | `success` | Genuine OpenAI-guided discovery compiled a typed eight-step artifact |
-| [`discovery-transaction-investigation`](discovery-transaction-investigation/) | `success` | Genuine OpenAI discovery compiled the 15-step transaction capability |
-| [`discovery-loan-payoff`](discovery-loan-payoff/) | `success` | Genuine OpenAI discovery compiled the 11-step payoff capability |
-| [`discovery-temporary-card-lock`](discovery-temporary-card-lock/) | `success` | Genuine OpenAI discovery compiled and validated the reversible 12-step card-lock capability |
-| [`replay-success`](replay-success/) | `success` | Version `1.0.0` replayed without model decisions and verified five outputs |
-| [`replay-member-not-found`](replay-member-not-found/) | `business_outcome` | A legitimate “no member” state is not reported as a crash |
-| [`replay-recovery`](replay-recovery/) | `success` | Version `1.0.1` used one declared interstitial recovery |
-| [`replay-hard-failure`](replay-hard-failure/) | `failure` | Version `1.0.2` classified permission denial and captured a masked frame |
-| [`human-handoff`](human-handoff/) | `success` | Version `2.0.0` paused, transferred the live session, validated fresh state, and resumed |
-| [`tenant-reuse`](tenant-reuse/) | `success` | The same `1.0.0` artifact and hash replayed on Summit |
-
-## Verify
-
-From the repository root:
+Each suite automatically validates Harbor and Summit before publication. The manifest binds the
+actual recording run, source revision, command, published artifact, redaction metadata, and hashes.
+The primary result can name its draft version; suite finalization assigns the published version
+and validated tenant set.
 
 ```bash
-UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bundles.py evidence
+uv run python scripts/verify_evidence_bundles.py evidence
 ```
 
-The verifier accepts only the files declared by the manifest and rejects symlinks, oversized JSON,
-unsafe text, invalid hashes, unordered or cross-run events, missing terminal results, artifact
-mismatches, and invalid attachment signatures.
+Bundles contain `artifact.yaml`, `events.jsonl`, `result.json`, and `manifest.json`.
+Discovery screenshots are transient; these are structured evidence bundles, not retained raw
+PII-bearing page captures. Private runtime records are ignored and are not submission files.
 
-## Bundle shape
-
-```text
-<scenario>/
-├── manifest.json
-├── events.jsonl
-├── result.json
-├── artifact.yaml       discovery only
-└── screenshots/*.png  failure/handoff when required
-```
-
-Playwright trace archives are not included. Masked screenshots are the selected richer failure and handoff signal. Unit fixtures are never represented as genuine run evidence. See [Verification](../docs/verification.md) for the proof matrix and [Safety and handoff](../docs/safety-and-handoff.md) for the redaction path.
-
-SHA-256 proves that files still match the reviewed manifest; it is not a digital signature. A
-malicious party able to rewrite both files and manifest could create a new internally consistent
-bundle. The committed Git revision is the reviewer-visible anchor for these bundles.
-
-## Rich evidence examples
-
-| Before handoff: values masked | After human action: values masked |
-|---|---|
-| ![Masked member search before handoff](human-handoff/screenshots/001.png) | ![Masked member results after handoff](human-handoff/screenshots/002.png) |
-
-![Rendered permission failure captured before teardown](replay-hard-failure/screenshots/001.png)
+Old-UI runs were removed, not relabeled as workstation runs. Browser regressions for policy-driven
+handoff use explicit temporary fixtures and real live control, not fabricated discovery evidence.
+See [verification](../docs/verification.md) for the precise proof boundaries.

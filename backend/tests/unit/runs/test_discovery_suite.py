@@ -1,6 +1,5 @@
 from dataclasses import replace
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 
@@ -11,7 +10,6 @@ from replayforge.capabilities.models import (
     TextCondition,
 )
 from replayforge.capabilities.registry import InMemoryCapabilityRegistry
-from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.engine import DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.policy.types import Risk
@@ -23,6 +21,7 @@ from replayforge.runs.discovery_suite import (
 )
 from replayforge.runs.results import ArtifactPrivacyDiagnostic, FailureResult
 from replayforge.shared.clock import FrozenClock
+from tests.artifacts import sample_artifact
 
 
 class Executor:
@@ -39,9 +38,8 @@ class Executor:
 
 
 def service_for(
-    path: str, scenario_artifacts: tuple[CapabilityArtifact, ...] = ()
+    artifact: CapabilityArtifact, scenario_artifacts: tuple[CapabilityArtifact, ...] = ()
 ) -> DiscoverySuiteService:
-    artifact = load_artifact_yaml(Path(path).read_text())
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime(2026, 9, 10, tzinfo=UTC)))
     artifacts = (artifact, *scenario_artifacts)
     call_index = 0
@@ -57,7 +55,7 @@ def service_for(
 
 
 def test_read_only_suite_publishes_only_at_finalize() -> None:
-    service = service_for("capabilities/member.lookup_savings_balance/1.0.0.yaml")
+    service = service_for(sample_artifact())
     suite = service.create(
         goal="Look up a member balance",
         application_family="northstar_member_service",
@@ -85,7 +83,7 @@ def test_read_only_suite_publishes_only_at_finalize() -> None:
 
 
 def test_suite_rejects_contradictory_lifecycle_state() -> None:
-    service = service_for("capabilities/member.lookup_savings_balance/1.0.0.yaml")
+    service = service_for(sample_artifact())
     suite = service.create(
         goal="Look up a member balance",
         application_family="northstar_member_service",
@@ -151,7 +149,7 @@ def test_suite_snapshot_omits_failure_values_and_free_text() -> None:
 
 
 def test_sensitive_suite_is_blocked_without_publication() -> None:
-    service = service_for("capabilities/member.lookup_savings_balance/2.0.0.yaml")
+    service = service_for(sample_artifact(sensitive=True))
     suite = service.create(
         goal="Reach a sensitive confirmation",
         application_family="northstar_member_service",
@@ -172,8 +170,7 @@ def test_sensitive_suite_is_blocked_without_publication() -> None:
 
 
 def test_reversible_suite_publishes_after_validation() -> None:
-    path = "capabilities/member.lookup_savings_balance/1.0.0.yaml"
-    artifact = load_artifact_yaml(Path(path).read_text())
+    artifact = sample_artifact()
     artifact = artifact.model_copy(
         update={
             "capability": artifact.capability.model_copy(update={"risk": Risk.REVERSIBLE}),
@@ -200,7 +197,7 @@ def test_reversible_suite_publishes_after_validation() -> None:
 
 
 def test_finalize_preserves_validated_tenant_variant() -> None:
-    service = service_for("capabilities/member.lookup_savings_balance/1.0.0.yaml")
+    service = service_for(sample_artifact())
     suite = service.create(
         goal="Look up a member balance",
         application_family="northstar_member_service",
@@ -222,8 +219,7 @@ def test_finalize_preserves_validated_tenant_variant() -> None:
 
 
 def test_scenario_is_bound_to_a_verified_primary_prefix() -> None:
-    path = "capabilities/member.lookup_savings_balance/1.0.0.yaml"
-    primary_artifact = load_artifact_yaml(Path(path).read_text())
+    primary_artifact = sample_artifact()
     branch_condition = TextCondition(kind="text", value="No matching member", match=MatchMode.EXACT)
     branch_step = primary_artifact.steps[-1].model_copy(
         update={
@@ -249,7 +245,7 @@ def test_scenario_is_bound_to_a_verified_primary_prefix() -> None:
             ),
         }
     )
-    service = service_for(path, (branch_artifact,))
+    service = service_for(primary_artifact, (branch_artifact,))
     suite = service.create(
         goal="Look up a member balance",
         application_family="northstar_member_service",

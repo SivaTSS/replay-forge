@@ -627,7 +627,7 @@ class PlaywrightSurfaceSession:
         )
         # A captured coordinate is only a discovery-time hint. Once converted,
         # publish the geometry-free rendered signature and discard every
-        # legacy visual/DOM alternative so schema 1.3 cannot carry a mixed
+        # visual/DOM alternative so the artifact cannot carry a mixed
         # target contract.
         rendered = tuple(
             item

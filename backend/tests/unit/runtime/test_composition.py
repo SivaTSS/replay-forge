@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from replayforge.capabilities.registry import CapabilityNotFoundError
+from replayforge.capabilities.registry import CapabilityNotFoundError, InMemoryCapabilityRegistry
 from replayforge.runtime.composition import (
     build_runtime,
     effective_replay_policy,
@@ -17,10 +17,12 @@ from replayforge.runtime.composition import (
     origin_ready,
 )
 from replayforge.runtime.settings import RuntimeSettings
+from replayforge.shared.clock import SystemClock
+from tests.artifacts import sample_artifact
 
 
 def artifact_directory() -> Path:
-    return Path(__file__).resolve().parents[4] / "capabilities"
+    return Path(__file__).resolve().parents[2] / "fixtures/catalog"
 
 
 def test_settings_validate_origin_and_artifact_directory() -> None:
@@ -169,8 +171,8 @@ def test_runtime_policy_supports_capability_scoped_select_actions() -> None:
 
 
 def test_registry_loads_immutable_handoff_version_with_sensitive_submit() -> None:
-    registry = load_registry(artifact_directory())
-    record = registry.get("member.lookup_savings_balance", "2.0.0")
+    registry = InMemoryCapabilityRegistry(SystemClock())
+    record = registry.publish(sample_artifact(sensitive=True))
 
     policy = effective_replay_policy(record, "http://127.0.0.1:3001")
 
@@ -180,9 +182,10 @@ def test_registry_loads_immutable_handoff_version_with_sensitive_submit() -> Non
     assert policy.maximum_risk.value == "sensitive"
 
 
-def test_empty_registry_directory_fails_startup(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="no versioned"):
-        load_registry(tmp_path)
+def test_empty_registry_can_bootstrap_first_discovery(tmp_path: Path) -> None:
+    registry = load_registry(tmp_path)
+    with pytest.raises(CapabilityNotFoundError):
+        registry.get("missing.capability", "1.0.0")
 
     with pytest.raises(CapabilityNotFoundError):
         load_registry(artifact_directory()).get("missing.capability", "1.0.0")

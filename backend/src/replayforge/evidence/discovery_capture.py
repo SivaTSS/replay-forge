@@ -10,6 +10,8 @@ from typing import Any
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from pydantic import ValidationError
+
 from replayforge.capabilities import (
     CapabilityArtifact,
     artifact_content_hash,
@@ -162,7 +164,10 @@ def validate_result(result: dict[str, Any]) -> CapabilityArtifact:
     artifact_payload = result.get("artifact")
     if not isinstance(artifact_payload, dict):
         raise RuntimeError("successful discovery omitted its compiled artifact")
-    artifact = CapabilityArtifact.model_validate(artifact_payload)
+    try:
+        artifact = CapabilityArtifact.model_validate(artifact_payload)
+    except ValidationError:
+        raise RuntimeError("compiled artifact failed schema validation") from None
     provenance = artifact.provenance
     if provenance.discovery_run_id != run_id:
         raise RuntimeError("artifact provenance does not identify the discovery run")

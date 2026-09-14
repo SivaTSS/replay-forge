@@ -4,7 +4,7 @@
 
 ## Contract
 
-Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation inputs, and step/time limits. A contract-planning pass first produces a typed `CapabilityDraftSpec`; the action loop then returns a validated draft, a typed failure, or an intervention request. The legacy one-shot endpoint publishes read-only drafts for compatibility; discovery suites keep drafts unpublished until finalization.
+Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation inputs, and step/time limits. A contract-planning pass first produces a typed `CapabilityDraftSpec`; the action loop then returns a validated draft, a typed failure, or an intervention request. Direct discovery publishes read-only results; discovery suites keep drafts unpublished until deterministic validation and finalization. The documented three-flow capture uses suites.
 
 It is available only when all three conditions hold:
 
@@ -65,6 +65,7 @@ sequenceDiagram
 - Active-element summary and state fingerprint.
 - A current PNG screenshot.
 - At most 20 recent normalized actions.
+- OCR text from the screen before the last completed action, explicitly historical and transient.
 - Allowed action types and maximum risk.
 
 ### What the model may return
@@ -239,50 +240,26 @@ asset capture is explicitly enabled; [runtime defaults prohibit new pixel retent
 Published schema `1.4` targets retain semantic identity, not coordinates or relative regions.
 Replay re-resolves every action from a fresh frame and never calls the model.
 
-The richer workstation's [capture specification](../config/servicing-discovery.yaml) describes a
-loan-payoff discovery and model-free Summit validation. The recipe itself is not proof; the
-[exported genuine run](../evidence/discovery-servicing-loan-payoff/manifest.json) records execution.
-Synthetic screenshot/member/loan data transmission
-was explicitly authorized on 2026-09-14. Early genuine attempts exposed several boundaries:
+The [goal-only specification](../config/servicing-discovery.yaml) requests three different outcomes
+on the same workstation. The [evidence inventory](verification.md#scenario-matrix) identifies
+the actual model runs; a specification or scripted browser test is not discovery evidence.
 
-| Attempt | Observed result | Follow-up |
-|---|---|---|
-| `run_433b2bd68bb84769a7a1d4df4e79f628` | Final equality check failed after extraction returned neighboring labels | Corrected field/value association; tested both tenants |
-| `run_c5de13d213d24a65af06f71a0bbcf979` | Repeated ambiguous proposals exhausted the provider budget | Added rejected-locator context and intent-based repeat detection |
-| `run_e3bc149bcb234864a0b6598056ca006d` | Primary discovery succeeded; Summit replay failed before opening the member | Reproduced a missed input rectangle being associated with a distant table cell |
-| `run_d46aeb169b7e41edadfc83597f111afd` | Model escalated after ambiguous navigation | Made `below` column-aligned, symmetric with the row-aligned `right_of` relation |
-| `run_fa3c4ff44a114da483b3b49e60463d86` | Quote issued, but the model asserted equality before any extraction | Added explicit unbound-condition rejection; independently checked production typing and date extraction |
-| `run_4489ea9042714e39b9c39847a1ed8705` | Keyboard dispatch failed after entering the member query | Constrained key names and validated single-chord structure before dispatch |
-| `run_4a543f86096e430d828b3e4cab442666` | Model skipped the supplied date; the bound equality check correctly failed | Clarified that visible defaults cannot substitute for supplied symbolic inputs |
-| `run_55ef5f4a7b244b23aebc0b88b449028b` | All outputs captured and equality verified twice; unchanged-screen guard stopped completion | Marked successful assertions in model history and treated verified observational actions as non-visual progress |
-| `run_4368c049fd434ae88a2dffa6a60c2db8` | Published after both same-input tenant validations; reuse audit found a literal financial value in an extraction target | Added automatic value-bound extraction rejection and captured-output publication checks; artifact excluded from deliverables |
+Real failures drove generic fixes: field/value association rejects neighboring labels; relation
+matching rejects ambiguous actions; symbolic input targets prevent copied record IDs; unbound
+conditions reject assertions before extraction; supplied form values cannot be replaced by defaults;
+and publication rejects private literals, including captured outputs. None is a bank-specific recipe.
 
-None of these attempts established a reusable workstation capability. Their local runtime records
-are not relabeled as successful portable evidence bundles.
+The transaction run `run_098f82d1d9a249a5a05860fbbd862dcf` on `699442c` completed after fixing
+contradictory output-constraint defaults and repeated-anchor resolution. Its published artifact
+passed both tenant validations. Earlier failed attempts remain private audit records, not deliverable
+success bundles.
 
-The subsequent run `run_71db81152027445bb3613a7360f75697`, on runtime commit `a06fe8a`,
-completed with the new guards and published `member.servicing_loan_payoff_quote/1.0.1` after
-automatic Summit and Harbor replay validation. Its 11 recorded steps bind both invocation inputs,
-extract all three outputs from the issued receipt using stable field labels, and retain the
-good-through/input-date equality assertion. The earlier value-bound `1.0.0` was moved unchanged
-to ignored local diagnostic storage, not overwritten or included among deliverables.
-The primary terminal record identifies the pre-publication draft; suite finalization adds the
-validated tenant and assigns the immutable `1.0.1` version, so its published hash differs.
-Subsequent model-free tests, with no provider credentials configured, reused that unchanged
-artifact on both tenants at 1440×900 with a different member and payoff date. Exact output checks
-passed after correcting the shared transform semantics described above.
-
-Transaction privacy-fix verification on runtime commit `a0a9e66` remains **incomplete**:
-
-| Genuine attempt | Observed result |
-|---|---|
-| `run_674002c2e5f64e42a3cbad3d4f168f01` | Model escalated with `target_ambiguous` before publication |
-| `run_baf04bcd9b9341b2bf0b4d659cd252cc` | Model escalated with `inconsistent_output_requirements` after its first extraction |
-
-Neither attempt reached the publication guard, produced a capability, or ran tenant validation.
-Both paused test sessions were explicitly terminated without human UI actions; their private
-runtime evidence remains intact. Unit regressions verify the schema-symbol and annotation
-redaction fixes, but these two live attempts do not establish end-to-end transaction success.
+A card-lock confirmation exposed missing observation context: the current screen no longer
+showed the inverse operation previously visible on the preceding screen. Discovery now sends
+the OCR text from the screen before the last completed action, alongside the current screenshot.
+This single-screen historical context is transient and is not persisted in events or artifacts.
+It may explain an observed affordance but cannot establish a current target or override policy.
+This was chosen over a task-specific risk exception, unbounded screenshot history, or blind retries.
 
 ## Provider decision
 

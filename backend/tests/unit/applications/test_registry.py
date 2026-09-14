@@ -10,14 +10,14 @@ from replayforge.applications.registry import load_application_registry
 def test_checked_in_catalog_resolves_symbolic_target() -> None:
     registry = load_application_registry(Path("config/applications.yaml"))
 
-    launch = registry.resolve("northstar_member_service", "summit", "visual_member_workbench")
+    launch = registry.resolve("northstar_member_service", "summit", "legacy_servicing")
 
-    assert launch.url == "http://127.0.0.1:3001/summit/visual-workbench"
+    assert launch.url == "http://127.0.0.1:3001/summit/servicing"
     assert launch.rendered_surface is True
-    assert launch.entry_points["member_search"].endswith("/summit")
+    assert set(launch.entry_points) == {"legacy_servicing"}
 
 
-def test_servicing_workstation_is_a_separate_rendered_entry_point() -> None:
+def test_servicing_workstation_is_the_only_rendered_entry_point() -> None:
     registry = load_application_registry(Path("config/applications.yaml"))
     launch = registry.resolve("northstar_member_service", "harbor", "legacy_servicing")
     assert launch.url == "http://127.0.0.1:3001/harbor/servicing"
@@ -27,17 +27,16 @@ def test_servicing_workstation_is_a_separate_rendered_entry_point() -> None:
     assert registration.entry_points["legacy_servicing"].required_landmarks[0].value == (
         "Branch member directory"
     )
-    assert registration.entry_points["visual_member_workbench"].path_template == (
-        "/{tenant}/visual-workbench"
-    )
+    assert set(registration.entry_points) == {"legacy_servicing"}
+    assert registration.policy.allowed_route_patterns == frozenset({"/servicing"})
 
 
 def test_registration_reads_do_not_expose_mutable_registry_state() -> None:
     registry = load_application_registry(Path("config/applications.yaml"))
     registry.all()[0].entry_points.clear()
-    registry.get("northstar_member_service").route_aliases.clear()
+    registry.get("northstar_member_service").route_aliases["/injected"] = "/servicing"
     assert registry.all()[0].entry_points
-    assert registry.all()[0].route_aliases
+    assert registry.all()[0].route_aliases == {}
 
 
 @pytest.mark.parametrize(

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -9,7 +10,7 @@ from replayforge.applications.compatibility import (
     validate_rendered_readiness,
 )
 from replayforge.applications.registry import load_application_registry
-from replayforge.capabilities.models import CapabilityArtifact
+from replayforge.capabilities.models import CapabilityArtifact, Landmark
 from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.surfaces.models import SurfaceError
 from replayforge.surfaces.ports import SurfaceSession
@@ -20,7 +21,10 @@ def test_rendered_readiness_requires_registered_landmarks(
     required_present: bool, forbidden_present: bool
 ) -> None:
     launch = load_application_registry(Path("config/applications.yaml")).resolve(
-        "northstar_member_service", "summit", "visual_member_workbench"
+        "northstar_member_service", "summit", "legacy_servicing"
+    )
+    launch = replace(
+        launch, forbidden_landmarks=(Landmark(kind="visual_text", value="Unavailable"),)
     )
     session = Mock(spec=SurfaceSession)
     session.wait_until.return_value = required_present
@@ -44,7 +48,7 @@ def test_every_committed_capability_matches_its_registered_tenants() -> None:
 def test_changed_contract_is_rejected(field: str, value: Any) -> None:
     registry = load_application_registry(Path("config/applications.yaml"))
     artifact = load_artifact_yaml(
-        Path("capabilities/member.temporary_card_lock/1.0.0.yaml").read_text()
+        Path("capabilities/member.servicing_loan_payoff_quote/1.0.1.yaml").read_text()
     )
     changed = artifact.model_copy(
         update={"compatibility": artifact.compatibility.model_copy(update={field: value})}
@@ -61,6 +65,9 @@ def test_unknown_application_and_entry_points_are_rejected(
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
     with pytest.raises(SurfaceError, match="not registered"):
         validate_application_compatibility(registry, artifact, "unregistered")
+    artifact = load_artifact_yaml(
+        Path("capabilities/member.servicing_loan_payoff_quote/1.0.1.yaml").read_text()
+    )
     changed = artifact.model_copy(
         update={
             "policy": artifact.policy.model_copy(

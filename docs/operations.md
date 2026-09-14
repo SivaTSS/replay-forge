@@ -46,8 +46,8 @@ There are no implemented capability-list, run-read, event-read, evidence-downloa
 ```json
 {
   "tenant": "harbor",
-  "version": "3.2.0",
-  "inputs": {"member_id": "12345"}
+  "version": "1.0.1",
+  "inputs": {"member_id": "12345", "payoff_date": "2026-09-20"}
 }
 ```
 
@@ -103,17 +103,13 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 
 ## Discovery publication and capture
 
-The expanded [demo workstation](demo-bank.md) is registered separately as `legacy_servicing`.
-The workflow capture commands below still exercise the earlier `visual_member_workbench` fixture;
-they do not discover the new workstation. Restart the runtime to load a changed registration catalog.
+The [demo workstation](demo-bank.md) has one entry point, `legacy_servicing`. All three
+business capabilities use it. Restart the runtime after changing registration.
 
-The `visual_member_workbench` entry point is one canvas-only application with three substantial
-tasks: transaction investigation, loan payoff calculation, and temporary card locking. The first
-two are read-only; card locking is classified as reversible and the target exposes `Unlock card`.
-The committed artifact does not execute that inverse or prove rollback; see its
-[checkpoint boundary](capability-and-replay.md#worked-example-temporary-card-lock).
-The suite runner discovers each task independently, validates it on Harbor
-and Summit, and writes its own immutable artifact. No post-discovery reviewer exists.
+Run `uv run python scripts/capture_demo_workflows.py --spec config/servicing-discovery.yaml --timeout-seconds 600`.
+Use `--workflow temporary_card_lock` (or another key in that file) to select one goal.
+The runner checks the draft's ID, risk, and requested input/output contract before validation
+or publication, then validates tenant reuse and finalizes automatically. No post-discovery reviewer exists.
 
 The runtime publishes each new capability version to its configured registry. The capture command
 exports a separate owner-only copy under a fresh `.local/discovery-captures/capture-*` directory;

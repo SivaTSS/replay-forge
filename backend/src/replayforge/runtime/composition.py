@@ -96,10 +96,8 @@ _PLATFORM_ACTIONS = frozenset(
 
 
 def load_registry(directory: Path) -> CapabilityRegistry:
-    registry = LocalCapabilityRegistry(directory)
-    if not registry.all():
-        raise ValueError("artifact directory contains no versioned YAML artifacts")
-    return registry
+    # First discovery must be possible without seeding an application-specific artifact.
+    return LocalCapabilityRegistry(directory)
 
 
 def origin_ready(origin: str) -> bool:
@@ -138,11 +136,9 @@ def effective_replay_policy(
     allowed_routes = (
         application.policy.allowed_route_patterns
         if application is not None
-        else _artifact_route_patterns(artifact)
+        else artifact.policy.allowed_route_patterns
     )
-    capability_routes = getattr(artifact.policy, "allowed_route_patterns", None)
-    if capability_routes:
-        allowed_routes = frozenset(capability_routes).intersection(allowed_routes)
+    allowed_routes = artifact.policy.allowed_route_patterns.intersection(allowed_routes)
     application_actions = (
         application.policy.allowed_action_types if application is not None else _PLATFORM_ACTIONS
     )
@@ -182,27 +178,6 @@ def effective_replay_policy(
         ),
     )
     return EffectivePolicy.intersect(*layers)
-
-
-def _artifact_route_patterns(artifact: object) -> frozenset[str]:
-    """Infer a legacy route allowlist from old immutable artifacts without app configuration."""
-    if not hasattr(artifact, "model_dump"):
-        return frozenset({"/"})
-    payload = artifact.model_dump(mode="json")
-    routes: set[str] = set()
-
-    def walk(value: object) -> None:
-        if isinstance(value, dict):
-            if value.get("kind") == "route" and isinstance(value.get("pattern"), str):
-                routes.add(value["pattern"])
-            for nested in value.values():
-                walk(nested)
-        elif isinstance(value, list):
-            for nested in value:
-                walk(nested)
-
-    walk(payload)
-    return frozenset(routes or {"/"})
 
 
 class RetainedSurfaceDriver(Protocol):

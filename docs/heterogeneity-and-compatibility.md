@@ -31,15 +31,13 @@ flowchart TB
 | Every step | Unique current target, policy, declared effect | Detect runtime faults and local incompatibility where they occur |
 | Completion | Business checkpoint and typed outputs | A compatible-looking screen alone cannot prove success |
 
-Older schema 1.0–1.3 artifacts predate registered base-variant/rendered-mode semantics. Their
-immutable bytes and hashes are preserved; they receive surface-contract and registered readiness checks,
-but registration does not reinterpret their historical base labels. This is an explicit compatibility
-rule, not a silent artifact migration.
+Only artifact schema 1.4 is accepted. Older schemas bypassed some registered base-variant,
+rendered-mode, geometry, and provenance checks; retaining a compatibility exception is unnecessary
+without deployed users. Old artifacts must be rediscovered, not silently migrated or grandfathered.
 
 The artifact's descriptive fingerprint can include tenant branding: Harbor's discovered heading
 is not Summit's heading. It is not silently promoted to a universal readiness condition. Application
-registration explicitly declares the shared landmarks to enforce; the workbench uses `Member Search`
-and forbids `System maintenance`. Artifact preconditions and per-step conditions remain executable.
+registration explicitly declares the shared landmarks to enforce; the workstation requires `Branch member directory`. Artifact preconditions and per-step conditions remain executable.
 
 The provenance `target_fingerprint` identifies the discovered observation. It is not an application
 version or a runtime equality gate: customer values, tenant branding, and viewport changes alter

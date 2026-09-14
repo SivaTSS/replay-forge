@@ -1,19 +1,23 @@
 schema_version: '1.4'
 capability:
-  id: member.loan_payoff_quote
-  version: 1.0.0
-  name: Calculate Auto Loan Payoff Quote
-  description: For the specified synthetic member, open the Auto loan, calculate a
-    payoff quote using the supplied payoff date, and return the quote details without
-    submitting a payment.
+  id: member.temporary_card_lock
+  version: 1.0.1
+  name: Temporarily lock card
+  description: Verify the supplied member_id and card_id through the card-maintenance
+    workflow, record the supplied maintenance reason, apply a temporary lock to the
+    selected card, and verify the completed result by re-extracting card_id and checking
+    that it matches the supplied card_id and that the final lock status is exactly
+    locked. Return only the completed-result card_id, lock_status, and confirmation_reference.
+    The observed surface does not yet expose an explicit inverse operation, so this
+    capability is classified as sensitive rather than reversible.
   application_family: northstar_member_service
   surface: web
-  risk: read_only
+  risk: reversible
   tags:
-  - member_service
-  - auto_loan
-  - payoff_quote
-  - financial
+  - member_servicing
+  - card_maintenance
+  - temporary_lock
+  - verified_result
 compatibility:
   application_family: northstar_member_service
   base_variant: standard
@@ -21,32 +25,42 @@ compatibility:
   - harbor
   - summit
   surface_contract: web.v1
-  entry_point: visual_member_workbench
+  entry_point: legacy_servicing
   rendered_surface: true
   fingerprint:
     required_landmarks:
     - kind: visual_text
-      value: NORTHSTAR MEMBER SERVICE
+      value: Branch member directory
     forbidden_landmarks: []
 inputs:
   type: object
   additional_properties: false
   required:
   - member_id
-  - payoff_date
+  - card_id
+  - reason
   properties:
     member_id:
       type: string
       description: Invocation value for member id.
-      data_classification: customer_identifier
+      data_classification: personal
       persistence: redacted
       required: []
       properties: {}
       additional_properties: false
       enum: []
-    payoff_date:
+    card_id:
       type: string
-      description: Invocation value for payoff date.
+      description: Invocation value for card id.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    reason:
+      type: string
+      description: Invocation value for reason.
       data_classification: personal
       persistence: redacted
       required: []
@@ -57,52 +71,34 @@ outputs:
   type: object
   additional_properties: false
   required:
-  - principal_balance
-  - accrued_interest
-  - payoff_amount
-  - currency
-  - good_through_date
+  - card_id
+  - lock_status
+  - confirmation_reference
   properties:
-    principal_balance:
+    card_id:
       type: string
-      description: Principal balance shown in the payoff quote.
-      data_classification: financial
+      description: Card identifier re-extracted from the completed result after the
+        state change.
+      data_classification: customer_identifier
       persistence: redacted
       required: []
       properties: {}
       additional_properties: false
       enum: []
-    accrued_interest:
+    lock_status:
       type: string
-      description: Accrued interest shown in the payoff quote.
-      data_classification: financial
+      description: Final lock status returned for the card after the temporary lock
+        operation.
+      data_classification: operational
       persistence: redacted
       required: []
       properties: {}
       additional_properties: false
       enum: []
-    payoff_amount:
+    confirmation_reference:
       type: string
-      description: Total payoff amount shown in the quote.
-      data_classification: financial
-      persistence: redacted
-      required: []
-      properties: {}
-      additional_properties: false
-      enum: []
-    currency:
-      type: string
-      description: Currency indicated for the payoff quote amounts.
-      data_classification: financial
-      persistence: redacted
-      required: []
-      properties: {}
-      additional_properties: false
-      enum: []
-    good_through_date:
-      type: string
-      description: Date through which the payoff quote is valid.
-      data_classification: financial
+      description: Confirmation reference returned by the completed card-lock operation.
+      data_classification: operational
       persistence: redacted
       required: []
       properties: {}
@@ -110,10 +106,10 @@ outputs:
       enum: []
 preconditions:
 - kind: route
-  pattern: /members/search
+  pattern: /servicing
 steps:
-- id: step_01_type_member_id_input
-  name: Member ID input
+- id: step_01_type_member_id_name_city_search_field
+  name: Member ID / name / city search field
   action:
     kind: type
     value:
@@ -121,14 +117,14 @@ steps:
       path: member_id
     clear: true
   target:
-    description: Member ID input
+    description: Member ID / name / city search field
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: rendered_labeled_control
-      label: Member ID
+      label: Member ID / name / city
       label_match: exact
       control_kind: text_input
     candidates: []
@@ -153,19 +149,43 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_02_click_search_button
-  name: Search button
+- id: step_02_press_keys_press_keys
+  name: press_keys
+  action:
+    kind: press_keys
+    keys:
+    - Enter
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_03_click_card_maintenance_navigation_control
+  name: Card maintenance navigation control
   action:
     kind: click
   target:
-    description: Search button
+    description: Card maintenance navigation control
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: rendered_text
-      value: Search
+      value: Card maintenance
       match: exact
     candidates: []
     state:
@@ -189,22 +209,58 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_03_click_open_control_for_auto_loan_row
-  name: Open control for Auto loan row
+- id: step_04_click_open_action_for_the_single_member_inquir
+  name: Open action for the single member inquiry result
   action:
     kind: click
   target:
-    description: Open control for Auto loan row
+    description: Open action for the single member inquiry result
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Open
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_05_click_card_maintenance_control_below_service_r
+  name: Card maintenance control below Service request history
+  action:
+    kind: click
+  target:
+    description: Card maintenance control below Service request history
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: ocr_relative
-      anchor: Auto loan
+      anchor: Service request history
       anchor_match: exact
-      target_text: Open
-      relation: same_row
+      target_text: Card maintenance
+      relation: below
       minimum_confidence: 0.95
       expected_count: 1
       portability: high
@@ -230,20 +286,23 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_04_click_create_payoff_quote_button
-  name: Create payoff quote button
+- id: step_06_click_open_action_for_the_supplied_row
+  name: Open action for the supplied card_id row
   action:
     kind: click
   target:
-    description: Create payoff quote button
+    description: Open action for the supplied card_id row
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
-    - strategy: rendered_text
-      value: Create payoff quote
-      match: exact
+    - strategy: input_text
+      value:
+        source: input
+        path: card_id
+      target_text: Open
+      relation: right_of
     candidates: []
     state:
       visible: true
@@ -266,23 +325,67 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_05_type_payoff_date_input
-  name: Payoff date input
+- id: step_07_extract_card_id_value_in_the_card_details_table
+  name: Card ID value in the card details table
+  action:
+    kind: extract
+    output: card_id
+    transform: trim
+  target:
+    description: Card ID value in the card details table
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Card ID
+      label_match: exact
+      relation: right_of
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: identity_matches
+    extracted_output: card_id
+    input_path: card_id
+  - kind: output_valid
+    output: card_id
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_08_type_maintenance_reason_text_input
+  name: Maintenance reason text input
   action:
     kind: type
     value:
       source: input
-      path: payoff_date
+      path: reason
     clear: true
   target:
-    description: Payoff date input
+    description: Maintenance reason text input
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: rendered_labeled_control
-      label: Payoff date
+      label: Maintenance reason
       label_match: exact
       control_kind: text_input
     candidates: []
@@ -307,19 +410,19 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_06_click_calculate_quote_control
-  name: Calculate quote control
+- id: step_09_click_review_temporary_lock_control
+  name: Review temporary lock control
   action:
     kind: click
   target:
-    description: Calculate quote control
+    description: Review temporary lock control
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: rendered_text
-      value: Calculate quote
+      value: Review temporary lock
       match: exact
     candidates: []
     state:
@@ -343,30 +446,70 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_07_extract_displayed_principal_balance_value
-  name: Displayed Principal balance value
+- id: step_10_click_confirm_operation_control
+  name: Confirm operation control
+  action:
+    kind: click
+  target:
+    description: Confirm operation control
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Confirm operation
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: reversible
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_11_extract_card_id_value_in_the_completed_result
+  name: Card ID value in the completed result
   action:
     kind: extract
-    output: principal_balance
+    output: card_id
     transform: trim
   target:
-    description: Displayed Principal balance value
+    description: Card ID value in the completed result
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: rendered_field_value
-      label: Principal balance
+      label: Card ID
       label_match: exact
+      relation: right_of
     candidates: []
     state:
       visible: true
     tenant_overrides_allowed: false
   preconditions: []
   postconditions:
+  - kind: identity_matches
+    extracted_output: card_id
+    input_path: card_id
   - kind: output_valid
-    output: principal_balance
+    output: card_id
   timeout_ms: 10000
   retry:
     max_attempts: 2
@@ -383,30 +526,34 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_08_extract_displayed_accrued_interest_value
-  name: Displayed Accrued interest value
+- id: step_12_extract_lock_status_value_in_the_completed_resul
+  name: Lock status value in the completed result
   action:
     kind: extract
-    output: accrued_interest
+    output: lock_status
     transform: trim
   target:
-    description: Displayed Accrued interest value
+    description: Lock status value in the completed result
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: rendered_field_value
-      label: Accrued interest
+      label: Lock status
       label_match: exact
+      relation: right_of
     candidates: []
     state:
       visible: true
     tenant_overrides_allowed: false
   preconditions: []
   postconditions:
+  - kind: output_equals
+    output: lock_status
+    value: Temporarily locked
   - kind: output_valid
-    output: accrued_interest
+    output: lock_status
   timeout_ms: 10000
   retry:
     max_attempts: 2
@@ -423,22 +570,23 @@ steps:
     before: false
     after: true
     on_failure: true
-- id: step_09_extract_displayed_payoff_amount_value
-  name: Displayed Payoff amount value
+- id: step_13_extract_confirmation_reference_value_in_the_comp
+  name: Confirmation reference value in the completed result
   action:
     kind: extract
-    output: payoff_amount
+    output: confirmation_reference
     transform: trim
   target:
-    description: Displayed Payoff amount value
+    description: Confirmation reference value in the completed result
     registered_risk: read_only
     scope:
       window: primary
       frame_path: []
     visual_candidates:
     - strategy: rendered_field_value
-      label: Payoff amount
+      label: Confirmation reference
       label_match: exact
+      relation: right_of
     candidates: []
     state:
       visible: true
@@ -446,87 +594,7 @@ steps:
   preconditions: []
   postconditions:
   - kind: output_valid
-    output: payoff_amount
-  timeout_ms: 10000
-  retry:
-    max_attempts: 2
-    backoff_ms:
-    - 500
-    retry_on:
-    - target_temporarily_absent
-    require_effect_absent: true
-  recovery_refs: []
-  outcome_refs: []
-  failure_refs: []
-  risk: read_only
-  evidence:
-    before: false
-    after: true
-    on_failure: true
-- id: step_10_extract_displayed_currency_value
-  name: Displayed Currency value
-  action:
-    kind: extract
-    output: currency
-    transform: trim
-  target:
-    description: Displayed Currency value
-    registered_risk: read_only
-    scope:
-      window: primary
-      frame_path: []
-    visual_candidates:
-    - strategy: rendered_field_value
-      label: Currency
-      label_match: exact
-    candidates: []
-    state:
-      visible: true
-    tenant_overrides_allowed: false
-  preconditions: []
-  postconditions:
-  - kind: output_valid
-    output: currency
-  timeout_ms: 10000
-  retry:
-    max_attempts: 2
-    backoff_ms:
-    - 500
-    retry_on:
-    - target_temporarily_absent
-    require_effect_absent: true
-  recovery_refs: []
-  outcome_refs: []
-  failure_refs: []
-  risk: read_only
-  evidence:
-    before: false
-    after: true
-    on_failure: true
-- id: step_11_extract_displayed_good_through_value
-  name: Displayed Good through value
-  action:
-    kind: extract
-    output: good_through_date
-    transform: trim
-  target:
-    description: Displayed Good through value
-    registered_risk: read_only
-    scope:
-      window: primary
-      frame_path: []
-    visual_candidates:
-    - strategy: rendered_field_value
-      label: Good through
-      label_match: exact
-    candidates: []
-    state:
-      visible: true
-    tenant_overrides_allowed: false
-  preconditions: []
-  postconditions:
-  - kind: output_valid
-    output: good_through_date
+    output: confirmation_reference
   timeout_ms: 10000
   retry:
     max_attempts: 2
@@ -547,64 +615,53 @@ recoveries: []
 outcomes: []
 failures: []
 checkpoint:
-  id: calculate_loan_payoff_quote_verified
+  id: temporarily_lock_card_verified
   condition:
     kind: all
     conditions:
     - kind: route
-      pattern: /members/search
+      pattern: /servicing
     - kind: all
       conditions:
       - kind: rendered_text
-        value: Principal balance
+        value: Card ID
         match: exact
       - kind: rendered_text
-        value: Accrued interest
+        value: Lock status
         match: exact
       - kind: rendered_text
-        value: Payoff amount
-        match: exact
-      - kind: rendered_text
-        value: Currency
-        match: exact
-      - kind: rendered_text
-        value: Good through
+        value: Confirmation reference
         match: exact
     - kind: output_valid
-      output: principal_balance
+      output: card_id
     - kind: output_valid
-      output: accrued_interest
+      output: lock_status
     - kind: output_valid
-      output: payoff_amount
-    - kind: output_valid
-      output: currency
-    - kind: output_valid
-      output: good_through_date
+      output: confirmation_reference
 policy:
   allowed_action_types:
-  - type
-  - click
   - extract
+  - type
+  - press_keys
+  - click
   allowed_entry_points:
-  - visual_member_workbench
-  maximum_risk: read_only
+  - legacy_servicing
+  maximum_risk: reversible
   allowed_route_patterns:
-  - /members/search
+  - /servicing
   forbidden_text_inputs: []
   output_redaction:
-    principal_balance: last4
-    accrued_interest: last4
-    payoff_amount: last4
-    currency: last4
-    good_through_date: last4
+    card_id: last4
+    lock_status: last4
+    confirmation_reference: last4
 provenance:
-  discovery_run_id: run_8798bc8030b04fcd8a69d2ca6cbd8f5a
+  discovery_run_id: run_10a4d5f021a840458d41e0b96498bcf2
   provider: openai
   model: gpt-5.6-luna
   prompt_policy_version: 2.0.0
   surface_adapter_version: web.v1
   compiler_version: 2.0.0
-  created_at: '2026-09-13T14:41:43.818679Z'
-  target_fingerprint: ac9af81a530b136a1e1991c60902f3d939de484924c4b4a70bb86ca087c4c13f
-  evidence_manifest_key: evidence://run_8798bc8030b04fcd8a69d2ca6cbd8f5a/manifest-evd_6eb16afc5bb64bc9bf332faec2403bb0.bin
-  artifact_content_hash: sha256:a85fd3518f15f3a4d643792d4b4124d7bf622d26d9dd84aa912d3b3340e02d12
+  created_at: '2026-09-14T14:24:20.732413Z'
+  target_fingerprint: ccfcffb0365b65fb562304325f102e6a0fa85b6793ffc45655f0d2f046a57ea4
+  evidence_manifest_key: evidence://run_10a4d5f021a840458d41e0b96498bcf2/manifest-evd_d3fb9e0966e041748929bd1b8cbebb17.bin
+  artifact_content_hash: sha256:b403f5b4de5efb5dcad4c3b0dc67c670f496f3d9f798324c79e9e9bcce3b5de9

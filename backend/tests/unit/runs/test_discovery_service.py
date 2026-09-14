@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -13,12 +12,12 @@ from replayforge.capabilities.registry import (
     CapabilityPublicationError,
     InMemoryCapabilityRegistry,
 )
-from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.engine import DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
 from replayforge.runs.discovery_service import DiscoveryApplicationService
 from replayforge.runs.results import FailureResult
 from replayforge.shared.clock import FrozenClock
+from tests.artifacts import sample_artifact
 
 
 @dataclass
@@ -92,9 +91,7 @@ def test_failed_discovery_is_not_published(valid_artifact_data: dict[str, Any]) 
 
 
 def test_one_shot_discovery_blocks_sensitive_publication() -> None:
-    artifact = load_artifact_yaml(
-        Path("capabilities/member.lookup_savings_balance/2.0.0.yaml").read_text()
-    )
+    artifact = sample_artifact(sensitive=True)
     registry = InMemoryCapabilityRegistry(FrozenClock(datetime.now(UTC)))
     service = DiscoveryApplicationService(
         registry, lambda run_id: Executor(artifact, True), lambda: True

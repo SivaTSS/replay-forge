@@ -1,355 +1,95 @@
-from __future__ import annotations
+"""Model-free reuse of the three genuine workstation discoveries."""
 
-import json
 from pathlib import Path
 
 import pytest
 
-from replayforge.applications.registry import load_application_registry
-from replayforge.capabilities.assets import LocalCapabilityAssetStore
-from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.runs.results import BusinessOutcomeResult, FailureResult, RunResult, SuccessResult
-from replayforge.runtime.composition import LocalRuntime, build_runtime
+from replayforge.runs.results import SuccessResult
+from replayforge.runtime.composition import build_runtime
 from replayforge.runtime.settings import RuntimeSettings
 from replayforge.shared.clock import SystemClock
-from replayforge.surfaces.models import Viewport
-from replayforge.surfaces.playwright import PlaywrightSurfaceDriver
-from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
-from replayforge.surfaces.vision_policy import load_vision_policy
 
 pytestmark = pytest.mark.integration
 REPOSITORY = Path(__file__).resolve().parents[3]
-ARTIFACT_PATH = REPOSITORY / "capabilities/member.lookup_savings_balance/3.2.0.yaml"
 
-
-def evidence_path(root: Path, tenant: str, viewport: Viewport) -> Path:
-    scale = str(viewport.device_scale).replace(".", "_")
-    return root / f"evidence-{tenant}-{viewport.width}x{viewport.height}@{scale}x"
-
-
-def invoke_visual_workbench(
-    demo_bank: str,
-    tmp_path: Path,
-    tenant: str,
-    viewport: Viewport,
-    member_id: str,
-) -> tuple[LocalRuntime, RunResult]:
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=REPOSITORY / "capabilities",
-            capability_asset_directory=REPOSITORY / "capabilities/_assets",
-            evidence_directory=evidence_path(tmp_path, tenant, viewport),
-            demo_base_url=demo_bank,
-            browser_viewport_width=viewport.width,
-            browser_viewport_height=viewport.height,
-            browser_device_scale_factor=viewport.device_scale,
-        )
-    )
-    result = runtime.service.invoke(
-        "member.lookup_savings_balance",
-        "3.2.0",
-        tenant,
-        {"member_id": member_id},
-    )
-    return runtime, result
+CASES = [
+    (
+        "member.transaction_investigation",
+        "1.0.1",
+        {"member_id": "12346", "account_id": "12346-01", "transaction_reference": "POS-80429"},
+        {
+            "transaction_reference": "POS-80429",
+            "account_id": "12346-01",
+            "amount": "-$84.27",
+            "posted_date": "2026-09-08",
+            "description": "NORTHWIND MARKET / POS PURCHASE",
+            "posting_status": "Posted",
+        },
+    ),
+    (
+        "member.servicing_loan_payoff_quote",
+        "1.0.1",
+        {"member_id": "12346", "payoff_date": "2026-09-21"},
+        {"payoff_amount": "$9,035.70", "good_through_date": "2026-09-21"},
+    ),
+    (
+        "member.temporary_card_lock",
+        "1.0.1",
+        {
+            "member_id": "12346",
+            "card_id": "12346-D1",
+            "reason": "Synthetic alternate-member replay",
+        },
+        {"card_id": "12346-D1", "lock_status": "Temporarily locked"},
+    ),
+]
 
 
 @pytest.mark.parametrize("tenant", ["harbor", "summit"])
 @pytest.mark.parametrize(
-    ("capability_id", "inputs", "expected_outputs"),
-    [
-        (
-            "member.transaction_investigation",
-            {
-                "member_id": "12345",
-                "merchant": "Northwind Market",
-                "transaction_date": "2026-09-08",
-                "amount": "84.27",
-            },
-            {
-                "transaction_reference": "TXN-80419",
-                "merchant": "Northwind Market",
-                "posted_date": "2026-09-08",
-                "amount": "84.27",
-                "currency": "USD",
-                "status": "Posted",
-            },
-        ),
-        (
-            "member.loan_payoff_quote",
-            {"member_id": "12345", "payoff_date": "2026-09-20"},
-            {
-                "principal_balance": "7800.00",
-                "accrued_interest": "21.40",
-                "payoff_amount": "7821.40",
-                "currency": "USD",
-                "good_through_date": "2026-09-20",
-            },
-        ),
-        (
-            "member.temporary_card_lock",
-            {"member_id": "12345", "card_last4": "0110"},
-            {
-                "card_last4": "0110",
-                "lock_status": "Temporarily locked",
-                "effective_at": "2026-09-13T14:00:00Z",
-                "confirmation_reference": "LOCK-0110-0913",
-            },
-        ),
-    ],
+    "capability_id,version,inputs,expected", CASES, ids=["transaction", "payoff", "card-lock"]
 )
-def test_discovered_workflows_replay_across_registered_tenants(
+def test_genuine_artifacts_reuse_changed_inputs_without_a_model(
     demo_bank: str,
     tmp_path: Path,
     tenant: str,
     capability_id: str,
+    version: str,
     inputs: dict[str, str],
-    expected_outputs: dict[str, str],
+    expected: dict[str, str],
 ) -> None:
-    viewport = Viewport(1280, 800, 1.0)
+    """Different member and inputs, both tenants, larger layout; no provider credentials."""
     runtime = build_runtime(
         RuntimeSettings(
             artifact_directory=REPOSITORY / "capabilities",
-            capability_asset_directory=REPOSITORY / "capabilities/_assets",
-            evidence_directory=evidence_path(tmp_path, tenant, viewport),
+            evidence_directory=tmp_path / "evidence",
             demo_base_url=demo_bank,
-        )
-    )
-    try:
-        result = runtime.service.invoke(capability_id, "1.0.0", tenant, inputs)
-        assert isinstance(result, SuccessResult)
-        assert result.outputs == expected_outputs
-        assert result.checkpoint.verified
-    finally:
-        runtime.close()
-
-
-@pytest.mark.parametrize("tenant", ["harbor", "summit"])
-def test_discovered_servicing_quote_reuses_new_inputs_at_larger_viewport(
-    demo_bank: str, tmp_path: Path, tenant: str
-) -> None:
-    """No provider: reuse the genuine trace with another member, date, and layout."""
-    viewport = Viewport(1440, 900, 1.0)
-    runtime = build_runtime(
-        RuntimeSettings(
-            artifact_directory=REPOSITORY / "capabilities",
-            capability_asset_directory=REPOSITORY / "capabilities/_assets",
-            evidence_directory=evidence_path(tmp_path, tenant, viewport),
-            demo_base_url=demo_bank,
-            browser_viewport_width=viewport.width,
-            browser_viewport_height=viewport.height,
+            browser_viewport_width=1440,
+            browser_viewport_height=900,
             openai_api_key=None,
             langfuse_public_key=None,
             langfuse_secret_key=None,
         )
     )
     try:
-        result = runtime.service.invoke(
-            "member.servicing_loan_payoff_quote",
-            "1.0.1",
-            tenant,
-            {"member_id": "12346", "payoff_date": "2026-09-21"},
-        )
+        result = runtime.service.invoke(capability_id, version, tenant, inputs)
         assert isinstance(result, SuccessResult), result
-        # Integer-domain ACT/365, rounded once: 900000 + 2140 + 1430 cents.
-        assert result.outputs == {
-            "payoff_amount": "$9,035.70",
-            "good_through_date": "2026-09-21",
-            "confirmation_reference": "HBR-000001" if tenant == "harbor" else "SUM-000001",
-        }
+        expected_outputs = dict(expected)
+        if capability_id != "member.transaction_investigation":
+            expected_outputs["confirmation_reference"] = (
+                "HBR-000001" if tenant == "harbor" else "SUM-000001"
+            )
+        assert result.outputs == expected_outputs
         assert result.checkpoint.verified
-    finally:
-        runtime.close()
-
-
-@pytest.mark.parametrize(
-    ("tenant", "viewport"),
-    [
-        ("harbor", Viewport(800, 600, 1.0)),
-        ("summit", Viewport(900, 700, 2.0)),
-        ("harbor", Viewport(1024, 768, 1.25)),
-        ("summit", Viewport(1280, 720, 1.0)),
-        ("harbor", Viewport(1440, 900, 1.5)),
-        ("summit", Viewport(1920, 1080, 2.0)),
-    ],
-    ids=[
-        "harbor-800x600@1x",
-        "summit-900x700@2x",
-        "harbor-1024x768@1_25x",
-        "summit-1280x720@1x",
-        "harbor-1440x900@1_5x",
-        "summit-1920x1080@2x",
-    ],
-)
-def test_visual_workbench_success_and_portability(
-    demo_bank: str, tmp_path: Path, tenant: str, viewport: Viewport
-) -> None:
-    member_id = "12345"
-    runtime, result = invoke_visual_workbench(demo_bank, tmp_path, tenant, viewport, member_id)
-    try:
-        assert isinstance(result, SuccessResult)
-        assert result.outputs == {
-            "member_id": member_id,
-            "account_type": "savings",
-            "currency": "USD",
-            "available_balance": "1420.57",
-            "as_of": "2026-09-10T12:30:00Z",
-        }
-        verification = verify_run_manifest(
-            LocalEvidenceStore(evidence_path(tmp_path, tenant, viewport), SystemClock()),
-            result.evidence_manifest,
+        verified = verify_run_manifest(
+            LocalEvidenceStore(tmp_path / "evidence", SystemClock()), result.evidence_manifest
         )
-        assert verification.terminal_result_verified
-        assert result.evidence_manifest
-        events = runtime.journals[result.run_id].events()
-        recovery_events = [event for event in events if event.event_type.startswith("recovery_")]
-        assert recovery_events == []
-    finally:
-        runtime.close()
-
-
-@pytest.mark.parametrize(
-    "member_id", ["13579", "67890"], ids=["delayed-results", "known-notice-recovery"]
-)
-def test_visual_workbench_handles_declared_recovery(
-    demo_bank: str, tmp_path: Path, member_id: str
-) -> None:
-    viewport = Viewport(1280, 800, 1.0)
-    runtime, result = invoke_visual_workbench(demo_bank, tmp_path, "harbor", viewport, member_id)
-    try:
-        assert isinstance(result, SuccessResult)
-        assert result.outputs["available_balance"] == "1420.57"
-        recovery_events = [
-            event.event_type
+        assert verified.terminal_result_verified
+        assert not any(
+            event.event_type.startswith("model_")
             for event in runtime.journals[result.run_id].events()
-            if event.event_type.startswith("recovery_")
-        ]
-        if member_id == "67890":
-            assert recovery_events == ["recovery_started", "recovery_completed"]
-        else:
-            assert recovery_events == []
-    finally:
-        runtime.close()
-
-
-@pytest.mark.parametrize(
-    ("tenant", "member_id", "result_type", "code", "step_id"),
-    [
-        ("harbor", "99999", BusinessOutcomeResult, "member_not_found", None),
-        ("summit", "24680", FailureResult, "permission_denied", "search.submit"),
-        ("harbor", "33333", FailureResult, "target_ambiguous", "search.submit"),
-        ("summit", "44444", FailureResult, "target_absent", "account.open_savings"),
-        ("harbor", "55555", FailureResult, "target_ambiguous", "account.extract_available_balance"),
-    ],
-    ids=[
-        "member-not-found",
-        "permission-denied",
-        "duplicate-search",
-        "changed-icon",
-        "duplicate-field",
-    ],
-)
-def test_visual_workbench_reports_declared_and_fail_closed_states(
-    demo_bank: str,
-    tmp_path: Path,
-    tenant: str,
-    member_id: str,
-    result_type: type[BusinessOutcomeResult | FailureResult],
-    code: str,
-    step_id: str | None,
-) -> None:
-    viewport = Viewport(1280, 800, 1.0)
-    runtime, result = invoke_visual_workbench(demo_bank, tmp_path, tenant, viewport, member_id)
-    try:
-        assert isinstance(result, BusinessOutcomeResult | FailureResult)
-        assert isinstance(result, result_type)
-        assert result.code == code
-        if isinstance(result, FailureResult):
-            assert result.step_id == step_id
-        verification = verify_run_manifest(
-            LocalEvidenceStore(evidence_path(tmp_path, tenant, viewport), SystemClock()),
-            result.evidence_manifest,
         )
-        assert verification.terminal_result_verified
-        if isinstance(result, FailureResult):
-            manifest = json.loads(
-                LocalEvidenceStore(evidence_path(tmp_path, tenant, viewport), SystemClock()).read(
-                    result.evidence_manifest
-                )
-            )
-            failure_frames = [
-                attachment
-                for attachment in manifest["attachments"]
-                if attachment["media_type"] == "image/png"
-            ]
-            assert failure_frames
-            assert all(
-                "mask:full-viewport" in frame["redaction_directives"] for frame in failure_frames
-            )
-        if member_id == "33333":
-            events = runtime.journals[result.run_id].events()
-            assert not any(
-                event.event_type == "action_intent" and event.step_id == "search.submit"
-                for event in events
-            )
     finally:
         runtime.close()
-
-
-def test_visual_workbench_exposes_only_a_canvas(demo_bank: str) -> None:
-    driver = PlaywrightSurfaceDriver(
-        demo_bank,
-        application_registry=load_application_registry(REPOSITORY / "config/applications.yaml"),
-        vision=VisionGrounder(
-            RapidOcrTextRecognizer(),
-            LocalCapabilityAssetStore(REPOSITORY / "capabilities/_assets"),
-            load_vision_policy(REPOSITORY / "config/vision-policy.yaml"),
-        ),
-    )
-    session = driver.open("northstar_member_service", "harbor", "visual_member_workbench")
-    try:
-        observation = session.observe()
-        assert observation.route == "/members/search"
-        assert observation.actionable_controls == ()
-        assert observation.extractable_fields == ()
-        assert session.page.locator("canvas").count() == 1
-    finally:
-        session.close()
-        driver.close()
-
-
-@pytest.mark.parametrize(
-    "artifact_path",
-    [
-        ARTIFACT_PATH,
-        REPOSITORY / "capabilities/member.transaction_investigation/1.0.0.yaml",
-        REPOSITORY / "capabilities/member.loan_payoff_quote/1.0.0.yaml",
-        REPOSITORY / "capabilities/member.temporary_card_lock/1.0.0.yaml",
-    ],
-)
-def test_visual_workbench_artifacts_have_only_geometry_free_targets(
-    artifact_path: Path,
-) -> None:
-    artifact = load_artifact_yaml(artifact_path.read_text())
-    assert all(
-        step.target is not None and step.target.visual_candidates and not step.target.candidates
-        for step in (*artifact.steps, *(s for r in artifact.recoveries for s in r.steps))
-        if step.target is not None
-    )
-    assert all(
-        candidate.strategy
-        in {
-            "rendered_text",
-            "rendered_labeled_control",
-            "rendered_field_value",
-            "rendered_group_image",
-            "ocr_relative",
-        }
-        for step in (*artifact.steps, *(s for r in artifact.recoveries for s in r.steps))
-        if step.target is not None
-        for candidate in step.target.visual_candidates
-    )
-    assert "coordinates" not in artifact.model_dump_json()
-    assert "relative_region" not in artifact.model_dump_json(exclude_none=True)

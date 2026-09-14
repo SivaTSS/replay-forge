@@ -15,6 +15,16 @@ import pytest
 def demo_bank() -> Iterator[str]:
     repository = Path(__file__).resolve().parents[3]
     app = repository / "apps" / "demo-bank"
+    base_url = "http://127.0.0.1:3001"
+    # Reuse an already-running local demo without starting or stopping its process.
+    try:
+        with urlopen(f"{base_url}/harbor/servicing", timeout=1) as response:
+            ready = response.status == 200
+    except URLError:
+        ready = False
+    if ready:
+        yield base_url
+        return
     process = subprocess.Popen(
         [
             str(app / "node_modules" / ".bin" / "next"),
@@ -32,6 +42,8 @@ def demo_bank() -> Iterator[str]:
     base_url = "http://127.0.0.1:3001"
     try:
         for _ in range(50):
+            if process.poll() is not None:
+                raise RuntimeError("demo bank exited before readiness")
             try:
                 with urlopen(f"{base_url}/harbor", timeout=1) as response:
                     if response.status == 200:

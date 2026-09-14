@@ -21,13 +21,8 @@ def validate_application_compatibility(
     if (
         artifact.capability.surface != launch.surface
         or compatibility.surface_contract != launch.surface_contract
-        or (
-            artifact.schema_version == "1.4"
-            and (
-                compatibility.base_variant != application.base_variant
-                or compatibility.rendered_surface != launch.rendered_surface
-            )
-        )
+        or compatibility.base_variant != application.base_variant
+        or compatibility.rendered_surface != launch.rendered_surface
     ):
         raise SurfaceError(
             "application_contract_mismatch",

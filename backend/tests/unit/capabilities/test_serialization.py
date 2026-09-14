@@ -18,38 +18,11 @@ _COMMITTED_ARTIFACT_HASHES = {
     "member.transaction_investigation/1.0.1.yaml": (
         "sha256:354824ebbd3ba6b77a126537b3c1d442e09a62235d275b9077ef1805024e7a03"
     ),
-    "member.loan_payoff_quote/1.0.0.yaml": (
-        "sha256:a85fd3518f15f3a4d643792d4b4124d7bf622d26d9dd84aa912d3b3340e02d12"
-    ),
-    "member.lookup_savings_balance/1.0.0.yaml": (
-        "sha256:2e4ec4920ed4726195c620b4c7accdfd1642dfd03dc01a2c4bf4e8e30691d208"
-    ),
-    "member.lookup_savings_balance/1.0.1.yaml": (
-        "sha256:06f64e8f546c416b96959c2ebbe03071baeb6d11eb9426baa87c1a39657ff5c0"
-    ),
-    "member.lookup_savings_balance/1.0.2.yaml": (
-        "sha256:f953de8c0de6e8dfb7fac8725ff6e65cdce6eb37b5a9cbf49debdb909207c2e5"
-    ),
-    "member.lookup_savings_balance/2.0.0.yaml": (
-        "sha256:53255c7e15629044f8d54cefd0a13338494c3dde44b7fa81767efba105967353"
-    ),
-    "member.lookup_savings_balance/3.0.0.yaml": (
-        "sha256:5d0d0c4765bcf1b1a8169da5303490421d7032d0a0acb6dbe34f057da9c49411"
-    ),
-    "member.lookup_savings_balance/3.1.0.yaml": (
-        "sha256:e304e76daa6d1410cf496f3a90eaa47913540de9327c517de121fe2292b7dc88"
-    ),
-    "member.lookup_savings_balance/3.2.0.yaml": (
-        "sha256:7bb65d0ade7518edd1ba8b5543e3dc0f649397b6d321a520a0462105b6a162cf"
-    ),
     "member.servicing_loan_payoff_quote/1.0.1.yaml": (
         "sha256:ea95e6c1a0aa65528270e7078374eb8997f57a573389fa3a1d827bc516d8f737"
     ),
-    "member.temporary_card_lock/1.0.0.yaml": (
-        "sha256:b8844028e13118a6ab091ed9ba460eeee97ff6a3511d1d9d9faabfb5685294a9"
-    ),
-    "member.transaction_investigation/1.0.0.yaml": (
-        "sha256:07ec19a67527a5c4f7e9a24dc1b3aa884990e636b4e97952c0e36645775892d2"
+    "member.temporary_card_lock/1.0.1.yaml": (
+        "sha256:b403f5b4de5efb5dcad4c3b0dc67c670f496f3d9f798324c79e9e9bcce3b5de9"
     ),
 }
 
@@ -150,13 +123,7 @@ def test_generated_schema_identifies_artifact_contract() -> None:
     schema = artifact_json_schema()
 
     assert schema["title"] == "CapabilityArtifact"
-    assert schema["properties"]["schema_version"]["enum"] == [
-        "1.0",
-        "1.1",
-        "1.2",
-        "1.3",
-        "1.4",
-    ]
+    assert schema["properties"]["schema_version"]["const"] == "1.4"
 
 
 def test_committed_schema_matches_generated_contract() -> None:

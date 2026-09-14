@@ -57,7 +57,8 @@ symbolic binding even if the field already displays a default value.
 When visual_tokens is non-empty, prefer rendered semantic candidates. For a visual
 typing or selection target, require a rendered labeled control; an OCR label is not itself an
 editable control. Use rendered_field_value for visual extraction, never text-click targeting.
-For an icon-only click target that OCR cannot name, you may provide one transient coordinates candidate covering
+For an icon-only click target that OCR cannot name, you may provide one transient coordinates
+candidate covering
 its tight bounding box and set capture_group_label to the unique rendered label for its row/card;
 discovery converts that temporary region into a content-addressed image signature before
 recording it. Never use coordinates for type or extract.

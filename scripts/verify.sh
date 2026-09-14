@@ -21,12 +21,11 @@ uv run mypy \
   scripts/verify_evidence.py \
   scripts/export_evidence.py \
   scripts/verify_evidence_bundles.py \
-  scripts/capture_demo_workflows.py \
-  scripts/capture_handoff_run.py \
-  scripts/capture_hard_failure_run.py \
-  scripts/capture_recovery_run.py
+  scripts/capture_demo_workflows.py
 uv run python scripts/verify_evidence_bundles.py evidence
 npx --yes pnpm@10.15.1 typecheck
 npx --yes pnpm@10.15.1 --filter @replayforge/demo-bank test
 npx --yes pnpm@10.15.1 build
-uv run pytest --cov=replayforge --cov-report=term-missing -q
+# Measure domain coverage separately: Python tracing distorts the real OCR deadlines.
+uv run pytest backend/tests/unit --cov=replayforge --cov-report=term-missing -q
+uv run pytest backend/tests/integration -q

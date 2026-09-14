@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from replayforge.capabilities.models import CapabilityArtifact
 from replayforge.capabilities.serialization import (
@@ -93,7 +93,7 @@ class BundleAttachment(BundleFile):
 class BundleArtifact(_BundleModel):
     capability_id: str = Field(pattern=r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
     content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    file: Literal["artifact.yaml"] | None = None
+    file: Literal["artifact.yaml"]
     version: str = Field(pattern=r"^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$")
 
 
@@ -126,15 +126,9 @@ class EvidenceBundleManifest(_BundleModel):
         cls,
         value: dict[Literal["artifact.yaml", "events.jsonl", "result.json"], BundleFile],
     ) -> dict[Literal["artifact.yaml", "events.jsonl", "result.json"], BundleFile]:
-        if not {"events.jsonl", "result.json"}.issubset(value):
+        if not {"artifact.yaml", "events.jsonl", "result.json"}.issubset(value):
             raise ValueError("bundle must declare all required files")
         return value
-
-    @model_validator(mode="after")
-    def require_consistent_artifact_file(self) -> EvidenceBundleManifest:
-        if (self.artifact.file is None) != ("artifact.yaml" not in self.files):
-            raise ValueError("bundle artifact file declaration is inconsistent")
-        return self
 
     @field_validator("attachments")
     @classmethod
@@ -284,21 +278,20 @@ def verify_evidence_bundle(
             raise EvidenceBundleIntegrityError("evidence bundle file hash or size does not match")
         content_by_name[name] = content
 
-    if manifest.artifact.file is not None:
-        try:
-            embedded_artifact = load_artifact_yaml(
-                content_by_name[manifest.artifact.file].decode("utf-8")
-            )
-        except (UnicodeDecodeError, ValidationError, ValueError) as error:
-            raise EvidenceBundleIntegrityError("embedded capability artifact is invalid") from error
-        if (
-            embedded_artifact.capability.id != manifest.artifact.capability_id
-            or embedded_artifact.capability.version != manifest.artifact.version
-            or artifact_content_hash(embedded_artifact) != manifest.artifact.content_hash
-        ):
-            raise EvidenceBundleIntegrityError(
-                "embedded capability artifact does not match its bundle metadata"
-            )
+    try:
+        embedded_artifact = load_artifact_yaml(
+            content_by_name[manifest.artifact.file].decode("utf-8")
+        )
+    except (UnicodeDecodeError, ValidationError, ValueError) as error:
+        raise EvidenceBundleIntegrityError("embedded capability artifact is invalid") from error
+    if (
+        embedded_artifact.capability.id != manifest.artifact.capability_id
+        or embedded_artifact.capability.version != manifest.artifact.version
+        or artifact_content_hash(embedded_artifact) != manifest.artifact.content_hash
+    ):
+        raise EvidenceBundleIntegrityError(
+            "embedded capability artifact does not match its bundle metadata"
+        )
 
     for relative_path, declared in manifest.attachments.items():
         try:
