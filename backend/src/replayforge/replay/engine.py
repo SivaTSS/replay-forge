@@ -24,6 +24,7 @@ from replayforge.capabilities.models import (
     TypeAction,
     WaitForAction,
 )
+from replayforge.capabilities.transforms import transform_extracted_text
 from replayforge.capabilities.values import (
     ContractValidationError,
     binding_classification,
@@ -907,8 +908,4 @@ class ReplayEngine:
 
     @staticmethod
     def _transform(value: str, transform: str) -> str:
-        if transform == "lowercase":
-            return value.strip().casefold()
-        if transform in {"trim", "decimal", "date-time"}:
-            return value.strip().removeprefix("$").replace(",", "")
-        return value
+        return transform_extracted_text(value, transform)
