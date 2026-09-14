@@ -1,10 +1,10 @@
 # Evidence
 
-Three primary model discoveries target the single servicing workstation:
+Primary model recordings cover three tasks on the single servicing workstation:
 
 | Bundle | Business task |
 |---|---|
-| [discovery-servicing-transaction](discovery-servicing-transaction/manifest.json) | Investigate a transaction and verify account/transaction identities |
+| [discovery-transaction-parameterized](discovery-transaction-parameterized/manifest.json) | Search the supplied member, select the supplied account, filter the supplied reference, and verify transaction/account identities |
 | [discovery-servicing-loan-payoff](discovery-servicing-loan-payoff/manifest.json) | Issue a non-binding dated payoff quote |
 | [discovery-servicing-card-lock](discovery-servicing-card-lock/manifest.json) | Temporarily lock the selected card and verify the result |
 
@@ -12,6 +12,8 @@ Each suite automatically validates Harbor and Summit before publication. The man
 actual recording run, source revision, command, exact run artifact, redaction metadata, and hashes.
 The primary result can name its draft version; suite finalization assigns the published version
 and validated tenant set.
+The [original transaction recording](discovery-servicing-transaction/manifest.json) remains
+immutable provenance; the current parameterized flow supersedes it on the same UI.
 
 Two separately captured model-free replays use the published payoff artifact without provider
 credentials or artifact modifications:

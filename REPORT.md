@@ -8,8 +8,8 @@ bank servicing workstation with transaction investigation, dated loan payoff quo
 locking. Its controls and values are painted on a canvas.
 
 The [single staff workstation](docs/demo-bank.md) also supports connected balances, transfers,
-holds, and service cases. Three genuine discovery bundles cover transaction research, payoff
-quotation, and card locking on this UI; each passes automatic Harbor/Summit replay validation.
+holds, and service cases. Genuine discoveries cover transaction research, payoff
+quotation, and card locking on this UI; each current capability passes automatic Harbor/Summit replay validation.
 Other functions have application tests, not published automation capabilities.
 
 ```mermaid
@@ -169,7 +169,7 @@ deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines th
 ## 7. Cuts
 
 Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
-assignment requests. Three genuine discovery bundles preserve the current UI's provenance. Tests exercise model-free
+assignment requests. Genuine primary and scenario bundles preserve the current UI's provenance. Tests exercise model-free
 reuse and real same-session handoff; policy-injection fixtures are explicitly separate from discovery.
 All 13 declared exception/recovery branches have genuine discovery and complete two-tenant replay
 proof. This does not claim exhaustive coverage of every possible application failure: unrecognized

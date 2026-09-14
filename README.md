@@ -16,11 +16,12 @@ There is one demo application: a [dated servicing workstation](docs/demo-bank.md
 and account inquiry, transaction research, transfers, card maintenance, holds, payoff quotes,
 service cases, and an activity journal. Open `http://127.0.0.1:3001/harbor/servicing`.
 
-Three genuine discoveries exercise different business operations on that same UI: transaction
+Genuinely discovered capabilities exercise three different business operations on that same UI: transaction
 investigation, loan-payoff quotation, and temporary card lock. Each artifact is independently
 validated on Harbor and Summit. The runtime contains no task-specific compiler, navigation
-recipe, record ID, or recorded click coordinates. Old demo routes, capabilities, and evidence
-are not part of the current distribution.
+recipe, record ID, or recorded click coordinates. Retired-UI routes, capabilities, and evidence
+are not part of the current distribution. All 13 declared negative/recovery cases have genuine
+discovery and two-tenant replay proof in the [verification matrix](docs/verification.md#scenario-matrix).
 
 ## What is real
 

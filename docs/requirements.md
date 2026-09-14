@@ -10,7 +10,7 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 | Requirement | Status | Concrete implementation | Proof / limit |
 |---|---|---|---|
 | Goal + target input | Implemented | `DiscoveryInvocation` accepts goal, family, tenant, entry point, inputs, limits | Target is registered, not an arbitrary URL |
-| Live LLM loop | Evidenced | `DiscoveryEngine` + `OpenAIModelProvider` | Three current workstation bundles |
+| Live LLM loop | Evidenced | `DiscoveryEngine` + `OpenAIModelProvider` | Genuine primary and scenario bundles for three workstation tasks |
 | Real UI actions | Evidenced | Chromium mouse/keyboard on the canvas workstation | Local synthetic target |
 | Bias beyond clean DOM | Implemented, Tested | Local OCR, frame-local layout graph, canonical visual signatures | Canonical flow has no DOM targets |
 | Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Three independently discovered workstation artifacts |

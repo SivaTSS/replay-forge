@@ -29,6 +29,27 @@ uv run python scripts/verify_evidence_bundles.py evidence
 uv run python scripts/check_docs.py
 ```
 
+## Verified snapshot
+
+On 2026-09-14, the following gates passed against code revision `f4d3d62`.
+Heavy browser, unit-test and build workloads ran sequentially; regression tests used no model calls.
+
+| Gate | Result |
+|---|---|
+| Backend unit/API tests | 862 passed; 90.95% branch-aware domain coverage |
+| Real Chromium integration | 82 passed, including current artifacts, changed inputs/viewport, live viewing and same-session handoff |
+| Evidence integrity | 51 bundles verified; 13 genuine exception/recovery discoveries and 32 two-tenant matrix replays |
+| Python quality and tooling | Formatting, lint and 177-file type check passed; 14 tooling tests passed |
+| Frontends | Both production builds and type checks passed; all four demo test files passed |
+| Documentation | 17 documents and 23 Mermaid diagrams checked |
+| Credential audit | No configured-credential matches or recognized credential patterns in working files and reachable history |
+
+The browser pass followed a real regression fix: thin button borders disappeared during coarse
+segmentation at a larger viewport. Local border confirmation corrected the ambiguity without
+editing learned artifacts, adding coordinates, or relaxing confidence/policy gates. The earlier
+failed run is not counted as a pass. These are point-in-time results, not exhaustive correctness
+or universal secret-detection guarantees.
+
 ## What is proved where
 
 | Claim | Executable check | Boundary |
