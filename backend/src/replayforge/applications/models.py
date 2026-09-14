@@ -48,6 +48,9 @@ class EntryPointRegistration(ApplicationModel):
             raise ValueError("entry-point templates may only contain the tenant variable")
         if self.path_template.count("{tenant}") > 1:
             raise ValueError("entry-point templates may contain tenant only once")
+        literal_path = self.path_template.replace("{tenant}", "")
+        if "{" in literal_path or "}" in literal_path:
+            raise ValueError("entry-point template contains unmatched braces")
         if "//" in self.path_template or ".." in self.path_template:
             raise ValueError("entry-point path template contains an unsafe path")
         return self
@@ -96,6 +99,10 @@ class ApplicationRegistration(ApplicationModel):
     @model_validator(mode="after")
     def validate_registration(self) -> Self:
         parsed = urlsplit(self.origin)
+        try:
+            _ = parsed.port
+        except ValueError as error:
+            raise ValueError("application origin contains an invalid port") from error
         if (
             parsed.scheme not in {"http", "https"}
             or not parsed.hostname
@@ -104,6 +111,9 @@ class ApplicationRegistration(ApplicationModel):
             or parsed.query
             or parsed.fragment
             or parsed.path not in {"", "/"}
+            or "?" in self.origin
+            or "#" in self.origin
+            or any(character.isspace() for character in self.origin)
         ):
             raise ValueError("application origin must be a credential-free HTTP origin")
         if len(set(self.tenants)) != len(self.tenants):

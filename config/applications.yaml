@@ -19,6 +19,10 @@ applications:
       visual_member_workbench:
         path_template: /{tenant}/visual-workbench
         rendered_surface: true
+        required_landmarks:
+          - {kind: visual_text, value: Member Search}
+        forbidden_landmarks:
+          - {kind: visual_text, value: System maintenance}
     route_aliases:
       /member-search: /members/search
       /member-results: /members/search

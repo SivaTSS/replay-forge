@@ -8,47 +8,9 @@ from threading import Lock
 from typing import Protocol
 
 import yaml
-from yaml.constructor import ConstructorError
-from yaml.nodes import MappingNode
-from yaml.resolver import BaseResolver
 
 from replayforge.applications.models import ApplicationRegistration, SurfaceLaunch
-
-
-class _UniqueKeySafeLoader(yaml.SafeLoader):
-    """Safe YAML loader that rejects silently overwritten mapping keys."""
-
-
-def _construct_unique_mapping(
-    loader: _UniqueKeySafeLoader, node: MappingNode, deep: bool = False
-) -> dict[object, object]:
-    loader.flatten_mapping(node)
-    mapping: dict[object, object] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)  # type: ignore[no-untyped-call]
-        try:
-            duplicate = key in mapping
-        except TypeError as error:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                "found an unhashable mapping key",
-                key_node.start_mark,
-            ) from error
-        if duplicate:
-            raise ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                "found a duplicate mapping key",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(  # type: ignore[no-untyped-call]
-            value_node, deep=deep
-        )
-    return mapping
-
-
-_UniqueKeySafeLoader.add_constructor(BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
+from replayforge.shared.yaml import load_unique_yaml
 
 
 class ApplicationRegistry(Protocol):
@@ -73,6 +35,10 @@ class InMemoryApplicationRegistry:
             registration.application_family for registration in self.registrations.values()
         }:
             raise ValueError("application registry keys must match application families")
+        self.registrations = {
+            key: registration.model_copy(deep=True)
+            for key, registration in self.registrations.items()
+        }
 
     def ready(self) -> bool:
         return True
@@ -80,13 +46,13 @@ class InMemoryApplicationRegistry:
     def get(self, application_family: str) -> ApplicationRegistration:
         with self._lock:
             try:
-                return self.registrations[application_family]
+                return self.registrations[application_family].model_copy(deep=True)
             except KeyError as exc:
                 raise ValueError("application family is not registered") from exc
 
     def all(self) -> tuple[ApplicationRegistration, ...]:
         with self._lock:
-            return tuple(self.registrations.values())
+            return tuple(item.model_copy(deep=True) for item in self.registrations.values())
 
     def resolve(self, application_family: str, tenant: str, entry_point: str) -> SurfaceLaunch:
         return self.get(application_family).resolve(tenant, entry_point)
@@ -98,11 +64,13 @@ def load_application_registry(path: Path) -> ApplicationRegistry:
     if path.stat().st_size > 1_000_000:
         raise ValueError("application registry exceeds the one-megabyte startup limit")
     try:
-        raw = yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeySafeLoader)
+        raw = load_unique_yaml(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as exc:
         raise ValueError("application registry is not valid safe YAML") from exc
     if not isinstance(raw, dict) or raw.get("schema_version") != "1.0":
         raise ValueError("application registry must declare schema version 1.0")
+    if raw.keys() - {"schema_version", "applications"}:
+        raise ValueError("application registry contains unknown fields")
     entries = raw.get("applications")
     if not isinstance(entries, list) or not entries:
         raise ValueError("application registry must contain applications")

@@ -145,6 +145,8 @@ class FakeSurfaceSession:
             return condition.output in outputs
         if isinstance(condition, TextCondition) and condition.value == "No member found":
             return self.member_not_found
+        if isinstance(condition, TextCondition) and condition.value == "System maintenance":
+            return False
         if isinstance(condition, TextCondition) and condition.value == "Member Results":
             return self.postconditions_valid and not self.interstitial_visible
         if isinstance(condition, TextCondition) and condition.value == "Important notice":
@@ -314,6 +316,42 @@ def test_condition_actions_cannot_succeed_without_their_condition(
     assert result.step_id == "guard.verify"
     assert session.executed_targets == []
     assert session.closed
+
+
+def test_incompatible_registration_stops_before_surface_open(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    def reject(artifact: CapabilityArtifact, tenant: str) -> None:
+        raise SurfaceError("application_contract_mismatch", "Application contract changed.")
+
+    def unexpected_open(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("An incompatible capability must never launch the surface")
+
+    monkeypatch.setattr(FakeSurfaceDriver, "open", unexpected_open)
+    engine, _, _ = build_engine(FakeSurfaceSession())
+    result = replace(engine, compatibility_validator=reject).execute(
+        request_for(valid_artifact_data)
+    )
+    assert isinstance(result, FailureResult)
+    assert result.code == "application_contract_mismatch"
+
+
+@pytest.mark.parametrize("classified", [True, False])
+def test_input_policy_is_enforced_before_typing(
+    valid_artifact_data: dict[str, Any], classified: bool
+) -> None:
+    if classified:
+        valid_artifact_data["inputs"]["properties"]["member_id"]["data_classification"] = "secret"
+    else:
+        valid_artifact_data["steps"][0]["target"]["description"] = "Password input"
+    session = FakeSurfaceSession()
+    engine, _, _ = build_engine(session)
+    result = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(result, FailureResult)
+    assert result.code == "policy_blocked"
+    assert session.executed_targets == []
 
 
 def request_for(artifact_data: dict[str, Any], member_id: str = "12345") -> ReplayRequest:

@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from replayforge.api.services import ApiServices
+from replayforge.applications.compatibility import validate_application_compatibility
 from replayforge.applications.registry import ApplicationRegistry, load_application_registry
 from replayforge.capabilities.assets import LocalCapabilityAssetStore
 from replayforge.capabilities.models import BusinessOutcome, CapabilityArtifact
@@ -20,6 +21,7 @@ from replayforge.capabilities.registry import (
     CapabilityVersionRecord,
     LocalCapabilityRegistry,
 )
+from replayforge.capabilities.values import contract_classifications
 from replayforge.discovery.compiler import TraceArtifactCompiler
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import DiscoveryResult, DiscoverySuccess
@@ -156,6 +158,9 @@ def effective_replay_policy(
             allowed_routes,
             application_actions,
             application_risk,
+            application.policy.forbidden_field_classes
+            if application is not None
+            else frozenset({DataClassification.CREDENTIAL, DataClassification.SECRET}),
         ),
         PolicyLayer(
             "tenant", frozenset({origin}), allowed_routes, application_actions, application_risk
@@ -615,10 +620,7 @@ def build_runtime(settings: object) -> LocalRuntime:
         with lock:
             journals[run_id] = journal
             result_classifications[run_id] = {
-                **{
-                    f"outputs.{name}": schema.data_classification
-                    for name, schema in record.artifact.outputs.properties.items()
-                },
+                **contract_classifications(record.artifact.outputs, "outputs"),
                 "expected": DataClassification.PERSONAL,
                 "observed": DataClassification.PERSONAL,
             }
@@ -663,6 +665,9 @@ def build_runtime(settings: object) -> LocalRuntime:
             journal,
             interventions,
             continuation_sink=retain_continuation,
+            compatibility_validator=lambda artifact, tenant: validate_application_compatibility(
+                application_registry, artifact, tenant
+            ),
         )
         return ManagedReplayExecutor(engine, driver, worker, live_sessions, lock)
 

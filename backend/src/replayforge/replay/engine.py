@@ -19,10 +19,17 @@ from replayforge.capabilities.models import (
     InputValue,
     LiteralValue,
     Recovery,
+    SelectAction,
     Step,
+    TypeAction,
     WaitForAction,
 )
-from replayforge.capabilities.values import ContractValidationError, resolve_input, validate_object
+from replayforge.capabilities.values import (
+    ContractValidationError,
+    binding_classification,
+    resolve_input,
+    validate_object,
+)
 from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
@@ -37,7 +44,7 @@ from replayforge.policy.models import (
     PrincipalType,
     RunMode,
 )
-from replayforge.policy.types import Decision
+from replayforge.policy.types import DataClassification, Decision
 from replayforge.runs.ports import InterventionRouter, RunRecorder
 from replayforge.runs.results import (
     BusinessOutcomeResult,
@@ -99,6 +106,7 @@ class ReplayEngine:
     intervention_router: InterventionRouter
     sleeper: Callable[[float], None] = sleep
     continuation_sink: ContinuationSink | None = None
+    compatibility_validator: Callable[[CapabilityArtifact, str], None] | None = None
 
     def execute(self, request: ReplayRequest) -> RunResult:
         try:
@@ -113,6 +121,8 @@ class ReplayEngine:
         session: SurfaceSession | None = None
         preserve_session = False
         try:
+            if self.compatibility_validator is not None:
+                self.compatibility_validator(request.artifact, request.tenant)
             session = self.surface_driver.open(
                 request.artifact.capability.application_family,
                 request.tenant,
@@ -330,6 +340,31 @@ class ReplayEngine:
                     )
             observation = session.observe()
             target = session.resolve(step.target, step.timeout_ms) if step.target else None
+            source = (
+                step.action.value
+                if isinstance(step.action, TypeAction)
+                else step.action.option
+                if isinstance(step.action, SelectAction)
+                else None
+            )
+            classification = (
+                binding_classification(
+                    request.artifact.inputs,
+                    source.path,
+                    self.effective_policy.forbidden_field_classes,
+                )
+                if isinstance(source, InputValue)
+                else None
+            )
+            if (
+                source is not None
+                and step.target is not None
+                and any(
+                    term.casefold() in step.target.description.casefold()
+                    for term in request.artifact.policy.forbidden_text_inputs
+                )
+            ):
+                classification = DataClassification.CREDENTIAL
             decision = self.policy_evaluator.evaluate(
                 self.effective_policy,
                 ActionContext(
@@ -347,6 +382,7 @@ class ReplayEngine:
                         target.registered_risk if target is not None else step.risk
                     ),
                     control_owner=AUTOMATION_OWNER.value,
+                    field_classification=classification,
                 ),
             )
             self.recorder.record(
@@ -426,6 +462,9 @@ class ReplayEngine:
                 return self._application_failure(request, session, step.id, declared_failure)
             for condition in step.postconditions:
                 if not session.wait_until(condition, outputs, inputs, step.timeout_ms):
+                    outcome = self._detect_outcome(request.artifact, step, session, outputs, inputs)
+                    if outcome is not None:
+                        return self._business_outcome(request, outcome, inputs)
                     recovery = (
                         self._attempt_recovery(
                             request,

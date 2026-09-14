@@ -17,6 +17,32 @@ def test_checked_in_catalog_resolves_symbolic_target() -> None:
     assert launch.entry_points["member_search"].endswith("/summit")
 
 
+def test_registration_reads_do_not_expose_mutable_registry_state() -> None:
+    registry = load_application_registry(Path("config/applications.yaml"))
+    registry.all()[0].entry_points.clear()
+    registry.get("northstar_member_service").route_aliases.clear()
+    assert registry.all()[0].entry_points
+    assert registry.all()[0].route_aliases
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://example.com:invalid",
+        "http://example.com:99999",
+        "http://example.com?",
+        "http://example.com#",
+        "http://exam ple.com",
+    ],
+)
+def test_application_origin_rejects_malformed_ports_and_delimiters(origin: str) -> None:
+    registration = load_application_registry(Path("config/applications.yaml")).all()[0]
+    data = registration.model_dump()
+    data["origin"] = origin
+    with pytest.raises(ValidationError):
+        ApplicationRegistration.model_validate(data)
+
+
 def test_catalog_rejects_duplicate_yaml_mapping_keys(tmp_path: Path) -> None:
     catalog = tmp_path / "applications.yaml"
     catalog.write_text(

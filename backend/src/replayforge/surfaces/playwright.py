@@ -30,6 +30,7 @@ from playwright.sync_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
+from replayforge.applications.compatibility import validate_rendered_readiness
 from replayforge.applications.models import SurfaceLaunch
 from replayforge.applications.registry import ApplicationRegistry
 from replayforge.capabilities.models import (
@@ -146,7 +147,15 @@ class PlaywrightSurfaceDriver:
             ) from error
         if self.playwright is None:
             self.playwright = sync_playwright().start()
-            self.browser = self.playwright.chromium.launch(headless=self.headless)
+            try:
+                self.browser = self.playwright.chromium.launch(headless=self.headless)
+            except PlaywrightError as error:
+                self.playwright.stop()
+                self.playwright = None
+                raise SurfaceError(
+                    "browser_launch_failed",
+                    "Chromium could not start; verify its installation and runtime dependencies.",
+                ) from error
         assert self.browser is not None
         context = self.browser.new_context(
             viewport={"width": self.viewport.width, "height": self.viewport.height},
@@ -191,6 +200,13 @@ class PlaywrightSurfaceDriver:
             route_aliases=registry.get(application_family).route_aliases,
         )
         self.active_session = session
+        if launch.rendered_surface:
+            try:
+                validate_rendered_readiness(session, launch)
+            except BaseException:
+                session.close()
+                self.active_session = None
+                raise
         return session
 
     @staticmethod
