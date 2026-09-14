@@ -283,7 +283,10 @@ steps:
       visible: true
     tenant_overrides_allowed: false
   preconditions: []
-  postconditions: []
+  postconditions:
+  - kind: rendered_text
+    value: Relationship summary
+    match: exact
   timeout_ms: 10000
   retry:
     max_attempts: 2
@@ -329,6 +332,88 @@ steps:
     before: false
     after: true
     on_failure: true
+- id: step_08_scroll_scroll
+  name: scroll
+  action:
+    kind: scroll
+    direction: down
+    amount: 579
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_09_assert_assert
+  name: assert
+  action:
+    kind: assert
+    condition:
+      kind: rendered_text
+      value: Notice acknowledged for this session.
+      match: exact
+  preconditions: []
+  postconditions:
+  - kind: rendered_text
+    value: Notice acknowledged for this session.
+    match: exact
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_10_assert_assert
+  name: assert
+  action:
+    kind: assert
+    condition:
+      kind: rendered_text
+      value: Card maintenance
+      match: exact
+  preconditions: []
+  postconditions:
+  - kind: rendered_text
+    value: Card maintenance
+    match: exact
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
 recoveries: []
 outcomes: []
 failures: []
@@ -340,14 +425,15 @@ checkpoint:
     - kind: route
       pattern: /servicing
     - kind: rendered_text
-      value: Notice acknowledged for this session.
+      value: Card maintenance
       match: exact
 policy:
   allowed_action_types:
+  - scroll
   - click
+  - type
   - assert
   - press_keys
-  - type
   allowed_entry_points:
   - legacy_servicing
   maximum_risk: read_only
@@ -359,13 +445,13 @@ policy:
     lock_status: last4
     confirmation_reference: last4
 provenance:
-  discovery_run_id: run_b5b30e13175148bc86e152b17fd2240d
+  discovery_run_id: run_efd6e0256555439eb3e274da5d6bac96
   provider: openai
   model: gpt-5.6-luna
   prompt_policy_version: 2.0.0
   surface_adapter_version: web.v1
   compiler_version: 2.0.0
-  created_at: '2026-09-14T20:13:25.120335Z'
-  target_fingerprint: 9673f9d24ce51e658aab556b61139a168ecd83b2234288ccc73a7725e1914be7
-  evidence_manifest_key: evidence://run_b5b30e13175148bc86e152b17fd2240d/manifest-evd_5875200f38904e9c8e1b30dc40a5f615.bin
-  artifact_content_hash: sha256:c87c8b78642f1c7cf9f781a801dcf40f662cbffe61969b67fcc7128fd6fe5fe4
+  created_at: '2026-09-14T20:42:34.979318Z'
+  target_fingerprint: 5ee5b4bc42296300984ddbef926a204b2a19aee98cf93d1050ce69606e9632c7
+  evidence_manifest_key: evidence://run_efd6e0256555439eb3e274da5d6bac96/manifest-evd_9dbc1b94a216457e81ebb0a1dbca6714.bin
+  artifact_content_hash: sha256:a3739a2f63f14c20347b7d10a42cf69d47af014c16481a0ea8d14247303c3648
