@@ -7,12 +7,17 @@ from typing import Any, cast
 import pytest
 
 from replayforge.capabilities.models import (
+    AssertAction,
     CapabilityArtifact,
+    Condition,
     ExtractAction,
+    IdentityMatchesCondition,
     InputValue,
     LiteralValue,
     ObjectContract,
+    OutputValidCondition,
     TypeAction,
+    WaitForAction,
 )
 from replayforge.discovery.engine import DiscoveryEngine, DiscoveryRequest
 from replayforge.discovery.models import (
@@ -638,6 +643,108 @@ def test_operation_fingerprint_ignores_explanation_but_preserves_target_changes(
     assert DiscoveryEngine._operation_fingerprint(proposal) != (
         DiscoveryEngine._operation_fingerprint(proposal.model_copy(update={"target": None}))
     )
+
+
+@pytest.mark.parametrize("kind", ["assert", "wait_for"])
+def test_condition_before_extraction_is_replanned_without_recording_a_false_assertion(
+    valid_artifact_data: dict[str, Any],
+    kind: str,
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[2]
+    condition = OutputValidCondition(kind="output_valid", output="available_balance")
+    action = (
+        AssertAction(kind="assert", condition=condition)
+        if kind == "assert"
+        else (WaitForAction(kind="wait_for", condition=condition))
+    )
+    check = ActProposal(
+        kind="act",
+        action=action,
+        target=None,
+        rationale="Verify output.",
+        expected_effect="Output is bound.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    extract = check.model_copy(update={"action": step.action, "target": step.target})
+    provider = QueueModelProvider(
+        [
+            check,
+            extract,
+            check,
+            CompleteProposal(kind="complete", rationale="Verified."),
+        ]
+    )
+    session = FakeSurfaceSession()
+    engine, compiler = build_discovery(session, provider, artifact)
+    assert engine.effective_policy is not None
+    engine = replace(
+        engine,
+        effective_policy=replace(
+            engine.effective_policy,
+            allowed_action_types=engine.effective_policy.allowed_action_types | {kind},
+        ),
+    )
+    result = engine.execute(make_request())
+    assert isinstance(result, DiscoverySuccess)
+    assert "condition_output_unbound" in provider.calls[1].action_history[-1]
+    assert "Seeing text on screen does not bind an output" in provider.calls[1].action_history[-1]
+    assert len(compiler.calls[0]) == 2
+    assert isinstance(compiler.calls[0][0].action, ExtractAction)
+    assert isinstance(engine.recorder, MemoryRecorder)
+    assert engine.recorder.events.count(("action_intent", None)) == 2
+
+
+def test_bound_identity_mismatch_remains_a_terminal_failure(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    class ComparingSession(FakeSurfaceSession):
+        def evaluate(
+            self, condition: Condition, outputs: dict[str, Any], inputs: dict[str, Any]
+        ) -> bool:
+            if isinstance(condition, IdentityMatchesCondition):
+                return outputs.get(condition.extracted_output) == inputs.get(condition.input_path)
+            return super().evaluate(condition, outputs, inputs)
+
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[2]
+    extract = ActProposal(
+        kind="act",
+        action=step.action,
+        target=step.target,
+        rationale="Extract output.",
+        expected_effect="Output bound.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    check = extract.model_copy(
+        update={
+            "target": None,
+            "action": AssertAction(
+                kind="assert",
+                condition=IdentityMatchesCondition(
+                    kind="identity_matches",
+                    extracted_output="available_balance",
+                    input_path="member_id",
+                ),
+            ),
+        }
+    )
+    provider = QueueModelProvider([extract, check])
+    engine, compiler = build_discovery(ComparingSession(), provider, artifact)
+    assert engine.effective_policy is not None
+    engine = replace(
+        engine,
+        effective_policy=replace(
+            engine.effective_policy,
+            allowed_action_types=engine.effective_policy.allowed_action_types | {"assert"},
+        ),
+    )
+    result = engine.execute(make_request())
+    assert isinstance(result, FailureResult)
+    assert result.code == "action_condition_not_verified"
+    assert compiler.calls == []
 
 
 def test_undeclared_extraction_is_rejected_before_execution(

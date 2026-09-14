@@ -63,6 +63,8 @@ using its exact field name, and
 complete only when every required output and the requested result are visibly verified.
 Conditions use operand as the route pattern, visible text, or output name. Identity conditions use
 operand for the extracted output and secondary_operand for the input path.
+An identity or output-valid condition requires its output to be in captured_output_fields.
+Visible text alone is not a captured output: extract it before proposing that condition.
 When frame_titles is non-empty, controls represented by the inner application observation must
 use target.scope.frame_path with a title locator matching the relevant frame title exactly.
 Never exceed maximum_risk. Typing into a search/query field whose operation only retrieves data,

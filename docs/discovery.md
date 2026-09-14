@@ -86,6 +86,11 @@ dispatch. Literal values matching supplied data—even nested values—cannot be
 This uses the same value-contract and classification helpers as replay: a successful discovery must
 not depend on inputs that its published capability would reject.
 
+Assertions and waits may reference only outputs already captured and inputs actually available.
+An unbound operand is a rejected proposal, not evidence of a failed UI state: the model can extract
+the missing field and replan. Nested conditions receive the same check. Once both values are
+bound, a failed comparison remains terminal; the engine never substitutes a model claim for it.
+
 ## Bounds
 
 The request and engine share domain-defined step and wall-time bounds. Repeated observations,
@@ -172,6 +177,7 @@ was explicitly authorized on 2026-09-14. Early genuine attempts exposed several 
 | `run_c5de13d213d24a65af06f71a0bbcf979` | Repeated ambiguous proposals exhausted the provider budget | Added rejected-locator context and intent-based repeat detection |
 | `run_e3bc149bcb234864a0b6598056ca006d` | Primary discovery succeeded; Summit replay failed before opening the member | Reproduced a missed input rectangle being associated with a distant table cell |
 | `run_d46aeb169b7e41edadfc83597f111afd` | Model escalated after ambiguous navigation | Made `below` column-aligned, symmetric with the row-aligned `right_of` relation |
+| `run_fa3c4ff44a114da483b3b49e60463d86` | Quote issued, but the model asserted equality before any extraction | Added explicit unbound-condition rejection; independently checked production typing and date extraction |
 
 None of these attempts yielded a published portable capability. Their local runtime records
 are not relabeled as successful exported bundles.

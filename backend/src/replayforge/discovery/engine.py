@@ -27,6 +27,7 @@ from replayforge.capabilities.values import (
     resolve_input,
     validate_object,
 )
+from replayforge.discovery.conditions import validate_condition_bindings
 from replayforge.discovery.constraints import (
     DEFAULT_DISCOVERY_STEPS,
     DEFAULT_DISCOVERY_TIMEOUT,
@@ -310,6 +311,16 @@ class DiscoveryEngine:
                             "unique; repeating this locator will not resolve the ambiguity. "
                             "Escalate if no supported locator can distinguish the control."
                         )
+                    elif error.code in {"condition_output_unbound", "condition_input_unbound"}:
+                        history.append(
+                            "Rejected proposal (not executed): "
+                            + self._proposal_fingerprint(proposal)
+                            + f"\nCondition binding rejected ({error.code}). "
+                            "Extract the referenced required output before asserting or waiting "
+                            "on it, and use an available symbolic input path. Seeing text on "
+                            "screen does not bind an output. Captured and remaining output "
+                            "fields describe the actual runtime bindings."
+                        )
                     elif error.code == "risk_classification_unresolved":
                         history.append(
                             "Previous proposal was not executed: if the screen visibly proves an "
@@ -457,6 +468,8 @@ class DiscoveryEngine:
         output_contract: ObjectContract,
         input_contract: ObjectContract | None,
     ) -> tuple[RecordedDiscoveryStep, str] | FailureResult | InterventionRequiredResult:
+        if isinstance(proposal.action, AssertAction | WaitForAction):
+            validate_condition_bindings(proposal.action.condition, outputs, request.inputs)
         value_source = (
             proposal.action.value
             if isinstance(proposal.action, TypeAction)
