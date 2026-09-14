@@ -54,8 +54,10 @@ Return only the provided structured proposal. Use symbolic input paths, never li
 values. Supplied input values are omitted from this text context. Never assume a prefilled field
 matches an invocation input. When the goal uses an input as a form value, type or select its
 symbolic binding even if the field already displays a default value.
-When visual_tokens is non-empty, prefer rendered semantic candidates. For an icon-only
-click target that OCR cannot name, you may provide one transient coordinates candidate covering
+When visual_tokens is non-empty, prefer rendered semantic candidates. For a visual
+typing or selection target, require a rendered labeled control; an OCR label is not itself an
+editable control. Use rendered_field_value for visual extraction, never text-click targeting.
+For an icon-only click target that OCR cannot name, you may provide one transient coordinates candidate covering
 its tight bounding box and set capture_group_label to the unique rendered label for its row/card;
 discovery converts that temporary region into a content-addressed image signature before
 recording it. Never use coordinates for type or extract.
@@ -339,18 +341,14 @@ class ProviderClickLocatorBundle(ProviderLocatorBundleBase):
 
 
 class ProviderTypeLocatorBundle(ProviderLocatorBundleBase):
-    visual_candidates: tuple[
-        ProviderOcrRelativeCandidate | ProviderRenderedLabeledControlCandidate, ...
-    ] = ()
+    visual_candidates: tuple[ProviderRenderedLabeledControlCandidate, ...] = ()
     candidates: tuple[ProviderRoleNameCandidate | ProviderInputCandidate, ...] = Field(
         default=(), max_length=5
     )
 
 
 class ProviderExtractLocatorBundle(ProviderLocatorBundleBase):
-    visual_candidates: tuple[
-        ProviderOcrRelativeCandidate | ProviderRenderedFieldValueCandidate, ...
-    ] = ()
+    visual_candidates: tuple[ProviderRenderedFieldValueCandidate, ...] = ()
     candidates: tuple[
         ProviderRoleNameCandidate
         | ProviderDisplayedTextCandidate

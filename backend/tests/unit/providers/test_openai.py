@@ -21,6 +21,7 @@ from replayforge.providers.openai import (
     ProviderClickAction,
     ProviderClickLocatorBundle,
     ProviderClickProposal,
+    ProviderExtractLocatorBundle,
     ProviderFrameLocator,
     ProviderFrameTitleCandidate,
     ProviderInputCandidate,
@@ -41,6 +42,26 @@ from replayforge.surfaces.models import (
     Viewport,
 )
 from tests.artifacts import sample_artifact
+
+
+@pytest.mark.parametrize("bundle", [ProviderTypeLocatorBundle, ProviderExtractLocatorBundle])
+def test_visual_form_and_extraction_targets_reject_text_click_candidates(
+    bundle: type[ProviderTypeLocatorBundle] | type[ProviderExtractLocatorBundle],
+) -> None:
+    with pytest.raises(ValidationError):
+        bundle.model_validate(
+            {
+                "description": "A labeled field",
+                "visual_candidates": [
+                    {
+                        "strategy": "ocr_relative",
+                        "anchor": "Reference",
+                        "target_text": "Value",
+                        "relation": "right_of",
+                    }
+                ],
+            }
+        )
 
 
 @dataclass
