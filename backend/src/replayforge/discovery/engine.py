@@ -154,10 +154,13 @@ class DiscoveryEngine:
                 )
                 observation = session.observe()
                 self.recorder.record("observation_captured", request.run_id)
-                previous_was_extraction = bool(recordings) and isinstance(
-                    recordings[-1].action, ExtractAction
+                previous_was_observational = bool(recordings) and isinstance(
+                    recordings[-1].action, ExtractAction | AssertAction | WaitForAction
                 )
-                if observation.fingerprint == previous_fingerprint and not previous_was_extraction:
+                if (
+                    observation.fingerprint == previous_fingerprint
+                    and not previous_was_observational
+                ):
                     repeated_state += 1
                 else:
                     repeated_state = 0
@@ -626,7 +629,10 @@ class DiscoveryEngine:
             risk=decision.effective_risk,
             verified_postconditions=tuple(verified_postconditions),
         )
-        return recorded, self._proposal_fingerprint(proposal)
+        history = "Completed action: " + self._proposal_fingerprint(proposal)
+        if isinstance(proposal.action, AssertAction | WaitForAction):
+            history += " Condition verified and retained in the recorded trace."
+        return recorded, history
 
     def _intervene(
         self,

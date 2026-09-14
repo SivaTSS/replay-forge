@@ -16,6 +16,7 @@ from replayforge.capabilities.models import (
     LiteralValue,
     ObjectContract,
     OutputValidCondition,
+    TextCondition,
     TypeAction,
     WaitForAction,
 )
@@ -694,6 +695,63 @@ def test_condition_before_extraction_is_replanned_without_recording_a_false_asse
     assert isinstance(compiler.calls[0][0].action, ExtractAction)
     assert isinstance(engine.recorder, MemoryRecorder)
     assert engine.recorder.events.count(("action_intent", None)) == 2
+
+
+@pytest.mark.parametrize("repeat", [False, True])
+def test_verified_conditions_allow_static_screens_but_not_unbounded_repetition(
+    valid_artifact_data: dict[str, Any],
+    repeat: bool,
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[2]
+    extract = ActProposal(
+        kind="act",
+        action=step.action,
+        target=step.target,
+        rationale="Read output.",
+        expected_effect="Output bound.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    check = extract.model_copy(
+        update={
+            "target": None,
+            "action": AssertAction(
+                kind="assert",
+                condition=OutputValidCondition(kind="output_valid", output="available_balance"),
+            ),
+        }
+    )
+    distinct = check.model_copy(
+        update={
+            "action": AssertAction(
+                kind="assert",
+                condition=TextCondition(kind="text", value="Ready"),
+            )
+        }
+    )
+    proposals: list[DiscoveryProposal] = (
+        [extract, check, check, check]
+        if repeat
+        else [extract, check, distinct, CompleteProposal(kind="complete", rationale="Verified.")]
+    )
+    provider = QueueModelProvider(proposals)
+    engine, _ = build_discovery(FakeSurfaceSession(static_fingerprint=True), provider, artifact)
+    assert engine.effective_policy is not None
+    engine = replace(
+        engine,
+        effective_policy=replace(
+            engine.effective_policy,
+            allowed_action_types=engine.effective_policy.allowed_action_types | {"assert"},
+        ),
+    )
+    result = engine.execute(make_request(max_repeated_state=1))
+    if repeat:
+        assert isinstance(result, InterventionRequiredResult)
+        assert result.code == "repeated_action"
+    else:
+        assert isinstance(result, DiscoverySuccess)
+    assert "Condition verified and retained" in provider.calls[2].action_history[-1]
 
 
 def test_bound_identity_mismatch_remains_a_terminal_failure(

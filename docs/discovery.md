@@ -90,6 +90,10 @@ Assertions and waits may reference only outputs already captured and inputs actu
 An unbound operand is a rejected proposal, not evidence of a failed UI state: the model can extract
 the missing field and replan. Nested conditions receive the same check. Once both values are
 bound, a failed comparison remains terminal; the engine never substitutes a model claim for it.
+Successful actions are explicitly marked completed in transient model history; successful
+assertions are marked verified and retained. Extraction, assertion, and satisfied waits need not
+change pixels, so they do not trigger the unchanged-screen guard. Repeated executable actions
+and the step/call/time budgets still bound them.
 
 Keyboard proposals use the same closed key-name vocabulary as artifacts. Each action is one
 chord (modifiers, then a supported navigation/function key or select-all shortcut), not a list of
@@ -186,6 +190,7 @@ was explicitly authorized on 2026-09-14. Early genuine attempts exposed several 
 | `run_fa3c4ff44a114da483b3b49e60463d86` | Quote issued, but the model asserted equality before any extraction | Added explicit unbound-condition rejection; independently checked production typing and date extraction |
 | `run_4489ea9042714e39b9c39847a1ed8705` | Keyboard dispatch failed after entering the member query | Constrained key names and validated single-chord structure before dispatch |
 | `run_4a543f86096e430d828b3e4cab442666` | Model skipped the supplied date; the bound equality check correctly failed | Clarified that visible defaults cannot substitute for supplied symbolic inputs |
+| `run_55ef5f4a7b244b23aebc0b88b449028b` | All outputs captured and equality verified twice; unchanged-screen guard stopped completion | Marked successful assertions in model history and treated verified observational actions as non-visual progress |
 
 None of these attempts yielded a published portable capability. Their local runtime records
 are not relabeled as successful exported bundles.
