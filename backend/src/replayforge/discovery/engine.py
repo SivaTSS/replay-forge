@@ -376,6 +376,7 @@ class DiscoveryEngine:
                         ),
                         scenario_kind=request.scenario.kind if request.scenario else None,
                         branch_observed=observed_branch is not None,
+                        recorded_step_count=len(recordings),
                     )
                 )
                 renew_control()

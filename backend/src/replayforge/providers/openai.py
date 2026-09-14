@@ -476,6 +476,12 @@ class ScenarioPrefixEnvelope(ProviderModel):
     proposal: ProviderRecordedActionProposal | ProviderBranchProposal | EscalateProposal
 
 
+class ScenarioStartEnvelope(ProviderModel):
+    """A branch must follow an executed primary action, not a speculative initial label."""
+
+    proposal: ProviderRecordedActionProposal | EscalateProposal
+
+
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
 
 
@@ -819,6 +825,7 @@ class OpenAIModelProvider:
             "recent_actions": list(context.action_history[-20:]),
             "scenario_kind": context.scenario_kind,
             "branch_observed": context.branch_observed,
+            "recorded_step_count": context.recorded_step_count,
             "rendered_surface": context.rendered_surface,
             "reference_steps": [
                 {
@@ -859,7 +866,11 @@ class OpenAIModelProvider:
                 instructions=_INSTRUCTIONS,
                 input=[{"role": "user", "content": input_content}],
                 text_format=(
-                    ScenarioPrefixEnvelope
+                    (
+                        ScenarioPrefixEnvelope
+                        if context.recorded_step_count
+                        else ScenarioStartEnvelope
+                    )
                     if context.scenario_kind is not None and not context.branch_observed
                     else ProposalEnvelope
                 ),
