@@ -110,6 +110,13 @@ tenant validation but could not generalize to a different member. These are boun
 guards (strings of at least four characters), not semantic PII detection. Stable field labels and
 operational status assertions remain supported; different-input replay is still necessary proof.
 
+A labeled extraction may record the observed `right_of` or `below` relation. With no direction,
+competing horizontal and stacked layouts remain ambiguous. An explicit relation selects the
+observed layout, but still requires one matching value group. This avoids guessing that the next
+table-row label is a stacked value, without storing offsets, screen dimensions, or field-specific
+rules. A genuinely model-driven transaction run exposed this ambiguity; the regression tests use
+unrelated part identifiers at three scales, and the unchanged failed-run screenshot verifies the fix.
+
 Discovery and replay share one pure extraction-transform implementation. `trim` removes only
 surrounding whitespace; only `decimal` removes dollar signs and grouping commas. `lowercase` uses
 Unicode lowercase, not case-folding. Separate implementations were rejected after an exact-output

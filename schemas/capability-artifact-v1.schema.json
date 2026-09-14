@@ -2132,6 +2132,22 @@
           "$ref": "#/$defs/MatchMode",
           "default": "exact"
         },
+        "relation": {
+          "anyOf": [
+            {
+              "enum": [
+                "right_of",
+                "below"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relation"
+        },
         "strategy": {
           "const": "rendered_field_value",
           "title": "Strategy",

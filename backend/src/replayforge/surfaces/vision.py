@@ -519,7 +519,7 @@ class VisionGrounder:
             if token.confidence >= policy.ocr.minimum_confidence
             and not self._center_in(token.region, label.region)
         )
-        value_tokens = self._field_value_tokens(graph, label.region, tokens)
+        value_tokens = self._field_value_tokens(graph, label.region, tokens, candidate.relation)
         if not value_tokens:
             raise SurfaceError(
                 "target_absent",
@@ -931,7 +931,11 @@ class VisionGrounder:
         return tuple(node for node in following if abs(node.region.y - nearest_y) <= tolerance)
 
     def _field_value_tokens(
-        self, graph: VisualLayoutGraph, label: ScreenRegion, tokens: tuple[VisualToken, ...]
+        self,
+        graph: VisualLayoutGraph,
+        label: ScreenRegion,
+        tokens: tuple[VisualToken, ...],
+        relation: Literal["right_of", "below"] | None = None,
     ) -> tuple[VisualToken, ...]:
         # Segmentation can identify a table's label column as a container without
         # its adjacent value cells. Search enclosing containers, not just the first
@@ -946,13 +950,19 @@ class VisionGrounder:
             scoped = tuple(
                 token for token in tokens if self._contains(container.region, token.region)
             )
-            horizontal = self._horizontal_value_tokens(label, scoped, graph.median_text_height)
+            horizontal = (
+                self._horizontal_value_tokens(label, scoped, graph.median_text_height)
+                if relation != "below"
+                else ()
+            )
             if horizontal:
                 if stacked:
                     raise self._cardinality_error(2, "competing field value layouts")
                 return horizontal
-            if not stacked:
-                stacked = self._associated_value_tokens(label, scoped, graph.median_text_height)
+            if not stacked and relation != "right_of":
+                stacked = self._stacked_value_tokens(label, scoped, graph.median_text_height)
+                if stacked and relation == "below":
+                    return stacked
         return stacked
 
     def _horizontal_value_tokens(
@@ -980,11 +990,19 @@ class VisionGrounder:
         tokens: tuple[VisualToken, ...],
         median_height: float,
     ) -> tuple[VisualToken, ...]:
-        policy = self._required_policy()
-        lines = self._text_lines(tokens, median_height)
         horizontal = self._horizontal_value_tokens(label, tokens, median_height)
         if horizontal:
             return horizontal
+        return self._stacked_value_tokens(label, tokens, median_height)
+
+    def _stacked_value_tokens(
+        self,
+        label: ScreenRegion,
+        tokens: tuple[VisualToken, ...],
+        median_height: float,
+    ) -> tuple[VisualToken, ...]:
+        policy = self._required_policy()
+        lines = self._text_lines(tokens, median_height)
         following = [
             line
             for line in lines

@@ -407,6 +407,7 @@ class RenderedFieldValueCandidate(ArtifactModel):
     strategy: Literal["rendered_field_value"]
     label: str = Field(min_length=1, max_length=200)
     label_match: MatchMode = MatchMode.EXACT
+    relation: Literal["right_of", "below"] | None = None
 
 
 class RenderedGroupImageCandidate(ArtifactModel):

@@ -102,7 +102,9 @@ outputs through stable field labels or structural accessors. A later extraction 
 previous binding: use this when identity or state must be checked both before and after a change,
 not to repeat an already verified observation. Never put a displayed
 output value in an extraction locator (including ocr_relative target_text). Use rendered_field_value
-for labeled values. Never extract an undeclared output. Complete when remaining_output_fields is
+for labeled values, with relation right_of or below when the screenshot establishes the value's
+direction from its label. This distinguishes horizontal table fields from stacked fields without
+coordinates. Never extract an undeclared output. Complete when remaining_output_fields is
 empty and the requested result is verified from the final state."""
 
 
@@ -270,6 +272,7 @@ class ProviderRenderedFieldValueCandidate(ProviderModel):
     strategy: Literal["rendered_field_value"]
     label: str = Field(min_length=1, max_length=200)
     label_match: Literal[MatchMode.EXACT] = MatchMode.EXACT
+    relation: Literal["right_of", "below"] | None = None
 
 
 class ProviderRenderedGroupImageCandidate(ProviderModel):

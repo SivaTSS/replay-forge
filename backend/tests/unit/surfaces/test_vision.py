@@ -411,6 +411,56 @@ def test_rendered_field_value_unions_a_stacked_value_line(tmp_path: Path) -> Non
     assert resolved.region == ScreenRegion(20, 82, 115, 20)
 
 
+@pytest.mark.parametrize("scale", [0.75, 1.0, 1.5])
+@pytest.mark.parametrize("relation", ["right_of", "below"])
+def test_field_direction_distinguishes_stacked_and_horizontal_values(
+    tmp_path: Path, scale: float, relation: str
+) -> None:
+    def box(x: int, y: int, width: int, height: int) -> ScreenRegion:
+        return ScreenRegion(*(round(item * scale) for item in (x, y, width, height)))
+
+    label = VisualToken("Serial", 0.99, box(20, 50, 60, 20))
+    stacked = VisualToken("Next label", 0.99, box(20, 82, 100, 20))
+    horizontal = VisualToken("PART-28", 0.99, box(250, 50, 80, 20))
+    frame = blank_png(round(400 * scale), round(240 * scale))
+    vision = semantic_vision(tmp_path, (label, stacked, horizontal))
+    graph = VisualLayoutGraph(
+        vision.frame_hash(frame),
+        Viewport(round(400 * scale), round(240 * scale)),
+        20 * scale,
+        (
+            VisualNode("column", "container", box(10, 40, 150, 100)),
+            VisualNode("viewport", "container", box(0, 0, 400, 240)),
+        ),
+        (),
+    )
+    vision._graph_cache[graph.frame_hash] = graph
+    candidate = RenderedFieldValueCandidate.model_validate(
+        {"strategy": "rendered_field_value", "label": "Serial", "relation": relation}
+    )
+    target = vision.resolve(candidate, frame, graph.viewport)
+    assert target.region == (horizontal.region if relation == "right_of" else stacked.region)
+
+
+def test_field_direction_still_rejects_two_values_in_the_selected_direction(tmp_path: Path) -> None:
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Serial", 0.99, ScreenRegion(20, 50, 60, 20)),
+            VisualToken("PART-28", 0.99, ScreenRegion(150, 50, 60, 20)),
+            VisualToken("PART-29", 0.99, ScreenRegion(300, 50, 60, 20)),
+        ),
+    )
+    with pytest.raises(SurfaceError, match="exactly once"):
+        vision.resolve(
+            RenderedFieldValueCandidate(
+                strategy="rendered_field_value", label="Serial", relation="right_of"
+            ),
+            blank_png(),
+            Viewport(400, 240),
+        )
+
+
 def test_rendered_field_value_rejects_duplicate_labels(tmp_path: Path) -> None:
     vision = semantic_vision(
         tmp_path,

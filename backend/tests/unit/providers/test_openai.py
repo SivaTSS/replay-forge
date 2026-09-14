@@ -27,6 +27,7 @@ from replayforge.providers.openai import (
     ProviderLocatorScope,
     ProviderOcrRelativeCandidate,
     ProviderOutputField,
+    ProviderRenderedFieldValueCandidate,
     ProviderTypeAction,
     ProviderTypeLocatorBundle,
     ProviderTypeProposal,
@@ -104,6 +105,15 @@ class SafeFakeProviderError(RuntimeError):
 def model_policy(**changes: object) -> ModelPolicy:
     policy = load_model_policy(Path("config/model-policy.yaml"))
     return policy.model_copy(update=changes)
+
+
+def test_field_direction_is_nullable_and_required_in_strict_provider_schema() -> None:
+    schema = to_strict_json_schema(ProviderRenderedFieldValueCandidate)
+    assert "relation" in schema["required"]
+    assert {item["type"] for item in schema["properties"]["relation"]["anyOf"]} == {
+        "string",
+        "null",
+    }
 
 
 def context() -> ProviderContext:
