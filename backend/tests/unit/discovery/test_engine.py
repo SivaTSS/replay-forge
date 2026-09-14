@@ -155,6 +155,76 @@ def make_request(**changes: Any) -> DiscoveryRequest:
     return DiscoveryRequest(**defaults)
 
 
+@pytest.mark.parametrize("delay, expected_code", [(12, None), (31, "control_lease_expired")])
+def test_discovery_renews_between_bounded_stages_but_never_revives_expired_control(
+    valid_artifact_data: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    delay: int,
+    expected_code: str | None,
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    session = FakeSurfaceSession()
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=artifact.steps[1].action,
+                target=artifact.steps[1].target,
+                rationale="Open record",
+                expected_effect="Record visible",
+                declared_risk=Risk.READ_ONLY,
+                confidence=1,
+            ),
+            EscalateProposal(kind="escalate", reason_code="test_done", rationale="Stop test"),
+        ]
+    )
+    engine, _ = build_discovery(session, provider, artifact)
+    instant = engine.clock.now()
+
+    class AdvancingClock:
+        def now(self) -> datetime:
+            return instant
+
+    clock = AdvancingClock()
+    engine = replace(
+        engine,
+        clock=clock,
+        lease_service=ControlLeaseService(InMemoryControlLeaseRepository(), clock),
+    )
+    original_decide = QueueModelProvider.decide
+    original_resolve = FakeSurfaceSession.resolve
+
+    def decide(provider: QueueModelProvider, context: ProviderContext) -> DiscoveryProposal:
+        nonlocal instant
+        instant += timedelta(seconds=delay)
+        return original_decide(provider, context)
+
+    def resolve(session: FakeSurfaceSession, target: object, timeout_ms: int) -> ResolvedTarget:
+        nonlocal instant
+        instant += timedelta(seconds=12)
+        return original_resolve(session, target, timeout_ms)
+
+    monkeypatch.setattr(QueueModelProvider, "decide", decide)
+    monkeypatch.setattr(FakeSurfaceSession, "resolve", resolve)
+    original_observe = FakeSurfaceSession.observe
+
+    def observe(session: FakeSurfaceSession) -> NormalizedObservation:
+        nonlocal instant
+        instant += timedelta(seconds=12)
+        return original_observe(session)
+
+    monkeypatch.setattr(FakeSurfaceSession, "observe", observe)
+    result = engine.execute(make_request())
+    if expected_code:
+        assert isinstance(result, FailureResult)
+        assert result.code == expected_code
+        assert session.executed_targets == []
+    else:
+        assert session.executed_targets
+        assert getattr(result, "code", None) != "control_lease_expired"
+    assert session.closed
+
+
 @pytest.mark.parametrize(
     "changes",
     [

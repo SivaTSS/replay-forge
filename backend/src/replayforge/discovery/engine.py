@@ -65,7 +65,11 @@ from replayforge.discovery.privacy import (
 from replayforge.discovery.scenarios import scenario_expected_condition
 from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
-from replayforge.interventions.leases import ControlLeaseService
+from replayforge.interventions.leases import (
+    ControlLeaseService,
+    LeaseConflictError,
+    LeaseExpiredError,
+)
 from replayforge.interventions.models import (
     AUTOMATION_OWNER,
     InterventionContext,
@@ -271,8 +275,15 @@ class DiscoveryEngine:
                 request.application_family, request.tenant, request.entry_point
             )
             lease = self.lease_service.create_for_automation(session.session_id)
+
+            def renew_control() -> None:
+                nonlocal lease
+                lease = self.lease_service.heartbeat(
+                    session.session_id, lease.version, AUTOMATION_OWNER
+                )
+
             self.recorder.record("discovery_started", request.run_id)
-            draft = self._plan_contract(request, session, effective_policy)
+            draft = self._plan_contract(request, session, effective_policy, renew_control)
             output_contract = (
                 draft.outputs if draft is not None else self.artifact_compiler.output_contract
             )
@@ -336,12 +347,14 @@ class DiscoveryEngine:
                     yield from handoff("repeated_observation", observation)
                     continue
 
+                screenshot_png = session.capture_provider_frame()
+                renew_control()
                 proposal = self.model_provider.decide(
                     ProviderContext(
                         goal=request.goal,
                         inputs=request.inputs,
                         observation=observation,
-                        screenshot_png=session.capture_provider_frame(),
+                        screenshot_png=screenshot_png,
                         action_history=tuple(history),
                         allowed_action_types=effective_policy.allowed_action_types,
                         rendered_surface=bool(getattr(session, "rendered_surface", False)),
@@ -365,6 +378,7 @@ class DiscoveryEngine:
                         branch_observed=observed_branch is not None,
                     )
                 )
+                renew_control()
                 self.recorder.record(
                     "model_proposal_received",
                     request.run_id,
@@ -510,7 +524,7 @@ class DiscoveryEngine:
                     act_result = self._act(
                         request,
                         session,
-                        lease.version,
+                        renew_control,
                         proposal,
                         observation,
                         outputs,
@@ -608,6 +622,10 @@ class DiscoveryEngine:
             return self._failure(request, error.code, error.safe_message)
         except SurfaceError as error:
             return self._failure(request, error.code, error.safe_message)
+        except LeaseExpiredError:
+            return self._failure(request, "control_lease_expired", "Automation control expired.")
+        except LeaseConflictError:
+            return self._failure(request, "control_lease_conflict", "Automation ownership changed.")
         finally:
             if session is not None:
                 session.close()
@@ -617,6 +635,7 @@ class DiscoveryEngine:
         request: DiscoveryRequest,
         session: SurfaceSession,
         effective_policy: EffectivePolicy,
+        renew_control: Callable[[], None],
     ) -> CapabilityDraftSpec | None:
         if request.scenario is not None:
             primary = request.scenario.primary
@@ -647,12 +666,15 @@ class DiscoveryEngine:
         if self.contract_planner is None:
             return None
         try:
+            observation = session.observe()
+            screenshot_png = session.capture_provider_frame()
+            renew_control()
             draft = self.contract_planner(
                 PlanningContext(
                     goal=request.goal,
                     inputs=request.inputs,
-                    observation=session.observe(),
-                    screenshot_png=session.capture_provider_frame(),
+                    observation=observation,
+                    screenshot_png=screenshot_png,
                     maximum_risk=effective_policy.maximum_risk,
                     requested_capability_id=request.existing_capability_id,
                     application_family=request.application_family,
@@ -660,6 +682,7 @@ class DiscoveryEngine:
                     allowed_action_types=effective_policy.allowed_action_types,
                 )
             )
+            renew_control()
             if not isinstance(draft, CapabilityDraftSpec):
                 raise ValueError("provider returned an invalid capability draft")
             if self.capability_id_resolver is not None:
@@ -748,7 +771,7 @@ class DiscoveryEngine:
         self,
         request: DiscoveryRequest,
         session: SurfaceSession,
-        lease_version: int,
+        renew_control: Callable[[], None],
         proposal: ActProposal,
         before: NormalizedObservation,
         outputs: dict[str, Any],
@@ -867,6 +890,7 @@ class DiscoveryEngine:
                     effect_absent=True,
                 )
             raise DiscoveryBlockedError(decision.reason_code)
+        renew_control()
         self.recorder.record("action_intent", request.run_id)
         if isinstance(proposal.action, ExtractAction):
             if target is None:
@@ -893,6 +917,7 @@ class DiscoveryEngine:
                     receipt.error_code or "action_failed",
                     "The discovery action did not complete.",
                 )
+        renew_control()
         verified_postconditions = []
         if isinstance(proposal.action, WaitForAction | AssertAction):
             if not session.wait_until(proposal.action.condition, outputs, request.inputs, 10_000):
@@ -902,6 +927,7 @@ class DiscoveryEngine:
                     "The action's condition was not observed.",
                 )
             verified_postconditions.append(proposal.action.condition)
+            renew_control()
         if proposal.expected_condition is not None:
             if not session.wait_until(proposal.expected_condition, outputs, request.inputs, 10_000):
                 return self._failure(
@@ -911,6 +937,7 @@ class DiscoveryEngine:
                 )
             if proposal.expected_condition not in verified_postconditions:
                 verified_postconditions.append(proposal.expected_condition)
+            renew_control()
         if isinstance(proposal.action, ExtractAction):
             output = proposal.action.output
             schema = output_contract.properties[output]

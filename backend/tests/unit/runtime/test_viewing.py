@@ -132,7 +132,13 @@ def test_replay_launch_pins_version_and_passes_changed_inputs(
         started = controller.start(request)
         controller.viewer._pool.shutdown(wait=True)
         mock.invoke.assert_called_once_with(
-            "member.servicing_loan_payoff_quote", "1.0.1", "harbor", inputs
+            "member.servicing_loan_payoff_quote",
+            version
+            or controller.registry.latest(
+                "member.servicing_loan_payoff_quote"
+            ).artifact.capability.version,
+            "harbor",
+            inputs,
         )
         assert (
             controller.viewer.snapshot(started["execution_id"], started["viewer_token"])["state"]

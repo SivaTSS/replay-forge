@@ -56,6 +56,7 @@ def main() -> None:
         "--spec", type=Path, required=True, help="Goal-only discovery suite specification"
     )
     parser.add_argument("--workflow", action="append", help="Workflow key; omit to capture all")
+    parser.add_argument("--scenario", action="append", help="Collect only these scenario codes")
     parser.add_argument("--resume-suite", help="Resume validation for one existing suite ID")
     parser.add_argument(
         "--primary-version", help="Extend this published version after fresh replay"
@@ -82,6 +83,12 @@ def main() -> None:
         parser.error(f"unknown workflow: {', '.join(unknown)}")
     if arguments.resume_suite and len(selected) != 1:
         parser.error("--resume-suite requires exactly one --workflow")
+    if arguments.scenario:
+        if len(selected) != 1 or not arguments.collect_only or not arguments.primary_version:
+            parser.error("--scenario requires one workflow, --collect-only and --primary-version")
+        known_codes = {item.get("code") for item in workflows[selected[0]].get("scenarios", [])}
+        if not set(arguments.scenario) <= known_codes:
+            parser.error("unknown scenario code")
     if arguments.primary_version and (
         len(selected) != 1
         or arguments.resume_suite
@@ -104,6 +111,11 @@ def main() -> None:
             _workflow_request(
                 {
                     **item,
+                    "scenarios": [
+                        scenario
+                        for scenario in item.get("scenarios", [])
+                        if not arguments.scenario or scenario.get("code") in arguments.scenario
+                    ],
                     "collect_only": arguments.collect_only,
                     **(
                         {"primary_version": arguments.primary_version}

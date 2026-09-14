@@ -13,6 +13,54 @@ ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / "scripts/capture_demo_workflows.py"
 
 
+@pytest.mark.parametrize("collect", [False, True])
+def test_partial_scenarios_are_collection_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    collect: bool,
+) -> None:
+    calls: list[SuiteCaptureRequest] = []
+
+    def capture(
+        base_url: str,
+        timeout: int,
+        output: Path,
+        request: SuiteCaptureRequest,
+        resume_suite: str | None,
+    ) -> dict[str, str]:
+        calls.append(request)
+        return {"status": "collected"}
+
+    monkeypatch.setattr("replayforge.evidence.discovery_capture.capture_suite", capture)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(SCRIPT),
+            "--spec",
+            str(ROOT / "config/servicing-discovery.yaml"),
+            "--workflow",
+            "temporary_card_lock",
+            "--primary-version",
+            "1.0.1",
+            "--scenario",
+            "card_expired",
+            "--output-directory",
+            str(tmp_path / "exports"),
+            *(["--collect-only"] if collect else []),
+        ],
+    )
+    if collect:
+        runpy.run_path(str(SCRIPT), run_name="__main__")
+        assert len(calls) == 1 and not calls[0].publish
+        assert [item.code for item in calls[0].scenarios] == ["card_expired"]
+    else:
+        with pytest.raises(SystemExit) as error:
+            runpy.run_path(str(SCRIPT), run_name="__main__")
+        assert error.value.code == 2
+        assert not calls and not (tmp_path / "exports").exists()
+
+
 def test_repeated_capture_uses_distinct_private_exports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

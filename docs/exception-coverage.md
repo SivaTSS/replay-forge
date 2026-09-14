@@ -110,6 +110,9 @@ provenance remains intact; only the new scenario runs are new discovery evidence
 For staged evidence work, `--collect-only` saves the verified scenario traces without publication
 and reports `collected`, never `published`. Then run the model-free restoration/validation tool.
 Normal capture still validates and publishes automatically; no human approval gate is added.
+To collect remaining cases without repeating preserved discoveries, `--scenario CODE` may be
+repeated with `--collect-only --primary-version VERSION`. Partial selection cannot publish;
+the restoration tool still requires the complete configured scenario set.
 
 The model-free replay capture tool accepts `expected_status: business_outcome` with an exact
 `expected_code`. A recovery case uses `expected_status: success` and `expected_recovery`;
@@ -120,6 +123,11 @@ Recovery renews its automation lease between corrective actions and passes the n
 version back to the primary loop. Matching multiple outcomes, failures, or recoveries within one
 category is `branch_ambiguous`, not permission to choose the first declaration. Existing failure
 precedence over outcomes remains unchanged.
+
+Discovery also renews between model inference, grounding, execution, and condition checks.
+Each renewal checks the same owner and exact lease version. A single stage that outlasts the
+lease still fails closed with `control_lease_expired`; ownership changes produce
+`control_lease_conflict`. There is no background renewal that could keep a hung run alive.
 
 The resource choice was measured on one identical 76-token frame: one OCR inference thread took
 7.0–7.6 seconds; two took 5.2–5.3 seconds with identical recognized text and boxes. This is a local

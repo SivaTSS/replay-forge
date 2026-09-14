@@ -21,6 +21,9 @@ _COMMITTED_ARTIFACT_HASHES = {
     "member.servicing_loan_payoff_quote/1.0.1.yaml": (
         "sha256:ea95e6c1a0aa65528270e7078374eb8997f57a573389fa3a1d827bc516d8f737"
     ),
+    "member.servicing_loan_payoff_quote/1.0.2.yaml": (
+        "sha256:8ae472cd3a86db94cae8c212711a4433c1eb7cfa217c5e995b3bbe6b9ef6c3e5"
+    ),
     "member.temporary_card_lock/1.0.1.yaml": (
         "sha256:b403f5b4de5efb5dcad4c3b0dc67c670f496f3d9f798324c79e9e9bcce3b5de9"
     ),

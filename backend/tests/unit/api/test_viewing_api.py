@@ -26,7 +26,8 @@ def test_viewer_catalog_authorization_and_no_cache(tmp_path: Path) -> None:
         response = client.get("/api/v1/executions/catalog")
         assert response.status_code == 200
         assert "no-store" in response.headers["cache-control"]
-        assert len(response.json()["capabilities"]) == 3
+        assert len(response.json()["capabilities"]) == len(controller.registry.all())
+        assert len({item["id"] for item in response.json()["capabilities"]}) == 3
         for capability in response.json()["capabilities"]:
             artifact = controller.registry.get(capability["id"], capability["version"]).artifact
             assert capability["description"] == artifact.capability.description
