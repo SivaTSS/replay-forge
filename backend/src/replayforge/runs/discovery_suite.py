@@ -543,7 +543,9 @@ def _merge_scenarios(
         ):
             raise ValueError("scenario branch marker does not match its executed assertion")
         condition = observed.condition
-        if condition.kind not in {"text", "rendered_text", "visual_text", "element"}:
+        if condition.kind not in {"text", "rendered_text", "visual_text", "element"} or (
+            condition.kind == "element" and condition.state in {"absent", "hidden"}
+        ):
             raise ValueError("branch requires a positive distinctive surface condition")
         if scenario.kind != "recovery" and len(scenario_artifact.steps) != prefix_length + 1:
             raise ValueError("terminal scenario must stop after its verified branch marker")

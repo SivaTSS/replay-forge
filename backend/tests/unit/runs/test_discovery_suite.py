@@ -7,6 +7,7 @@ from replayforge.capabilities.models import (
     AllCondition,
     AssertAction,
     CapabilityArtifact,
+    ElementCondition,
     MatchMode,
     TextCondition,
 )
@@ -21,6 +22,7 @@ from replayforge.runs.discovery_suite import (
     DiscoverySuiteService,
     DiscoverySuiteStatus,
     ReplayValidation,
+    _merge_scenarios,
     _shared_prefix_length,
 )
 from replayforge.runs.results import (
@@ -166,6 +168,43 @@ def test_extend_published_requires_available_version_and_fresh_success(failure: 
             tenant="harbor",
             inputs={"member_id": "12345"},
         )
+
+
+@pytest.mark.parametrize("state", ["absent", "hidden"])
+def test_missing_control_cannot_prove_negative_business_outcome(state: str) -> None:
+    primary = sample_artifact()
+    condition = ElementCondition.model_validate(
+        {
+            "kind": "element",
+            "state": state,
+            "target": primary.steps[0].target.model_dump() if primary.steps[0].target else {},
+        }
+    )
+    marker = primary.steps[0].model_copy(
+        update={
+            "id": "negative_marker",
+            "action": AssertAction(kind="assert", condition=condition),
+            "target": None,
+            "postconditions": (condition,),
+        }
+    )
+    traced = primary.model_copy(update={"steps": (*primary.steps, marker)})
+    scenario = DiscoveryScenario(
+        kind="business_outcome",
+        goal="Observe a missing record",
+        code="missing_record",
+        description="No matching record",
+        inputs={"member_id": "00000"},
+        result=DiscoverySuccess(
+            status="success",
+            run_id=primary.provenance.discovery_run_id,
+            artifact=traced,
+            evidence_manifest=primary.provenance.evidence_manifest_key,
+            branch=ObservedBranch(len(primary.steps), condition),
+        ),
+    )
+    with pytest.raises(ValueError, match="positive distinctive"):
+        _merge_scenarios(primary, (scenario,))
 
 
 def test_suite_rejects_contradictory_lifecycle_state() -> None:
