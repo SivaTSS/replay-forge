@@ -72,7 +72,11 @@ from replayforge.policy.models import (
 )
 from replayforge.policy.types import Decision
 from replayforge.runs.ports import InterventionRouter, RunRecorder
-from replayforge.runs.results import FailureResult, InterventionRequiredResult
+from replayforge.runs.results import (
+    ArtifactPrivacyDiagnostic,
+    FailureResult,
+    InterventionRequiredResult,
+)
 from replayforge.shared.clock import Clock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import ActionStatus, NormalizedObservation, SurfaceError
@@ -233,7 +237,14 @@ class DiscoveryEngine:
                             artifact, request.inputs, self.privacy_redactor, outputs
                         )
                     except ArtifactPrivacyError as error:
-                        return self._failure(request, "artifact_privacy_rejected", str(error))
+                        return self._failure(
+                            request,
+                            "artifact_privacy_rejected",
+                            str(error),
+                            privacy_rejection=ArtifactPrivacyDiagnostic(
+                                source=error.source, location=error.location
+                            ),
+                        )
                     except EvidenceRejectedError:
                         return self._failure(
                             request,
@@ -735,7 +746,14 @@ class DiscoveryEngine:
             control_owner="automation_paused",
         )
 
-    def _failure(self, request: DiscoveryRequest, code: str, message: str) -> FailureResult:
+    def _failure(
+        self,
+        request: DiscoveryRequest,
+        code: str,
+        message: str,
+        *,
+        privacy_rejection: ArtifactPrivacyDiagnostic | None = None,
+    ) -> FailureResult:
         self.recorder.record("discovery_failed", request.run_id, details={"code": code})
         return FailureResult(
             status="failure",
@@ -744,6 +762,7 @@ class DiscoveryEngine:
             message=message,
             recoverable=False,
             evidence_manifest=self.recorder.evidence_manifest_key,
+            privacy_rejection=privacy_rejection,
         )
 
     @staticmethod

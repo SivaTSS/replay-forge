@@ -420,6 +420,25 @@ def test_publication_privacy_rejection_is_distinct_and_does_not_expose_raw_reaso
     assert "private-value-must-not-be-logged" not in repr(engine.recorder)
 
 
+def test_known_privacy_rejection_preserves_structured_safe_diagnostic(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from replayforge.discovery.privacy import ArtifactPrivacyError
+
+    def reject(*_args: object) -> None:
+        raise ArtifactPrivacyError("captured", "artifact.outputs.properties.*:key")
+
+    monkeypatch.setattr("replayforge.discovery.engine.validate_artifact_privacy", reject)
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    provider = QueueModelProvider([CompleteProposal(kind="complete", rationale="Done")])
+    engine, _ = build_discovery(FakeSurfaceSession(), provider, artifact)
+    result = engine.execute(make_request())
+    assert isinstance(result, FailureResult)
+    assert result.privacy_rejection is not None
+    assert result.privacy_rejection.source == "captured"
+    assert result.privacy_rejection.location == "artifact.outputs.properties.*:key"
+
+
 def test_successful_loop_records_action_and_compiles_verified_artifact(
     valid_artifact_data: dict[str, Any],
 ) -> None:

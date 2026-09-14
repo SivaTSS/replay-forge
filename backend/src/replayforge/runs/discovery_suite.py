@@ -612,6 +612,8 @@ def _result_snapshot(result: DiscoveryResult) -> dict[str, object]:
         if isinstance(result, FailureResult):
             snapshot["recoverable"] = result.recoverable
             snapshot["evidence_manifest"] = result.evidence_manifest
+            if result.privacy_rejection is not None:
+                snapshot["privacy_rejection"] = result.privacy_rejection.model_dump(mode="json")
         else:
             snapshot["intervention_id"] = result.intervention_id
             snapshot["session_live"] = result.session_live

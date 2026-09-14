@@ -58,6 +58,16 @@ class BusinessOutcomeResult(CompletedResultModel):
     details: dict[str, JsonValue]
 
 
+class ArtifactPrivacyDiagnostic(ResultModel):
+    """Runtime-generated schema path; never a rejected value or a dictionary key."""
+
+    source: Literal["invocation", "captured"]
+    location: str = Field(
+        max_length=1_000,
+        pattern=r"^artifact(?:\.(?:[a-z][a-z0-9_]*|\*)|\[[0-9]+\])*(?::key)?$",
+    )
+
+
 class FailureResult(CompletedResultModel):
     status: Literal["failure"]
     code: str = Field(pattern=_STABLE_CODE)
@@ -66,6 +76,7 @@ class FailureResult(CompletedResultModel):
     step_id: str | None = Field(default=None, pattern=_STEP_ID)
     expected: dict[str, JsonValue] | None = None
     observed: dict[str, JsonValue] | None = None
+    privacy_rejection: ArtifactPrivacyDiagnostic | None = None
 
 
 class InterventionRequiredResult(ResultModel):

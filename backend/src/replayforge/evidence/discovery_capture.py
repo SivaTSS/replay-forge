@@ -15,6 +15,7 @@ from replayforge.capabilities import (
     artifact_content_hash,
     dump_artifact_yaml,
 )
+from replayforge.runs.results import ArtifactPrivacyDiagnostic
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,11 +101,13 @@ def invoke_suite(
     if primary.get("status") != "success":
         code = primary.get("code")
         suffix = f" ({code})" if isinstance(code, str) else ""
-        # This is the public failure's runtime-owned safe message, never outputs or a draft.
-        message = primary.get("message")
-        if isinstance(message, str):
-            suffix += f": {message}"
-        raise RuntimeError(f"model-driven discovery suite did not return success{suffix}")
+        diagnostic = primary.get("privacy_rejection")
+        if diagnostic is not None:
+            safe = ArtifactPrivacyDiagnostic.model_validate(diagnostic)
+            suffix += f": literal {safe.source} value at {safe.location}"
+        raise RuntimeError(
+            f"model-driven discovery suite {suite_id} did not return success{suffix}"
+        )
 
     for tenant in request.validation_tenants:
         suite = _request_json(

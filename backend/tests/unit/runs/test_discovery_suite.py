@@ -21,7 +21,7 @@ from replayforge.runs.discovery_suite import (
     DiscoverySuiteService,
     DiscoverySuiteStatus,
 )
-from replayforge.runs.results import FailureResult
+from replayforge.runs.results import ArtifactPrivacyDiagnostic, FailureResult
 from replayforge.shared.clock import FrozenClock
 
 
@@ -134,6 +134,20 @@ def test_suite_snapshot_omits_failure_values_and_free_text() -> None:
         "recoverable": False,
         "evidence_manifest": ("evidence://run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/manifest.json"),
     }
+
+    diagnostic = ArtifactPrivacyDiagnostic(
+        source="captured", location="artifact.steps[2].target.description"
+    )
+    failed = replace(
+        suite,
+        primary=failure.model_copy(
+            update={"code": "artifact_privacy_rejected", "privacy_rejection": diagnostic}
+        ),
+    )
+    primary_snapshot = failed.snapshot()["primary"]
+    assert isinstance(primary_snapshot, dict)
+    assert primary_snapshot["privacy_rejection"] == diagnostic.model_dump()
+    assert "12345" not in str(failed.snapshot())
 
 
 def test_sensitive_suite_is_blocked_without_publication() -> None:
