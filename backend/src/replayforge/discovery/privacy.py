@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -25,6 +26,7 @@ from replayforge.capabilities.models import (
     RenderedFieldValueCandidate,
     ValueSchema,
 )
+from replayforge.capabilities.serialization import artifact_content_hash
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.policy.types import DataClassification
 
@@ -153,21 +155,29 @@ def validate_artifact_privacy(
     if any(pattern.search(full_content) for pattern in _PERSONAL_PATTERNS):
         raise EvidenceRejectedError("artifact contains personal-data-shaped text")
 
-    def check(value: object, source: Literal["invocation", "captured"]) -> None:
+    for source, value in _known_values(artifact, inputs, outputs):
+        # Match serialized text too: quotes/newlines must not evade the guard.
+        serialized = json.dumps(value, ensure_ascii=False)[1:-1].casefold()
+        location = _match_location(artifact, serialized, source=source)
+        if location is not None:
+            raise ArtifactPrivacyError(source, location)
+
+
+def _known_values(
+    artifact: CapabilityArtifact, inputs: dict[str, Any], outputs: dict[str, Any] | None
+) -> Iterator[tuple[Literal["invocation", "captured"], str]]:
+    def strings(value: object) -> Iterator[str]:
         if isinstance(value, dict):
             for item in value.values():
-                check(item, source)
+                yield from strings(item)
         elif isinstance(value, list):
             for item in value:
-                check(item, source)
+                yield from strings(item)
         elif isinstance(value, str) and len(value.strip()) >= 4:
-            # Match serialized text too: quotes/newlines must not evade the guard.
-            serialized = json.dumps(value, ensure_ascii=False)[1:-1].casefold()
-            location = _match_location(artifact, serialized, source=source)
-            if location is not None:
-                raise ArtifactPrivacyError(source, location)
+            yield value
 
-    check(inputs, "invocation")
+    for value in strings(inputs):
+        yield "invocation", value
     for name, value in (outputs or {}).items():
         schema = artifact.outputs.properties.get(name)
         if schema is not None and schema.data_classification in {
@@ -175,7 +185,54 @@ def validate_artifact_privacy(
             DataClassification.CUSTOMER_IDENTIFIER,
             DataClassification.FINANCIAL,
         }:
-            check(value, "captured")
+            for item in strings(value):
+                yield "captured", item
+
+
+def redact_contract_descriptions(
+    artifact: CapabilityArtifact,
+    inputs: dict[str, Any],
+    outputs: dict[str, Any],
+    redactor: StructuredRedactor | None = None,
+) -> CapabilityArtifact:
+    """Redact documentation only; never rewrite executable or policy-relevant content.
+
+    A whole field is removed on a known-value match, avoiding partial identifiers or
+    Unicode replacement errors. Publication must still run the complete privacy guard.
+    """
+    (redactor or StructuredRedactor()).validate_text(artifact.model_dump_json())
+    private = tuple(value.casefold() for _, value in _known_values(artifact, inputs, outputs))
+
+    def clean(schema: ValueSchema) -> ValueSchema:
+        description = schema.description
+        if any(value in description.casefold() for value in private):
+            description = "[REDACTED]"
+        return schema.model_copy(
+            update={
+                "description": description,
+                "properties": {name: clean(child) for name, child in schema.properties.items()},
+            }
+        )
+
+    def contract(value: ObjectContract) -> ObjectContract:
+        return value.model_copy(
+            update={
+                "properties": {name: clean(schema) for name, schema in value.properties.items()}
+            }
+        )
+
+    cleaned = artifact.model_copy(
+        update={"inputs": contract(artifact.inputs), "outputs": contract(artifact.outputs)}
+    )
+    if cleaned == artifact:
+        return artifact
+    return cleaned.model_copy(
+        update={
+            "provenance": cleaned.provenance.model_copy(
+                update={"artifact_content_hash": artifact_content_hash(cleaned)}
+            )
+        }
+    )
 
 
 def extraction_locator_contains_value(target: LocatorBundle | None, value: str) -> bool:

@@ -120,6 +120,12 @@ personal-data-shaped patterns still scan the entire artifact, including provenan
 schema-name collisions without changing output classifications or adding application-specific
 exceptions; it does not detect arbitrary encodings of personal data.
 
+Before that check, matching private values in input/output **schema descriptions** cause the
+whole description to become `[REDACTED]`. These annotations do not drive execution. This is
+redaction, not a metadata exemption: the resulting artifact is checked again and its content hash
+is recomputed. Selectors, target descriptions used by policy, examples, constraints, and observed
+conditions are never rewritten. Configured secrets are rejected before any description redaction.
+
 A failed suite exposes a typed `privacy_rejection` with the source category and schema-only
 location. Dictionary keys become `*`; rejected values and free-text failure messages stay out of
 suite snapshots. Capture errors include the suite ID so the failed run remains identifiable.

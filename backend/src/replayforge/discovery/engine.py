@@ -53,6 +53,7 @@ from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelPr
 from replayforge.discovery.privacy import (
     ArtifactPrivacyError,
     extraction_locator_contains_value,
+    redact_contract_descriptions,
     target_contains_invocation_literal,
     validate_artifact_privacy,
 )
@@ -232,6 +233,9 @@ class DiscoveryEngine:
                             str(getattr(session, "surface_contract", "web.v1")),
                             tuple(getattr(session, "required_landmarks", ())),
                             tuple(getattr(session, "forbidden_landmarks", ())),
+                        )
+                        artifact = redact_contract_descriptions(
+                            artifact, request.inputs, outputs, self.privacy_redactor
                         )
                         validate_artifact_privacy(
                             artifact, request.inputs, self.privacy_redactor, outputs

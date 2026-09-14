@@ -4,12 +4,14 @@ from typing import Any
 import pytest
 
 from replayforge.capabilities.models import CapabilityArtifact, LocatorBundle
+from replayforge.capabilities.serialization import artifact_content_hash
 from replayforge.discovery.privacy import (
     ArtifactPrivacyError,
     extraction_locator_contains_value,
+    redact_contract_descriptions,
     validate_artifact_privacy,
 )
-from replayforge.evidence.redaction import EvidenceRejectedError
+from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 
 
 @pytest.mark.parametrize(
@@ -207,4 +209,58 @@ def test_known_string_cannot_be_embedded_as_numeric_example(
     with pytest.raises(ArtifactPrivacyError):
         validate_artifact_privacy(
             CapabilityArtifact.model_validate(valid_artifact_data), {"query": "12345"}
+        )
+
+
+def test_contract_documentation_is_redacted_without_changing_executable_content(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    data = _with_status_contract(valid_artifact_data).model_dump(mode="json")
+    data["outputs"]["properties"]["posted_date"]["description"] = "The posted date of this record"
+    original = CapabilityArtifact.model_validate(data)
+    cleaned = redact_contract_descriptions(original, {}, {"posting_status": "Posted"})
+    validate_artifact_privacy(cleaned, {}, outputs={"posting_status": "Posted"})
+    assert (
+        original.outputs.properties["posted_date"].description == "The posted date of this record"
+    )
+    assert cleaned.outputs.properties["posted_date"].description == "[REDACTED]"
+    assert cleaned.provenance.artifact_content_hash == artifact_content_hash(cleaned)
+    assert cleaned.steps == original.steps
+    assert cleaned.checkpoint == original.checkpoint
+    assert cleaned.policy == original.policy
+    assert (
+        cleaned.outputs.properties["posting_status"]
+        == original.outputs.properties["posting_status"]
+    )
+
+
+@pytest.mark.parametrize("field", ["description", "example", "const", "enum"])
+def test_description_redaction_does_not_sanitize_executable_targets_or_schema_constraints(
+    valid_artifact_data: dict[str, Any], field: str
+) -> None:
+    data = _with_status_contract(valid_artifact_data).model_dump(mode="json")
+    if field == "description":
+        data["steps"][2]["target"]["description"] = "Private Person"
+    else:
+        data["outputs"]["properties"]["posting_status"][field] = (
+            ["Private Person"] if field == "enum" else "Private Person"
+        )
+    cleaned = redact_contract_descriptions(
+        CapabilityArtifact.model_validate(data), {}, {"posting_status": "Private Person"}
+    )
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(cleaned, {}, outputs={"posting_status": "Private Person"})
+
+
+def test_configured_secrets_are_rejected_before_description_redaction(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    data = _with_status_contract(valid_artifact_data).model_dump(mode="json")
+    data["outputs"]["properties"]["posting_status"]["description"] = "sensitive-test-credential"
+    with pytest.raises(EvidenceRejectedError):
+        redact_contract_descriptions(
+            CapabilityArtifact.model_validate(data),
+            {},
+            {"posting_status": "sensitive-test-credential"},
+            StructuredRedactor(configured_secrets=("sensitive-test-credential",)),
         )
