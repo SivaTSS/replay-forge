@@ -61,6 +61,10 @@ integration tests run in one coverage process so browser-executed domain paths c
 | Application contract changes stop before launch | `test_incompatible_registration_stops_before_surface_open` |
 | Shared readiness differs from tenant branding | Registered readiness tests plus actual Harbor/Summit Chromium replay |
 | Production compilation is task-independent | Dependency test rejects production imports from `tests`; old compiler is a fixture |
+| Discovery enforces its planned input contract and input classifications | `test_planned_input_contract_is_checked_before_any_action`; `test_discovery_input_classification_applies_before_typing` |
+| Validation errors cannot echo arbitrary property names | `test_request_validation_never_echoes_unknown_property_names` |
+| All reviewed policy YAML has unambiguous keys | Model/vision duplicate-budget rejection tests |
+| Late UI responses cannot change the selected task | `test_delayed_lookup_cannot_replace_new_operator_selection` |
 
 The genuine discovery bundles are historical executions tied to their recorded commits. They were
 verified, not regenerated or relabeled during the audit. Browser integration tests exercise today's
@@ -70,14 +74,16 @@ runtime against those unchanged artifact contracts; synthetic test providers rem
 
 | Gate | Result |
 |---|---|
-| Unit suite | 588 passed, including registration, compiler-safety, and evidence-tampering regressions |
-| Integration suite | 47 passed, including real Chromium replay, portability, and operator control |
-| Configured domain coverage | 90.15%, with the existing branch-aware 90% threshold and exclusions unchanged |
+| Unit suite | 608 passed, including discovery-input policy, registration, compiler-safety, and evidence-tampering regressions |
+| Integration suite | 48 passed, including real Chromium replay, portability, operator control, and response-ordering regression |
+| Configured domain coverage | 90.48%, with the existing branch-aware 90% threshold and exclusions unchanged |
 | Static checks | Ruff format/lint and strict mypy passed; both frontend typechecks and sequential production builds passed |
 | Historical evidence | All ten bundles verified; no genuine discovery was regenerated |
 
-The full browser/unit run was followed by a complete unit rerun with coverage appended after
-tests-only additions. Production code was unchanged between those runs. The test dependency
+The full 655-case Python run passed with coverage. After rebuilding the console, both operator
+browser cases passed, including one added response-ordering case: 656 distinct passing cases in
+total. That new case first reproduced the stale-selection bug against the previous console build.
+It mocks response timing; the separate handoff case drives the real retained browser session.
 Starlette emits one upstream AnyIO deprecation warning; no test is skipped to suppress it.
 
 ## Evidence bundle anatomy

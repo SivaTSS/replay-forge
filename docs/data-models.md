@@ -76,9 +76,9 @@ flowchart TB
 | Policy | Entry points, routes, actions, risk ceiling, and forbidden data classes are explicit |
 | Provenance | Run, provider/model, component versions, timestamp, fingerprint, evidence key, and optional canonical hash are recorded |
 
-Artifact and registration YAML rejects duplicate mapping keys, including duplicates introduced
+Artifact, registration, model-policy, and vision-policy YAML reject duplicate mapping keys, including duplicates introduced
 by merge keys. Silent last-key-wins parsing would let displayed configuration disagree with the
-effective contract. The parser is shared so both boundaries use the same rule.
+effective contract. These boundaries share one parser and one rejection rule.
 
 Compatibility is checked against registration before launch and registered readiness landmarks
 on the live entry surface. Descriptive discovery fingerprints are not executable preconditions.
@@ -155,8 +155,9 @@ a risk ceiling, and forbidden data classes. Intersection keeps only shared allow
 forbidden classes, and chooses the lowest risk ceiling. Empty intersections are valid and fail
 closed.
 
-Replay passes the bound input's classification into policy, including forbidden classifications
-in parent objects. Discovery rejects nested credential/secret fields as well as top-level ones.
+Discovery and replay pass the bound input's classification into policy, including forbidden
+classifications in parent objects. Discovery also rejects nested credential/secret fields and
+checks supplied values against the planned contract before the action loop.
 Evidence classification also walks nested outputs. Explicit `remove` directives drop the field;
 `tokenize` and `last4` never weaken a stronger classification, and customer tokenization is used
 instead of retaining trailing identifying digits. These are persistence rules; successful callers

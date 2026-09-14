@@ -48,6 +48,9 @@ Every required output must be extracted and referenced by the checkpoint; runtim
 output values before success. Registry snapshots isolate nested mutable mappings, while immutable
 file publication prevents replacing an existing version.
 
+Discovery validates supplied inputs against its planned contract before acting and applies the same
+bound-input classification rules as replay, including forbidden parent-object classifications.
+
 YAML was chosen for reviewability, typed models for enforceable semantics, and canonical SHA-256
 for content identity. The generic compiler accepts executed, verified trace steps rather than an
 arbitrary model-written program. Historical task-specific compilation exists only in test fixtures.
