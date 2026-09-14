@@ -997,16 +997,30 @@ def _validate_geometry_free_visual_contract(artifact: CapabilityArtifact) -> Non
 
 def _validate_no_persisted_coordinates(artifact: CapabilityArtifact) -> None:
     def walk(value: Any) -> None:
-        if isinstance(value, dict):
-            if value.get("strategy") == LocatorStrategy.COORDINATES.value:
+        if isinstance(value, ArtifactModel):
+            if (
+                isinstance(value, LocatorCandidate)
+                and value.strategy is LocatorStrategy.COORDINATES
+            ):
                 raise ValueError("schema 1.4 artifacts cannot persist coordinate locators")
+            if isinstance(value, ImageAnchorCandidate) or (
+                isinstance(value, OcrTextCandidate | OcrRelativeCandidate | VisualTextCondition)
+                and any(
+                    getattr(value, name, None) is not None
+                    for name in ("search_region", "relative_region", "region")
+                )
+            ):
+                raise ValueError("schema 1.4 artifacts cannot persist visual geometry")
+            for name in type(value).model_fields:
+                walk(getattr(value, name))
+        elif isinstance(value, dict):
             for nested in value.values():
                 walk(nested)
-        elif isinstance(value, list):
+        elif isinstance(value, list | tuple):
             for nested in value:
                 walk(nested)
 
-    walk(artifact.model_dump(mode="json"))
+    walk(artifact)
 
 
 class CapabilityArtifact(ArtifactModel):

@@ -108,7 +108,10 @@ checked on model proposals, recorded discovery steps, and final artifact steps.
 
 Schema `1.4` stores no coordinates. Rendered candidates describe text, labeled controls, fields,
 or image groups. The surface adapter derives a region from the current frame and viewport, uses it
-once, and discards it. Older `1.0`–`1.3` artifact schemas are rejected; no migration shim is retained.
+once, and discards it. The geometry prohibition also covers visual fallbacks in DOM-enabled
+capabilities; changing the surface flag cannot bypass it. The guard traverses typed model objects,
+not arbitrary JSON data that happens to contain a field named `strategy`.
+Older `1.0`–`1.3` artifact schemas are rejected; no migration shim is retained.
 
 ## Discovery
 

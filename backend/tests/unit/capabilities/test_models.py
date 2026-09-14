@@ -314,6 +314,32 @@ def test_retired_artifact_schemas_are_rejected(
 
 
 @pytest.mark.parametrize(
+    "candidate",
+    [
+        {
+            "strategy": "ocr_text",
+            "value": "Reference",
+            "search_region": {"x": 0, "y": 0, "width": 1, "height": 1},
+        },
+        {
+            "strategy": "ocr_relative",
+            "anchor": "Reference",
+            "relation": "right_of",
+            "relative_region": {"x": 1, "y": 0, "width": 4, "height": 1},
+        },
+    ],
+)
+def test_dom_capabilities_cannot_smuggle_in_fixed_visual_geometry(
+    valid_artifact_data: dict[str, Any],
+    candidate: dict[str, Any],
+) -> None:
+    valid_artifact_data["compatibility"]["rendered_surface"] = False
+    valid_artifact_data["steps"][0]["target"]["visual_candidates"] = [candidate]
+    with pytest.raises(ValidationError, match="cannot persist visual geometry"):
+        CapabilityArtifact.model_validate(valid_artifact_data)
+
+
+@pytest.mark.parametrize(
     ("schema", "message"),
     [
         (
