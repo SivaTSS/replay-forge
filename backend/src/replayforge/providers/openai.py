@@ -45,7 +45,10 @@ logger = logging.getLogger(__name__)
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
 Return only the provided structured proposal. Use symbolic input paths, never literal customer
-values. When visual_tokens is non-empty, prefer rendered semantic candidates. For an icon-only
+values. Supplied input values are omitted from this text context. Never assume a prefilled field
+matches an invocation input. When the goal uses an input as a form value, type or select its
+symbolic binding even if the field already displays a default value.
+When visual_tokens is non-empty, prefer rendered semantic candidates. For an icon-only
 click target that OCR cannot name, you may provide one transient coordinates candidate covering
 its tight bounding box and set capture_group_label to the unique rendered label for its row/card;
 discovery converts that temporary region into a content-addressed image signature before
