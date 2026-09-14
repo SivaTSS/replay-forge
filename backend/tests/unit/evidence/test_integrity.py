@@ -2,6 +2,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -120,4 +121,93 @@ def test_verifier_rejects_invalid_manifest_relationships(
     manifest_path.write_text(json.dumps(manifest))
 
     with pytest.raises(EvidenceIntegrityError):
+        verify_run_manifest(store, journal.evidence_manifest_key)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("events", "created_at", "2026-09-10T12:00:00"),
+        ("events", "redaction_directives", ["mask:input", "mask:input"]),
+        ("events", "redaction_directives", [""]),
+        ("events", "media_type", "image/png"),
+        ("attachments", "media_type", "application/json"),
+        ("terminal_result", "media_type", "image/png"),
+        ("terminal_result", "retention_class", "failure"),
+    ],
+)
+def test_manifest_rejects_invalid_retention_and_payload_metadata(
+    retained_run: tuple[LocalEvidenceStore, InMemoryRunJournal],
+    section: str,
+    field: str,
+    value: Any,
+) -> None:
+    store, journal = retained_run
+    path = store.root / journal.evidence_manifest_key.removeprefix("evidence://")
+    manifest = json.loads(path.read_text())
+    entry = manifest[section] if section == "terminal_result" else manifest[section][0]
+    entry[field] = value
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(EvidenceIntegrityError):
+        verify_run_manifest(store, journal.evidence_manifest_key)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "message"),
+    [
+        ("events", "run_id", "run_" + "a" * 32, "event payload belongs"),
+        ("events", "occurred_at", "2026-09-10T12:00:00", "event evidence violates"),
+        ("events", "sequence", 0, "event evidence violates"),
+        ("terminal_result", "run_id", "run_" + "a" * 32, "terminal result payload belongs"),
+        ("terminal_result", "status", "intervention_required", "terminal result evidence violates"),
+    ],
+)
+def test_valid_hash_cannot_hide_invalid_event_or_result_semantics(
+    retained_run: tuple[LocalEvidenceStore, InMemoryRunJournal],
+    section: str,
+    field: str,
+    value: Any,
+    message: str,
+) -> None:
+    store, journal = retained_run
+    path = store.root / journal.evidence_manifest_key.removeprefix("evidence://")
+    manifest = json.loads(path.read_text())
+    entry = manifest[section] if section == "terminal_result" else manifest[section][0]
+    payload_path = store.root / entry["key"].removeprefix("evidence://")
+    payload = json.loads(payload_path.read_text())
+    payload[field] = value
+    content = json.dumps(payload).encode()
+    payload_path.write_bytes(content)
+    entry.update(
+        size_bytes=len(content), content_hash=f"sha256:{hashlib.sha256(content).hexdigest()}"
+    )
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(EvidenceIntegrityError, match=message):
+        verify_run_manifest(store, journal.evidence_manifest_key)
+
+
+def test_incomplete_manifest_is_allowed_only_when_explicitly_requested(
+    retained_run: tuple[LocalEvidenceStore, InMemoryRunJournal],
+) -> None:
+    store, journal = retained_run
+    path = store.root / journal.evidence_manifest_key.removeprefix("evidence://")
+    manifest = json.loads(path.read_text())
+    manifest["terminal_result"] = None
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(EvidenceIntegrityError, match="no terminal result"):
+        verify_run_manifest(store, journal.evidence_manifest_key)
+    assert not verify_run_manifest(
+        store, journal.evidence_manifest_key, require_terminal=False
+    ).terminal_result_verified
+
+
+def test_manifest_requires_an_aware_generation_timestamp(
+    retained_run: tuple[LocalEvidenceStore, InMemoryRunJournal],
+) -> None:
+    store, journal = retained_run
+    path = store.root / journal.evidence_manifest_key.removeprefix("evidence://")
+    manifest = json.loads(path.read_text())
+    manifest["generated_at"] = "2026-09-10T12:00:00"
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(EvidenceIntegrityError, match="manifest violates"):
         verify_run_manifest(store, journal.evidence_manifest_key)

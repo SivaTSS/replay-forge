@@ -66,6 +66,20 @@ The genuine discovery bundles are historical executions tied to their recorded c
 verified, not regenerated or relabeled during the audit. Browser integration tests exercise today's
 runtime against those unchanged artifact contracts; synthetic test providers remain test fixtures.
 
+### Audit checkpoint
+
+| Gate | Result |
+|---|---|
+| Unit suite | 588 passed, including registration, compiler-safety, and evidence-tampering regressions |
+| Integration suite | 47 passed, including real Chromium replay, portability, and operator control |
+| Configured domain coverage | 90.15%, with the existing branch-aware 90% threshold and exclusions unchanged |
+| Static checks | Ruff format/lint and strict mypy passed; both frontend typechecks and sequential production builds passed |
+| Historical evidence | All ten bundles verified; no genuine discovery was regenerated |
+
+The full browser/unit run was followed by a complete unit rerun with coverage appended after
+tests-only additions. Production code was unchanged between those runs. The test dependency
+Starlette emits one upstream AnyIO deprecation warning; no test is skipped to suppress it.
+
 ## Evidence bundle anatomy
 
 ```text
@@ -149,4 +163,8 @@ No Playwright trace archive is committed. This is an explicit optional evidence 
 
 ## Secret audit
 
-`.env`, `.secrets/`, local Langfuse data, runtime evidence, dependencies, build output, and the assignment PDF are ignored. Before the current public push, all tracked files and all reachable historical blobs were scanned for provider keys, cloud keys, repository tokens, bearer tokens, JWTs, and private keys. Actual local credential values were also compared against history without exposing them; no match was found.
+`.env`, `.secrets/`, local Langfuse data, runtime evidence, dependencies, build output, and the
+assignment PDF are ignored. The audit checks tracked content and reachable Git history for
+configured credential values and high-confidence credential patterns without printing secret
+values. No matches were found. Pattern scans are a release check, not a proof that arbitrary
+sensitive text can always be recognized.
