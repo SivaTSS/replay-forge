@@ -158,6 +158,9 @@ Named relative targets are resolved across all matching anchors and must identif
 target. A repeated identity in a search field and a result row need not be ambiguous when only
 the row has a related action. Multiple distinct related actions still fail closed; no nearest,
 first-row, or pixel-offset fallback is used. Region-offset locators still require one anchor.
+When repeated related text includes one visibly bounded control and plain status text, current-frame
+segmentation may select that unique control. Multiple matching controls remain ambiguous; an
+enclosing row alone does not establish which label is actionable.
 
 Discovery and replay share one pure extraction-transform implementation. `trim` removes only
 surrounding whitespace; only `decimal` removes dollar signs and grouping commas. `lowercase` uses
@@ -245,11 +248,15 @@ execute it. `branch` marks a positively observed exceptional state and becomes a
 in the trace. The compiler binds that marker to the matching executed prefix; it never infers a
 branch from the last piece of text on a page. Normal task discovery cannot use these scenario-only
 proposals.
+Reused actions retain existing identity postconditions, including their composite semantics, and
+the model's additional scenario assertion. Neither can silently replace the other.
 
 Negative scenarios stop at the marker without fabricating happy-path outputs. Optional extraction
 is available for identity checks. Recovery scenarios mark the blocker first, execute a bounded
 correction, and assert a distinct restored state. They rejoin at the next primary step, cannot skip
 the remaining program, and must pass a fresh complete replay that actually uses the recovery.
+The [exception coverage matrix](exception-coverage.md) separates configured cases, automated
+regression checks, and genuine discovery/replay evidence.
 
 | Choice | Alternative | Reason |
 |---|---|---|

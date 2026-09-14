@@ -8,8 +8,20 @@ from playwright.sync_api import BrowserContext, Page
 from playwright.sync_api import Error as PlaywrightError
 
 from replayforge.applications.registry import load_application_registry
-from replayforge.capabilities.models import ElementCondition, IdentityMatchesCondition
-from replayforge.surfaces.models import ActionableControl, ExtractableField, SurfaceError
+from replayforge.capabilities.models import (
+    ElementCondition,
+    IdentityMatchesCondition,
+    InputValue,
+    SelectAction,
+)
+from replayforge.surfaces.models import (
+    ActionableControl,
+    ExtractableField,
+    ResolvedTarget,
+    ScreenRegion,
+    SurfaceError,
+    VisualTargetData,
+)
 from replayforge.surfaces.playwright import PlaywrightSurfaceDriver, PlaywrightSurfaceSession
 
 
@@ -36,6 +48,25 @@ def session_with(page: FakePage) -> PlaywrightSurfaceSession:
 def test_driver_requires_explicit_application_registration() -> None:
     with pytest.raises(ValueError, match="application registry"):
         PlaywrightSurfaceDriver("http://127.0.0.1:3001")
+
+
+def test_visual_select_rejection_proves_no_effect_and_allows_replanning() -> None:
+    session = session_with(FakePage())
+    target = ResolvedTarget(
+        "visual",
+        "Generic dropdown",
+        0,
+        1,
+        visual=VisualTargetData(ScreenRegion(10, 10, 100, 30), "rendered", 1.0, "frame"),
+    )
+    with pytest.raises(SurfaceError) as error:
+        session.execute(
+            SelectAction(kind="select", option=InputValue(source="input", path="choice")),
+            target,
+            {"choice": "Synthetic option"},
+        )
+    assert error.value.code == "visual_select_unsupported"
+    assert error.value.recoverable and error.value.effect_absent
 
 
 def test_rendered_readiness_requires_vision_before_browser_launch() -> None:

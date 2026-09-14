@@ -46,6 +46,7 @@ the repository—not approving a discovery publication.
 | How do I watch a run and inspect earlier replay screens? | [Live execution viewing](live-viewing.md) |
 | What can the synthetic bank do, and how does it challenge automation? | [Demo bank](demo-bank.md) |
 | What do the tests and committed evidence prove? | [Verification](verification.md) |
+| Which negative outcomes and recovery paths must be proved? | [Exception coverage](exception-coverage.md) |
 | How does the implementation map to the assignment? | [Requirements](requirements.md) |
 
 Start with the root [quickstart](../README.md), then read Architecture → Data models →

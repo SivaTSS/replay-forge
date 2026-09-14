@@ -57,6 +57,9 @@ symbolic binding even if the field already displays a default value.
 When visual_tokens is non-empty, prefer rendered semantic candidates. For a visual
 typing or selection target, require a rendered labeled control; an OCR label is not itself an
 editable control. Use rendered_field_value for visual extraction, never text-click targeting.
+select is only supported for native DOM select elements. For a rendered/custom dropdown,
+open its visible control and choose the observed option using click or supported keyboard actions.
+Use input_text for an invocation-bound option; do not embed the caller's value in a locator.
 For an icon-only click target that OCR cannot name, you may provide one transient coordinates
 candidate covering
 its tight bounding box and set capture_group_label to the unique rendered label for its row/card;

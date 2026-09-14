@@ -9,11 +9,9 @@ from datetime import timedelta
 from typing import Any, cast
 
 from replayforge.capabilities.models import (
-    AllCondition,
     AssertAction,
     CapabilityArtifact,
     ExtractAction,
-    IdentityMatchesCondition,
     InputValue,
     Landmark,
     LiteralValue,
@@ -64,6 +62,7 @@ from replayforge.discovery.privacy import (
     target_contains_invocation_literal,
     validate_artifact_privacy,
 )
+from replayforge.discovery.scenarios import scenario_expected_condition
 from replayforge.evidence.models import RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.interventions.leases import ControlLeaseService
@@ -470,20 +469,8 @@ class DiscoveryEngine:
                         target=reference.target,
                         rationale=proposal.rationale,
                         expected_effect="Reobserve the recorded action's effect.",
-                        expected_condition=(
-                            AllCondition(
-                                kind="all",
-                                conditions=tuple(
-                                    condition
-                                    for condition in reference.postconditions
-                                    if isinstance(condition, IdentityMatchesCondition)
-                                ),
-                            )
-                            if any(
-                                isinstance(condition, IdentityMatchesCondition)
-                                for condition in reference.postconditions
-                            )
-                            else proposal.expected_condition
+                        expected_condition=scenario_expected_condition(
+                            reference, proposal.expected_condition
                         ),
                         declared_risk=reference.risk,
                         confidence=1.0,
@@ -557,6 +544,13 @@ class DiscoveryEngine:
                             "current screenshot. The relation across every matching anchor must "
                             "identify one target; repeating this locator cannot resolve ambiguity. "
                             "Escalate if no supported locator can distinguish the control."
+                        )
+                    elif error.code == "visual_select_unsupported":
+                        history.append(
+                            "Previous proposal was not executed: select requires a native DOM "
+                            "select element. For a rendered/custom dropdown, open the visible "
+                            "control and choose the observed option with click or supported keys. "
+                            "Use input_text for an option bound to invocation data."
                         )
                     elif error.code == "literal_input_target":
                         history.append(

@@ -703,6 +703,8 @@ class PlaywrightSurfaceSession:
                     raise SurfaceError(
                         "visual_select_unsupported",
                         "Visual select actions require an explicit keyboard interaction flow.",
+                        recoverable=True,
+                        effect_absent=True,
                     )
                 self._required(locator).select_option(
                     label=str(self._resolve_value(action.option, inputs))

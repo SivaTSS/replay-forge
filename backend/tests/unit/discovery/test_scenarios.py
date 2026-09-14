@@ -5,7 +5,15 @@ from hashlib import sha256
 
 import pytest
 
-from replayforge.capabilities.models import CapabilityArtifact, TextCondition
+from replayforge.capabilities.models import (
+    AllCondition,
+    AnyCondition,
+    CapabilityArtifact,
+    Condition,
+    IdentityMatchesCondition,
+    NotCondition,
+    TextCondition,
+)
 from replayforge.discovery.compiler import TraceArtifactCompiler
 from replayforge.discovery.engine import DiscoveryEngine
 from replayforge.discovery.models import (
@@ -15,6 +23,7 @@ from replayforge.discovery.models import (
     RecordedActionProposal,
     ScenarioContext,
 )
+from replayforge.discovery.scenarios import scenario_expected_condition
 from replayforge.runs.results import FailureResult
 from replayforge.surfaces.models import NormalizedObservation
 from tests.artifacts import sample_artifact
@@ -28,6 +37,36 @@ class HashedSurface(FakeSurfaceSession):
         return replace(
             observation, fingerprint=sha256(observation.fingerprint.encode()).hexdigest()
         )
+
+
+@pytest.mark.parametrize("wrapper", ["direct", "all", "any", "not"])
+def test_scenario_cannot_drop_nested_identity_or_its_new_assertion(wrapper: str) -> None:
+    identity = IdentityMatchesCondition(
+        kind="identity_matches", extracted_output="member_id", input_path="member_id"
+    )
+    guards: dict[str, Condition] = {
+        "direct": identity,
+        "all": AllCondition(kind="all", conditions=(identity,)),
+        "any": AnyCondition(kind="any", conditions=(identity,)),
+        "not": NotCondition(kind="not", condition=identity),
+    }
+    guarded = guards[wrapper]
+    proposed = TextCondition(kind="text", value="Exceptional state")
+    step = sample_artifact().steps[0].model_copy(update={"postconditions": (guarded,)})
+    assert scenario_expected_condition(step, proposed) == AllCondition(
+        kind="all", conditions=(guarded, proposed)
+    )
+    assert scenario_expected_condition(step, None) == guarded
+    assert scenario_expected_condition(step, guarded) == guarded
+
+
+def test_scenario_without_identity_can_replace_success_only_expectation() -> None:
+    step = (
+        sample_artifact()
+        .steps[0]
+        .model_copy(update={"postconditions": (TextCondition(kind="text", value="Success"),)})
+    )
+    assert scenario_expected_condition(step, None) is None
 
 
 def scenario_engine(
