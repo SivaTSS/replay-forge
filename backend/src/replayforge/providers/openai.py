@@ -60,6 +60,12 @@ editable control. Use rendered_field_value for visual extraction, never text-cli
 select is only supported for native DOM select elements. For a rendered/custom dropdown,
 open its visible control and choose the observed option using click or supported keyboard actions.
 Use input_text for an invocation-bound option; do not embed the caller's value in a locator.
+An input_text binding matches a complete OCR phrase, not an identifier embedded inside a longer
+option label. When a required record identity is displayed separately in a list or table, prefer
+its uniquely grounded row action to a composite-label dropdown. Establish the requested record
+context before opening a task workspace; do not rely on the workspace's preselected record.
+Do not type into a non-editable dropdown. If options cannot be uniquely bound, use another
+observed record-navigation affordance or escalate; never select by row number or arrow count.
 For an icon-only click target that OCR cannot name, you may provide one transient coordinates
 candidate covering
 its tight bounding box and set capture_group_label to the unique rendered label for its row/card;
