@@ -470,6 +470,12 @@ class ProposalEnvelope(ProviderModel):
     )
 
 
+class ScenarioPrefixEnvelope(ProviderModel):
+    """Only an observed primary prefix can be merged into an exception artifact."""
+
+    proposal: ProviderRecordedActionProposal | ProviderBranchProposal | EscalateProposal
+
+
 _DISCOVERY_PROPOSAL: TypeAdapter[DiscoveryProposal] = TypeAdapter(DiscoveryProposal)
 
 
@@ -852,7 +858,11 @@ class OpenAIModelProvider:
                 reasoning={"effort": self.policy.reasoning_effort},
                 instructions=_INSTRUCTIONS,
                 input=[{"role": "user", "content": input_content}],
-                text_format=ProposalEnvelope,
+                text_format=(
+                    ScenarioPrefixEnvelope
+                    if context.scenario_kind is not None and not context.branch_observed
+                    else ProposalEnvelope
+                ),
                 max_output_tokens=self.policy.max_output_tokens,
                 store=False,
                 tools=[],

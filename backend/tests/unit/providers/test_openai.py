@@ -40,6 +40,7 @@ from replayforge.providers.openai import (
     ProviderTypeAction,
     ProviderTypeLocatorBundle,
     ProviderTypeProposal,
+    ScenarioPrefixEnvelope,
 )
 from replayforge.providers.policy import ModelPolicy, load_model_policy
 from replayforge.shared.ids import EntityKind, new_id
@@ -193,6 +194,24 @@ def context() -> ProviderContext:
         captured_output_names=("member_id",),
         previous_visual_text=("Review restore",),
     )
+
+
+def test_scenario_prefix_schema_excludes_unmergeable_free_form_actions() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(
+            proposal=ProviderRecordedActionProposal(
+                kind="recorded_action", step_id="lookup", rationale="Repeat observed action"
+            )
+        )
+    )
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy(), FakeTelemetry())
+    provider.decide(replace(context(), scenario_kind="business_outcome"))
+    assert responses.request["text_format"] is ScenarioPrefixEnvelope
+    schema = to_strict_json_schema(ScenarioPrefixEnvelope)
+    assert "ProviderClickProposal" not in schema["$defs"]
+    assert "ProviderBranchProposal" in schema["$defs"]
+    assert "ProviderRecordedActionProposal" in schema["$defs"]
+    assert "CompleteProposal" not in schema["$defs"]
 
 
 def test_provider_requests_bounded_non_stored_structured_output() -> None:

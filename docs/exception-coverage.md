@@ -77,6 +77,7 @@ be claimed; they are not fabricated by changing replay results.
 | Choice | Alternative considered | Reason |
 |---|---|---|
 | Model-selected actions from the observed primary trace | Handwritten bank-specific exception scripts | Navigation stays in discovered artifacts; each action is grounded and authorized again |
+| Phase-specific scenario proposal schema | Expose every action type before divergence | Only recorded actions, a branch marker, or escalation can extend a mergeable prefix; recovery permits newly discovered corrections |
 | Explicit positive branch marker | Infer a branch from the last visible text | Preserve the actual divergence point and reject speculation |
 | Optional negative-trace outputs | Require normal success outputs on every path | A rejected request has no legitimate success receipt to extract |
 | Exact replay disposition and recovery-event gate | Accept any successful validation run | Prevent unexecuted or misclassified branches from passing publication |
