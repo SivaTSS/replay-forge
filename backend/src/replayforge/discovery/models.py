@@ -183,6 +183,7 @@ class ProviderContext:
     output_contract: ObjectContract
     captured_output_names: tuple[str, ...] = ()
     maximum_risk: Risk = Risk.READ_ONLY
+    previous_visual_text: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         captured = set(self.captured_output_names)

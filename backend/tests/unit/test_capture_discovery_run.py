@@ -21,6 +21,7 @@ from replayforge.evidence.discovery_capture import (
     validate_result,
     write_new_artifact,
 )
+from tests.artifacts import sample_artifact
 
 
 class JsonResponse:
@@ -38,9 +39,7 @@ class JsonResponse:
 
 
 def discovery_result() -> dict[str, Any]:
-    artifact = load_artifact_yaml(
-        Path("capabilities/member.lookup_savings_balance/1.0.0.yaml").read_text()
-    )
+    artifact = sample_artifact()
     run_id = "run_0123456789abcdef0123456789abcdef"
     manifest = f"evidence://{run_id}/manifest.json"
     provenance_manifest = f"evidence://{run_id}/manifest-compile-snapshot.bin"
@@ -158,6 +157,42 @@ def test_failed_suite_capture_reports_schema_path_not_free_text(
     assert "sui_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in str(error.value)
     assert "artifact.outputs.properties.*:key" in str(error.value)
     assert "Customer value" not in str(error.value)
+
+
+def test_mismatched_draft_is_rejected_before_validation_or_publication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = SuiteCaptureRequest(
+        goal="Inspect a record",
+        application_family="warehouse",
+        tenant="example",
+        entry_point="home",
+        inputs={},
+        validation_tenants=("second",),
+        expected_capability_id="warehouse.inspect",
+        expected_risk="read_only",
+        expected_inputs=(),
+        expected_outputs=("status",),
+    )
+    calls: list[str] = []
+
+    def respond(_base: str, path: str, _timeout: int, **_kwargs: Any) -> dict[str, Any]:
+        calls.append(path)
+        return {
+            "suite_id": "sui_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "primary": {"status": "success"},
+            "artifact": {
+                "capability_id": "warehouse.inspect",
+                "risk": "read_only",
+                "input_contract": {"required": []},
+                "output_fields": ["wrong_output"],
+            },
+        }
+
+    monkeypatch.setattr(discovery_capture, "_request_json", respond)
+    with pytest.raises(RuntimeError, match="not published"):
+        discovery_capture.invoke_suite("http://localhost:8000", 120, request)
+    assert calls == ["/api/v1/discovery-suites"]
 
 
 def test_suite_capture_requires_real_provenance_and_validated_contract(

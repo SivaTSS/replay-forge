@@ -33,7 +33,6 @@ from replayforge.providers.openai import (
     ProviderTypeProposal,
 )
 from replayforge.providers.policy import ModelPolicy, load_model_policy
-from replayforge.shared.clock import SystemClock
 from replayforge.shared.ids import EntityKind, new_id
 from replayforge.surfaces.models import (
     ActionableControl,
@@ -41,7 +40,7 @@ from replayforge.surfaces.models import (
     NormalizedObservation,
     Viewport,
 )
-from tests.legacy_compiler import SavingsBalanceCompiler
+from tests.artifacts import sample_artifact
 
 
 @dataclass
@@ -135,8 +134,9 @@ def context() -> ProviderContext:
         screenshot_png=b"\x89PNG\r\n\x1a\nsynthetic-frame",
         action_history=("opened search",),
         allowed_action_types=frozenset({"type", "click"}),
-        output_contract=SavingsBalanceCompiler(SystemClock()).output_contract,
+        output_contract=sample_artifact().outputs,
         captured_output_names=("member_id",),
+        previous_visual_text=("Review restore",),
     )
 
 
@@ -191,6 +191,7 @@ def test_provider_requests_bounded_non_stored_structured_output() -> None:
         },
     ]
     assert sent["captured_output_fields"] == ["member_id"]
+    assert sent["previous_visual_text"] == ["Review restore"]
     assert sent["remaining_output_fields"] == [
         "account_type",
         "currency",

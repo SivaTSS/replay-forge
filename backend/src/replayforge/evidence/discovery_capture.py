@@ -109,6 +109,21 @@ def invoke_suite(
             f"model-driven discovery suite {suite_id} did not return success{suffix}"
         )
 
+    metadata = suite.get("artifact")
+    if not isinstance(metadata, dict):
+        raise RuntimeError("discovery suite omitted its draft contract")
+    contract = metadata.get("input_contract")
+    if (
+        metadata.get("capability_id") != request.expected_capability_id
+        or metadata.get("risk") != request.expected_risk
+        or not isinstance(contract, dict)
+        or set(contract.get("required", [])) != set(request.expected_inputs)
+        or set(metadata.get("output_fields", [])) != set(request.expected_outputs)
+    ):
+        raise RuntimeError(
+            "discovered draft does not match the configured capture contract; not published"
+        )
+
     for tenant in request.validation_tenants:
         suite = _request_json(
             base_url,
@@ -206,11 +221,11 @@ def capture_suite(
         raise RuntimeError(
             "discovered capability risk does not match the configured capture contract"
         )
-    if tuple(artifact.inputs.required) != request.expected_inputs:
+    if set(artifact.inputs.required) != set(request.expected_inputs):
         raise RuntimeError(
             "discovered input contract does not match the configured capture contract"
         )
-    if tuple(artifact.outputs.required) != request.expected_outputs:
+    if set(artifact.outputs.required) != set(request.expected_outputs):
         raise RuntimeError(
             "discovered output contract does not match the configured capture contract"
         )

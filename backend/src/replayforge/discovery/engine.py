@@ -202,6 +202,14 @@ class DiscoveryEngine:
                             name for name in output_contract.required if name in outputs
                         ),
                         maximum_risk=effective_policy.maximum_risk,
+                        previous_visual_text=(
+                            tuple(
+                                token.text
+                                for token in recordings[-1].observation_before.visual_tokens
+                            )
+                            if recordings
+                            else ()
+                        ),
                     )
                 )
                 self.recorder.record(
