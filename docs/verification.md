@@ -16,7 +16,7 @@ flowchart TB
     PY --> D[Locked dependency sync]
     PY --> F[Ruff format + lint]
     PY --> M[Strict mypy]
-    PY --> U[Unit tests + 90% branch gate]
+    PY --> U[Tests + 90% coverage gate]
     WEB --> T[TypeScript checks]
     WEB --> B[Two Next.js builds]
     SYS --> E[Evidence bundle verification]
@@ -24,7 +24,7 @@ flowchart TB
 
 ```
 
-The 90% branch gate covers deterministic domain code. Thin HTTP, provider, launch-registry,
+The 90% branch-aware coverage gate covers deterministic domain code. Thin HTTP, provider, launch-registry,
 suite-orchestration, composition, and Playwright adapters are excluded from that percentage and
 covered by contract tests, real Chromium integration, and genuine discovery evidence. Unit and
 integration tests run in one coverage process so browser-executed domain paths count.
@@ -43,9 +43,28 @@ integration tests run in one coverage process so browser-executed domain paths c
 | Shared artifact across tenants | Chromium integration | `evidence/tenant-reuse` |
 | Canvas-only model-free replay | Chromium on Harbor and Summit | Automated `3.0.0`, `3.1.0`, and `3.2.0` integration tests |
 | Visual fail-closed behavior | OCR cardinality, same-scale peak detection, contextual template, asset integrity tests | Unit suite + `test_visual_portability.py` |
-| Visual portability | One artifact across two tenants, six CSS viewports, DPR `1–2` | 15-case matrix, all passing |
+| Visual portability | One artifact across two tenants, six CSS viewports, DPR `1–2` | Portability matrix plus six discovered-task/tenant combinations |
 | Artifact immutability and integrity | Registry/serialization tests | Artifact hash in every applicable bundle |
 | Redaction before retention | Redactor/journal/store tests | Manifest directives and sanitized payloads |
+
+## Audit regression coverage
+
+| Correctness boundary | Regression proof |
+|---|---|
+| Condition actions execute their declared semantics | `test_condition_actions_cannot_succeed_without_their_condition` |
+| Ambiguity cannot prove absence | `test_absence_requires_proof_not_a_resolution_error` |
+| Nested input references and finite financial decimals | `test_nested_input_resolution_and_missing_optional_values`; value-contract cases |
+| Returned mappings cannot mutate registry state | `test_nested_mutation_cannot_change_published_content`; registration snapshot test |
+| Duplicate YAML cannot overwrite reviewed fields | `test_yaml_cannot_silently_overwrite_reviewed_fields` |
+| Nested secrets cannot hide under public objects | Discovery-contract and evidence-classification tests |
+| Policy runs before forbidden input | `test_input_policy_is_enforced_before_typing` |
+| Application contract changes stop before launch | `test_incompatible_registration_stops_before_surface_open` |
+| Shared readiness differs from tenant branding | Registered readiness tests plus actual Harbor/Summit Chromium replay |
+| Production compilation is task-independent | Dependency test rejects production imports from `tests`; old compiler is a fixture |
+
+The genuine discovery bundles are historical executions tied to their recorded commits. They were
+verified, not regenerated or relabeled during the audit. Browser integration tests exercise today's
+runtime against those unchanged artifact contracts; synthetic test providers remain test fixtures.
 
 ## Evidence bundle anatomy
 

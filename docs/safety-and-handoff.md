@@ -26,6 +26,11 @@ platform ∩ application ∩ tenant ∩ capability ∩ invocation
 
 Allowed origins, route patterns, and action types become the set intersection. Forbidden field classes become the union. The maximum risk becomes the most restrictive ceiling. Discovery currently intersects platform and application layers.
 
+The current tenant and invocation layers inherit the application/capability ceilings; there is no
+separate per-tenant policy editor or caller-supplied policy override. Registered forbidden classes
+reach replay, and input classification includes protected parent objects. Capability-declared
+forbidden input labels are enforced before typing.
+
 Risk is the maximum of:
 
 - Risk declared by the step or proposal.

@@ -19,7 +19,7 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Explicit allowlist | Implemented | Origin/route/action/risk policy intersections | Policy decision tests |
 | Conservative risk | Evidenced | Sensitive pauses; irreversible denies | `human-handoff` |
 | No sensitive persistence | Implemented | Structured redaction, secret scan, masked frames | Evidence/store tests and manifests |
-| Structured evidence | Evidenced | Ordered events, result, hashes, manifest | Seven verified bundles |
+| Structured evidence | Evidenced | Ordered events, result, hashes, manifest | Ten verified bundles |
 | Detect and route intervention | Evidenced | Stuck, low confidence, model escalation, surface recommendation, sensitive policy | Handoff bundle |
 | Same-session control | Evidenced | Retained context and worker; bounded human input | Handoff before/after frames |
 | Explicit ownership | Evidenced | TTL lease, owner, version, CAS | Conflict/race tests |
@@ -27,8 +27,8 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
 | Canvas visual control | Implemented, tested | One canvas-only workbench exposes three substantial tasks using geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
 | Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
-| Multi-tenant reuse | Evidenced | `3.2.0` uses one artifact across Harbor and Summit with reordered rows | 15-case visual/DPR matrix |
-| Per-tenant drift/overlays | Designed only | Compatibility landmarks and surface fingerprint fields | No overlay repository or automatic drift gate |
+| Multi-tenant reuse | Evidenced | `3.2.0` uses one artifact across Harbor and Summit with reordered rows | Visual/DPR matrix and discovered-task tenant validation |
+| Per-tenant/version drift | Implemented checks; extension designed | Pre-launch registration contract and live entry landmarks; per-step verification | No vendor-release detector or overlay repository; [design](heterogeneity-and-compatibility.md) |
 | Human operator surface | Implemented | Next.js intervention console | No run list, auth, or WebSocket |
 | Agent-facing invocation | Implemented | `/invoke` with typed arguments and discriminated result | Capability catalog endpoint is not implemented |
 
@@ -64,7 +64,8 @@ goal
   entry-point edit, or runtime code change. A new application still needs one policy-reviewed
   registration; a new surface contract still needs an adapter.
 - Rendered OCR, label relations, and visual signatures execute today; legacy image anchors remain supported; accessibility-path and native desktop adapters do not.
-- Compatibility fingerprints are recorded; startup/runtime drift enforcement is not implemented.
+- Registration and semantic landmark compatibility are enforced. Observation hashes remain
+  provenance; they are not literal pixel-equality drift gates.
 - Published capabilities and evidence survive restart; operational run and handoff state does not.
 - The control plane is not a complete product UI.
 - The API is synchronous and has no WebSocket endpoint.

@@ -40,6 +40,9 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers UV_CACHE_DIR=/tmp/
 cp .env.example .env
 ```
 
+OCR inference runs locally. A fresh RapidOCR installation may download model weights at first
+use; provision those files before running in a network-isolated environment.
+
 Start the target:
 
 ```bash
@@ -120,6 +123,20 @@ cross-tenant validate, finalize, and write all configured workflow artifacts:
 UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_demo_workflows.py
 ```
 
+Then invoke the latest published card-lock capability without a model call:
+
+```bash
+curl --fail-with-body --silent --show-error \
+  -H 'content-type: application/json' \
+  -d '{"tenant":"harbor","inputs":{"member_id":"12345","card_last4":"0110"}}' \
+  http://127.0.0.1:8000/api/v1/capabilities/member.temporary_card_lock/invoke
+```
+
+The script exports into a fresh private directory under ignored `.local/discovery-captures` and
+reports the actual published versions. Supply that `version` in the invocation body
+to pin a run, or omit it to resolve the latest publication. The committed discoveries can also be
+replayed with these commands without configuring model credentials or starting Langfuse.
+
 The reviewed [model policy](config/model-policy.yaml) fixes provider, model, reasoning effort, token/call limits, timeout, frame size, and cost ceiling. Requests cannot override it. Provider calls use strict structured output, no tools, and `store=false`.
 
 ## Verify everything
@@ -128,7 +145,7 @@ The reviewed [model policy](config/model-policy.yaml) fixes provider, model, rea
 bash scripts/verify.sh
 ```
 
-This runs locked dependency setup, Ruff, strict mypy, unit tests with a 90% branch gate, evidence verification, TypeScript checks, both frontend builds, and real Chromium integration tests.
+This runs locked dependency setup, Ruff, strict mypy, a 90% branch-aware domain-coverage gate, evidence verification, TypeScript checks, both frontend builds, and real Chromium integration tests.
 
 Run the focused visual portability matrix after starting or building the demo bank:
 
@@ -172,6 +189,7 @@ docs/                implementation-accurate design documentation
 
 - [Architecture and trade-offs](docs/architecture.md)
 - [Domain data models](docs/data-models.md)
+- [Tenant and surface compatibility](docs/heterogeneity-and-compatibility.md)
 - [Capability schema and replay semantics](docs/capability-and-replay.md)
 - [Discovery loop and model boundary](docs/discovery.md)
 - [Safety, evidence, and human handoff](docs/safety-and-handoff.md)

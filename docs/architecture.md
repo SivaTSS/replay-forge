@@ -215,3 +215,14 @@ Capability semantics stay stable
 ```
 
 A new transport must define observation normalization, input dispatch, screenshots, and condition evaluation. The visual grounding layer is transport-independent over PNG frames and viewport dimensions; a native desktop adapter can reuse it, but no native transport is claimed here.
+
+The production discovery compiler is task-independent. The historical savings compiler lives only
+in `backend/tests/legacy_compiler.py` to reproduce old fixtures; runtime composition cannot import it.
+Application compatibility and the vendor-version extension are described in
+[Heterogeneity and compatibility](heterogeneity-and-compatibility.md).
+
+OpenCV and ONNX use one native computation thread each: concurrency already exists at the run
+worker boundary, and machine-wide default pools can exhaust grounding deadlines through
+oversubscription. Shared RapidOCR initialization/inference is serialized because the library mutates
+call parameters. This favors predictable local resource use; it does not claim fleet throughput.
+Frontend builds run sequentially to avoid two compiler workloads competing for memory.

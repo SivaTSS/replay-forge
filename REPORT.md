@@ -2,150 +2,158 @@
 
 ## 1. Architecture
 
-ReplayForge is a modular monolith: one FastAPI process owns discovery, replay, policy, browser sessions, evidence, and handoff. Two Next.js applications remain separate deployables because they have separate trust roles: the demo bank is the automation target; the control plane is the human intervention client.
+ReplayForge turns a natural-language goal into a verified UI recording, publishes it as a typed
+capability, and executes later invocations without model decisions. The real target is one synthetic
+banking workbench with transaction investigation, dated loan payoff quoting, and temporary card
+locking. Its controls and values are painted on a canvas.
 
-```text
-caller ──HTTP──► FastAPI ──► discovery or replay engine ──SurfaceSession──► Playwright
-                         ├──► policy evaluator                         └──► demo bank
-operator console ────────┤
-                         └──► redacting journal ──EvidenceStore──► local files
-
-discovery engine ──ModelProvider──► OpenAI ──metrics──► local Langfuse
-replay engine     ── no model dependency
+```mermaid
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"}}}%%
+flowchart LR
+    G[Goal and inputs] --> D[Model discovery]
+    D --> A[(Typed capability)]
+    A --> R[Deterministic replay]
+    D --> S[Surface session]
+    R --> S
+    S --> B[Real Chromium UI]
+    R -. pause .-> H[Human control]
+    H --> S
 ```
 
-The engines depend on typed ports, not FastAPI, OpenAI, Playwright, or filesystem types. A structural test prevents the replay package from importing model providers. Each run receives an isolated Chromium context and one `SerialSessionWorker`; all browser and later human operations execute on that owner thread.
+A modular monolith keeps policy, discovery, replay, evidence, and intervention behind typed ports.
+FastAPI composes these modules; separate Next.js applications serve the target and operator console.
+Each browser run has one owner thread, retained across handoff. Structural tests prohibit runtime
+imports from domain modules and model imports from replay.
 
-| Option considered | Choice | Reason |
-|---|---|---|
-| Microservices and a queue | Rejected | Adds deployment and recovery problems without improving the evaluated local flow |
-| Unstructured single script | Rejected | Makes policy, surfaces, and evidence inseparable |
-| Modular monolith with ports | **Chosen** | Strong replaceable boundaries with one-process operability |
-| PostgreSQL and object storage | Deferred | Immutable artifacts, visual assets, and evidence need durable files; distributed operational history is outside the evaluated flow |
-
-The primary path is rendered-surface automation. Discovery combines screenshots with local OCR tokens and optional semantic facts. Replay resolves geometry-free rendered text, label-to-control/value relationships, and a content-addressed group signature before optional DOM/accessibility candidates. The canonical target exposes the workflow as one canvas; Playwright provides CSS-pixel screenshots and mouse/keyboard transport, not element identity. Native desktop transport is the remaining extension seam.
+Microservices and queues would add coordination without improving this slice. Atomic local files
+preserve capabilities, visual assets, and evidence; in-memory repositories own live coordination.
+OpenCV/ONNX computation is bounded and shared OCR calls are serialized to prevent oversubscription
+and mutable-provider races. [Architecture](docs/architecture.md) explains module ownership.
 
 ## 2. Artifact schema
 
-The production program is a strict YAML artifact, not a model transcript or generated browser script.
+The artifact is strict, versioned YAML—not executable generated code or a model transcript.
 
-```text
-identity/version
-├── compatibility: application family, tenant variants, surface contract, entry point
-├── typed input/output object contracts and data classifications
-├── preconditions
-├── ordered steps: action, scoped locator candidates, postconditions, timeout, retry, risk
-├── business outcomes, application failures, bounded recoveries
-├── final checkpoint
-├── capability policy ceiling
-└── provenance and canonical SHA-256
-```
+| Component | Contract |
+|---|---|
+| Identity and compatibility | Capability ID/version, application family, tenants, surface contract, entry point, landmarks |
+| Inputs and outputs | Closed typed objects, constraints, classifications, nested input references |
+| Program | Ordered actions, unique targets, pre/postconditions, timeouts, finite retries/recoveries |
+| Result semantics | Explicit business outcomes, application failures, final checkpoint |
+| Authority and provenance | Policy ceiling, discovery run, model/compiler versions, evidence key, canonical hash |
 
-Pydantic models reject unknown fields and invalid cross-references. Every required output must be extracted by the main flow and checked by the final checkpoint. Published `(capability ID, version)` content is immutable; discovery receives the next patch version. Publication atomically adds the validated YAML under `capabilities/<id>/<version>.yaml`; a fresh runtime revalidates its path, schema, and canonical hash before replay. Symbolic values such as `input.member_id` make a recording reusable without retaining the discovery value.
+Pydantic rejects unknown fields and invalid references; the YAML loader rejects duplicate keys.
+Schema 1.4 rejects persistent coordinates and binds provenance evidence to its discovery run.
+Every required output must be extracted and referenced by the checkpoint; runtime validates actual
+output values before success. Registry snapshots isolate nested mutable mappings, while immutable
+file publication prevents replacing an existing version.
 
-Target bundles contain a human-readable description, reviewed target risk, optional frame scope, ordered visual and semantic candidates, expected cardinality, state, and portability. Version `3.2.0` uses rendered text for named actions, frame-local label relationships for controls and values, and a content-addressed canonical edge signature scoped by the freshly observed `Savings` label. Its workbench renders three identical account-row icons, so a global match is ambiguous and must fail closed; the semantic group graph selects the unique matching component. Schema `1.3` forbids target geometry and target-specific tuning fields recursively.
-
-| Option considered | Choice | Reason |
-|---|---|---|
-| Executable Playwright script | Rejected | Surface-specific, difficult to validate, and capable of escaping policy |
-| Raw JSON | Rejected as review format | Strict but less readable for a step-oriented capability |
-| YAML validated into frozen models | **Chosen** | Human-reviewable and machine-strict; raw YAML is never executed |
-| Record coordinates only | Rejected | Viewport and layout changes make deterministic replay brittle |
-| Persist relative regions | Rejected | Responsive reflow changes the relationship being recorded |
-| Semantic OCR + frame-local graph + visual signature | **Chosen** | Keeps identity durable while deriving current CSS-pixel geometry |
-| Model writes an arbitrary artifact | Rejected | The generic compiler accepts only the contract and actions proven by the executed trace |
+YAML was chosen for reviewability, typed models for enforceable semantics, and canonical SHA-256
+for content identity. The generic compiler accepts executed, verified trace steps rather than an
+arbitrary model-written program. Historical task-specific compilation exists only in test fixtures.
+See [Data models](docs/data-models.md) and [Replay contract](docs/capability-and-replay.md).
 
 ## 3. Determinism & error handling
 
-Replay validates inputs and tenant compatibility before opening Chromium. For each ordered step it asserts automation ownership, verifies preconditions, resolves exactly one target, asks policy, records intent, acts, records the result, detects declared exceptional states, and verifies postconditions. Success additionally requires the final checkpoint and all five output schemas.
+Replay validates inputs and registered compatibility, opens an isolated session, checks live
+landmarks, and executes each step under an ownership lease and intersected policy. Targets resolve
+uniquely from the current frame. Click dispatch is not proof of effect: postconditions and the
+business checkpoint establish completion.
 
-```text
-invocation
-  → validate
-  → open isolated session + lease
-  → [resolve → policy → intent → act → result → verify] × steps
-  → checkpoint + typed outputs
-  → one discriminated result
-```
+`assert` checks its condition, `wait_for` polls within the step budget, and `checkpoint` evaluates the
+named condition. Missing or ambiguous targets stop execution. Recovery follows declared steps and
+a fixed resume point. Retries require a named eligible error, remaining attempts, and proof that
+the previous effect is absent; uncertain mutations are never blindly repeated.
 
-The result contract separates four meanings:
+| Result | Meaning |
+|---|---|
+| `success` | Checkpoint and typed outputs verified |
+| `business_outcome` | A legitimate negative result, such as no matching member |
+| `failure` | Application, policy, targeting, or verification failure with step/context |
+| `intervention_required` | Automation paused with the live session retained |
 
-| Result | Meaning | Demonstration |
-|---|---|---|
-| `success` | Checkpoint and outputs verified | Visual-first versions `3.0.0`, `3.1.0`, and `3.2.0` |
-| `business_outcome` | Legitimate negative answer | `member_not_found` |
-| `failure` | Known application, mechanical, policy, or verification failure | Permission denial in `1.0.2` |
-| `intervention_required` | Session is live but automation may not proceed | Sensitive submit in `2.0.0` |
-
-Retries require a named recoverable code, remaining attempts, and—when declared—proof that the previous effect is absent. Recovery is an explicit, bounded step list with a fixed resume point; nested recovery and sensitive recovery actions are invalid. Version `1.0.1` demonstrates one known interstitial dismissal. No replay path can ask a model to improvise.
-
-The key choice was checkpoint-led correctness rather than action-led optimism: a successful click receipt proves only dispatch, while a postcondition proves effect and the final checkpoint proves the business state. Fuzzy selection and open-ended LLM recovery were rejected because they weaken reproducibility and auditability.
+Known notices, delayed loads, permission denial, and ambiguity have executable coverage.
+Open-ended model recovery was rejected because replay must remain reproducible.
 
 ## 4. Heterogeneity & multi-tenant
 
-The seam is `SurfaceDriver`/`SurfaceSession`: open, observe, resolve, act, evaluate, extract, capture evidence, and close. Normalized observations and actions contain no Playwright handles. `VisionGrounder` operates on PNG bytes and viewport dimensions, so a desktop transport can reuse the same OCR and template logic while supplying its own capture and input mechanisms.
+`SurfaceSession` separates perception/input from program semantics. Playwright supplies browser
+transport; primary targeting uses local OCR, current-frame label/control relationships, and
+content-addressed visual signatures. DOM locators remain optional. Recorded coordinates and
+relative regions were rejected because window resizing and responsive reflow invalidate them.
 
-The canonical demo is DOM-hostile by construction: every control and displayed value is painted into one canvas. The immutable `3.0.0` route proves the original visual flow; `3.1.0` remains a prior repeated-row fixture; `3.2.0` adds responsive cards/table reflow, DPR variation, delayed results, a known notice, permission denial, controlled ambiguity, a changed icon, and duplicate field labels. Harbor and Summit vary palette, font metrics, horizontal placement, and account-row order. The same `3.2.0` artifact succeeds across six CSS viewports from `800×600` to `1920×1080` at DPR values `1–2`; the 15-case Chromium matrix also verifies declared business, recovery, and fail-closed states. Persistent coordinates were rejected; discovery may use a transient icon region only to create a content-addressed signature before recording.
+One artifact runs across Harbor and Summit, which vary typography, branding, row order, and layout.
+The visual matrix exercises six viewport sizes and DPR 1–2. Discovery-suite validation adds tenant
+support only after deterministic execution succeeds.
 
-One artifact lists both `harbor` and `summit` as supported variants. The adapter normalizes tenant-prefixed routes to one surface contract; the portability matrix proves the same `3.2.0` artifact version and hash on Summit and across the tested viewport/DPR scales. This is a measured reuse proof, not a claim that hundreds of tenant instances have been deployed.
+Before replay, application registration must match the artifact's surface contract; schema 1.4 also
+checks base variant and rendered mode. Registered required/forbidden landmarks catch declared entry-state
+incompatibility. The discovery observation hash remains provenance, not a literal drift gate:
+legitimate values and branding change the pixels. Descriptive discovery landmarks may also contain
+tenant branding; only explicit registration readiness conditions apply across tenants.
 
-| Multi-tenant option | Choice | Reason |
-|---|---|---|
-| Copy one artifact per institution | Rejected | Creates review drift and hides shared vendor behavior |
-| Arbitrary tenant patches | Rejected | Can silently change business behavior or widen policy |
-| Shared application-family artifact | **Chosen** | Reuses one reviewed contract across compatible variants |
+A vendor change that preserves semantics may reuse the artifact after validation. Changed workflow
+or output meaning requires a new immutable version. Future narrow overrides would bind the base
+artifact hash, tenant, and vendor version; they must not widen authority. Independent tenant origins,
+automated release detection, and an overlay repository are not implemented.
 
-The artifact records required/forbidden landmarks and a target fingerprint, but automatic drift enforcement and an overlay repository are not implemented. A production extension would keep base semantics immutable and allow only narrow, validated locator/entry-point/timing overrides that cannot widen policy.
+Desktop can reuse PNG grounding but needs OS capture/input, focus/window identity, and desktop
+policy semantics. Registration rejects unsupported desktop contracts today.
+[Compatibility](docs/heterogeneity-and-compatibility.md) records the extension and legacy rules.
 
 ## 5. Escalation & handoff
 
-Discovery intervenes on repeated state, repeated action, low confidence, explicit model escalation, or a policy requirement. Replay intervenes on sensitive policy decisions or surface errors marked for intervention.
+Repeated state/actions, low confidence, explicit escalation, and sensitive policy decisions route
+interventions carrying run, task, step, surface, and pause context.
 
-```text
-automation/v1 → paused/v2 → human:operator/v3 ──heartbeat──► human/v4...
-                                      │
-                                      └──resume──► paused → fresh validation → automation
-```
+The operator claims the same retained Chromium context using an exclusive expiring lease.
+Intervention and lease transitions commit atomically under paired compare-and-swap checks.
+Human input carries the current lease version, frame sequence, viewport, and next client sequence.
+Stale input is rejected; accepted input invalidates the frame. Evidence records actions and text
+length, never manual text.
 
-The live Chromium context and its worker are retained. The operator claims an exclusive 30-second lease, polls PNG frames, and sends one bounded left-click, text, or allowlisted key command tied to the exact lease version, latest frame sequence, next client sequence, and viewport. After an accepted input the frame is invalidated. Stale or concurrent requests return conflict.
-
-Resume captures fresh state, confirms the current location is allowed, checks the interrupted step's postcondition or business outcome, and rejects an unchanged fingerprint. Only then does ownership return to automation and replay continue with the remaining steps. Manual text is never logged; evidence records its character count. Discovery can pause on the same session, but automated discovery continuation after manual work is deliberately unavailable.
-
-HTTP polling was chosen over a WebSocket/CDP stream. It is less fluid, but it provides a minimal real handoff with explicit stale-frame semantics and far less transport scope. Opening a new browser was rejected because it would lose session context and violate the requirement.
+Resume validates fresh location and the interrupted step's effect or a declared business outcome.
+An unchanged state cannot resume. Successful validation restores automation ownership and continues
+the remaining steps. HTTP frame polling provides the required real handoff with modest transport
+complexity. Discovery can pause for control, but its automatic continuation remains a documented cut.
 
 ## 6. Safety
 
-Each action crosses three independent controls: current lease ownership, effective allowlists, and effective risk. Replay intersects platform, application, tenant, capability, and invocation policy layers; discovery intersects platform and application layers. Sets narrow by intersection, forbidden classifications accumulate, and the lowest risk ceiling wins.
+Origin, normalized route, action, field classification, and independently inferred risk constrain
+automation. Policy layers intersect allowlists, union forbidden classes, and take the lowest risk
+ceiling. Irreversible automation is denied; sensitive replay pauses for human operation. Reversible
+discovery requires deterministic suite validation before publication. No human approval state is
+inserted after discovery.
 
-Risk is independently inferred from action type, target language, and observed target facts, then combined with the declared risk. Irreversible actions are always denied. Sensitive replay steps pause for same-session human intervention. Discovery publishes only deterministically validated read-only or reversible capabilities; sensitive and irreversible drafts are blocked. Origins, normalized routes, and action types must be explicitly allowed.
+Evidence is redacted before storage. Nested output classifications are preserved; credentials,
+personal values, and financial data are removed or masked. Canvas evidence masks the whole canvas
+because sensitive pixels have no reliable element boundaries. Live operator frames and authorized
+discovery frames are transient. Provider requests use `store=false`; local Langfuse records model-call
+metrics.
 
-Evidence is sanitized before persistence. Structured redaction drops secret-bearing keys and personal fields, tokenizes customer identifiers, replaces financial values, and scans remaining text for credential patterns. Persisted DOM screenshots mask inputs and value cells; both canvas-only visual routes mask the entire canvas because their sensitive pixels have no element boundary. Durable writes, closed-set bundle verification, SHA-256 metadata, and manifests expose incomplete or changed evidence relative to the committed manifest. These hashes provide integrity, not signer authenticity. API errors expose stable codes and safe messages without submitted values or raw provider errors.
-
-The trade-off is conservative capability: the system may stop where a broader automation could continue. That is intentional for financial operations. Authentication, operator authorization, TLS, automated evidence expiry, and durable control transactions are required before production deployment and are outside this local submission.
+Hash-linked, closed-set manifests detect changed or incomplete evidence, not signer authenticity.
+This is a local trusted-operator system: caller labels are not authentication, human control is not a
+semantic financial authorization system, and transport/network isolation is not a browser sandbox.
+Production requires authenticated operators, tenant authorization, retention enforcement, and
+deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines these boundaries.
 
 ## 7. Cuts
 
-Depth is concentrated in one canvas-only banking application with three substantial workflows:
-transaction investigation, loan payoff quoting, and reversible temporary card locking. Each uses a
-separate real discovery trace and immutable artifact while sharing the same application registration,
-compiler, policy engine, and replay interpreter.
+Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
+assignment requests. Four genuine discovery bundles and six replay/handoff bundles preserve the
+end-to-end evidence; tests exercise current code against immutable artifacts.
 
-| Cut | What exists instead | Next production step |
-|---|---|---|
-| PostgreSQL repositories | Atomic local capability registry; in-memory journal metadata, leases, interventions, and suites | Transactional operational history when multi-process coordination requires it |
-| S3-compatible evidence | Not implemented: opaque keys over durable local files satisfy this single-node, repository-reviewed slice | Revisit only if remote distribution or multi-node retention becomes a requirement |
-| Full operations UI | Focused intervention console | Run list, capability catalog, evidence viewer, authentication |
-| WebSocket/video co-browsing | PNG polling and bounded HTTP input | Backpressured stream with durable control events |
-| Native desktop execution | Reusable PNG vision layer and surface ports | OS capture/input transport and window identity |
-| Generic discovery compiler | Implemented from typed, verified traces | Broader scenario-merging coverage remains future work |
-| Discovery continuation after handoff | Safe reopen with retained session | Serializable discovery continuation and fresh-goal validation |
-| Distributed workers/queues | One process and one browser-owner thread per run | Durable scheduling only when workload requires it |
-| Open-ended model replay recovery | Declared finite recovery only | Optional single-step, policy-checked assisted fallback |
-| Automatic tenant drift/overlays | Supported variants, route normalization, recorded fingerprints | Narrow overlay schema and compatibility gate |
+| Deliberate cut | Reason / next condition |
+|---|---|
+| PostgreSQL and distributed workers | Saved capabilities need durable files; multi-process coordination would justify a transactional repository |
+| S3 | Local durable evidence satisfies this single-node submission |
+| Full operations product and co-browsing stream | A focused polling console proves real handoff |
+| Native desktop adapter | Typed surface seam exists; OS transport requires separate implementation |
+| Discovery continuation after human control | Replay continuation is implemented; discovery needs a separately validated continuation model |
+| Tenant overlay engine | Shared-artifact validation proves reuse; specialization design is documented |
+| LLM replay fallback | Finite deterministic recovery preserves the production model boundary |
 
-The repository provides ten hash-verified evidence bundles: four genuine discoveries, replay
-success, member-not-found, bounded recovery, hard failure with a masked screenshot, same-session
-handoff, and second-tenant reuse. The visual workbench adds a reproducible 21-case Chromium matrix
-without persisting raw canvas frames. `bash scripts/verify.sh` runs formatting, lint, strict typing,
-a 90% domain branch gate, evidence integrity, both frontend builds, and real Chromium integration
-tests.
+`bash scripts/verify.sh` checks formatting, typing, evidence integrity, sequential frontend builds,
+and unit/Chromium tests with a 90% configured domain-coverage gate. Setup, genuine discovery, and
+invocation commands are in [README](README.md); the full traceability matrix is in
+[Requirements](docs/requirements.md).

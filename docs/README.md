@@ -26,6 +26,7 @@ renderer; connectors use one neutral, high-contrast gray in light and dark modes
 |---|---|
 | What runs, and where are the boundaries? | [Architecture](architecture.md) |
 | What are the domain objects and how do they relate? | [Data models](data-models.md) |
+| How does one capability span tenants and application versions? | [Compatibility](heterogeneity-and-compatibility.md) |
 | What exactly is recorded and replayed? | [Capability and replay](capability-and-replay.md) |
 | What does the model see and decide? | [Discovery](discovery.md) |
 | How are unsafe actions, data, and handoff handled? | [Safety and handoff](safety-and-handoff.md) |
