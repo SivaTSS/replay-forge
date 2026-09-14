@@ -164,9 +164,16 @@ Replay re-resolves every action from a fresh frame and never calls the model.
 The richer workstation's [capture specification](../config/servicing-discovery.yaml) describes a
 loan-payoff discovery and model-free Summit validation. It is an executable capture recipe, not
 a discovered capability or proof of success. Synthetic screenshot/member/loan data transmission
-was explicitly authorized on 2026-09-14. The first genuine attempt failed its final condition
-after a field-value association bug returned neighboring labels; the fix is covered by
-production-extraction tests on Harbor and Summit. No successful new bundle is claimed yet.
+was explicitly authorized on 2026-09-14. Early genuine attempts exposed three separate boundaries:
+
+| Attempt | Observed result | Follow-up |
+|---|---|---|
+| `run_433b2bd68bb84769a7a1d4df4e79f628` | Final equality check failed after extraction returned neighboring labels | Corrected field/value association; tested both tenants |
+| `run_c5de13d213d24a65af06f71a0bbcf979` | Repeated ambiguous proposals exhausted the provider budget | Added rejected-locator context and intent-based repeat detection |
+| `run_e3bc149bcb234864a0b6598056ca006d` | Primary discovery succeeded; Summit replay failed before opening the member | Reproduced a missed input rectangle being associated with a distant table cell |
+
+These attempts are not portable capability evidence. Publication remained blocked by validation;
+the local runtime records are not relabeled as successful exported bundles.
 
 ## Provider decision
 

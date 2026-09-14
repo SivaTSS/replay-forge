@@ -116,6 +116,12 @@ transfer to Savings leaves `$3,869.02` available and adds exactly `$125.50` to t
 For the `$7,800.00` loan at 7.25%, a September 20 quote adds `$10.85` to `$21.40` opening accrued
 interest: total **$7,832.25**. Issuing the quote does not change principal.
 
+Quote review explicitly distinguishes the inquiry reference from a financial posting: issuance
+adds a journal entry and receipt but neither schedules a payment nor changes account balances.
+The shared confirmation step remains. Generic "before posting" wording was rejected for this
+operation because it incorrectly implied a financial instruction; actual mutations retain that
+warning. A controller regression checks both the wording and unchanged accounts/postings.
+
 ## Tasks to try
 
 Start each independent scenario with a fresh tab unless deliberately testing retained state.

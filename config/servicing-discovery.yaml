@@ -8,6 +8,8 @@ workflows:
       The requested result is a non-binding calculation and its issuance reference,
       not a financial instruction, loan settlement, or account-state change.
       Verify that the completed quote's good-through date matches the supplied payoff_date.
+      The resulting capability must retain this comparison as a replayable equality assertion
+      between good_through_date and payoff_date, not just a visual claim during discovery.
       Complete only after the quote has actually been calculated, not on a review screen.
     application_family: northstar_member_service
     tenant: harbor

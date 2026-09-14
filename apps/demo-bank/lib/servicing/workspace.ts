@@ -727,10 +727,15 @@ export function buildView(state: Workspace): {
       ),
     );
   } else if (state.page === "review" && state.pending) {
-    title = "Verify instructions before posting";
+    const isQuote = state.pending.command.kind === "quote";
+    title = isQuote
+      ? "Verify non-binding payoff calculation"
+      : "Verify instructions before posting";
     blocks.push(
       note(
-        "REVIEW ONLY — no changes have been posted. Cancel to return without changing records.",
+        isQuote
+          ? "REVIEW ONLY — issuing this quote records an inquiry reference. It does not make or schedule a payment, settle the loan, or change account balances."
+          : "REVIEW ONLY — no changes have been posted. Cancel to return without changing records.",
         "warning",
       ),
       heading(REVIEW_TITLES[state.pending.command.kind]),

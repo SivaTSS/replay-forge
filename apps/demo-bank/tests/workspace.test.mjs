@@ -4,6 +4,21 @@ import { act, buildView, createWorkspace } from "../lib/servicing/workspace.ts";
 import { ledger } from "../lib/servicing/bank.ts";
 
 const member = () => act(createWorkspace("harbor"), "member:12345");
+
+test("payoff review describes inquiry effects without implying a financial posting", () => {
+  let state = act(member(), "nav:loans");
+  state = { ...state, fields: { ...state.fields, quoteDate: "2026-09-20" } };
+  const review = act(state, "review-quote");
+  assert.equal(review.page, "review");
+  const view = buildView(review);
+  assert.equal(view.title, "Verify non-binding payoff calculation");
+  assert.match(JSON.stringify(view.blocks), /does not make or schedule a payment/);
+  const issued = act(review, "confirm");
+  assert.equal(issued.page, "receipt");
+  assert.deepEqual(issued.bank.accounts, state.bank.accounts);
+  assert.deepEqual(issued.bank.postings, state.bank.postings);
+  assert.equal(issued.bank.journal.length, state.bank.journal.length + 1);
+});
 const transferForm = () => {
   const state = act(member(), "nav:transfers");
   return {

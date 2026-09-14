@@ -159,7 +159,7 @@ Verified on 2026-09-14 after the servicing workflow audit:
 | Additional Chromium regression tests | 6 passed | Scripted discovery, replay, business outcome, recovery, live control, and same-session resume; no model calls |
 | Static checks | Ruff and strict mypy passed | No claim of a newly rerun full browser matrix |
 | Historical evidence | Ten bundles verified unchanged | New policies do not retroactively rewrite old evidence |
-| Rich-workstation model discovery | Not run | Environment denied the loan-payoff egress request before execution; explicit scenario authorization is pending |
+| Rich-workstation model discovery at this checkpoint | Not run | The initial egress request was denied; explicit authorization was subsequently granted on 2026-09-14, and the genuine attempts below supersede this status |
 
 Reproduce the new browser checks with `test_playwright_surface.py` and the selection
 `real_iframe_search_and_account_extraction or visual_evidence_masks or evidence_masks_unclassified or registered_artifact_classifies_permission_denial or real_output_failure_retains`.
