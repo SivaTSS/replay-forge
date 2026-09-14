@@ -172,7 +172,12 @@ surface observation. Choose a short snake_case operation_slug, describe the requ
 and list every output the caller should receive. Output names must be stable semantic names, not
 screen labels or customer values. All UI extractions are normalized text, so declare every output
 as type string. Never invent parsing formats, regexes, enums, constants, or customer values. Never
-declare credential or secret fields. Be conservative about
+declare credential or secret fields. Classify outputs by their meaning, not merely the target's
+industry: record identifiers are customer_identifier; amounts and transaction details are
+financial; names/contact information are personal. A generic UI workflow-state label is
+operational, not a customer identity or financial amount. If a field's meaning is uncertain,
+keep the conservative personal classification. Never classify private data as public merely to
+avoid redaction. Be conservative about
 risk: entering search or filter criteria that only retrieves data remains read_only. A mutation may
 be reversible only when the observed workflow exposes an explicit inverse operation that restores
 the prior state; otherwise it is sensitive or irreversible."""

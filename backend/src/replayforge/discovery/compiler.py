@@ -48,7 +48,7 @@ class TraceArtifactCompiler:
     """Compile any verified discovery trace from a provider-generated capability draft."""
 
     clock: Clock
-    compiler_version: str = "2.0.0"
+    compiler_version: str = "2.0.1"
     surface_adapter_version: str = "web.v1"
 
     @property
@@ -217,7 +217,7 @@ class TraceArtifactCompiler:
                 discovery_run_id=run_id,
                 provider=provider_name,
                 model=model_name,
-                prompt_policy_version="2.0.0",
+                prompt_policy_version="2.1.0",
                 surface_adapter_version=self.surface_adapter_version,
                 compiler_version=self.compiler_version,
                 created_at=self.clock.now(),
@@ -293,15 +293,14 @@ class TraceArtifactCompiler:
     def _compile_step(index: int, recording: RecordedDiscoveryStep) -> Step:
         action = recording.action
         raw = recording.target.description if recording.target is not None else action.kind
-        slug = "_".join(part for part in raw.lower().replace("-", " ").split() if part.isalnum())
-        slug = slug[:40] or action.kind
         postconditions: tuple[Condition, ...] = recording.verified_postconditions or (
             (OutputValidCondition(kind="output_valid", output=action.output),)
             if isinstance(action, ExtractAction)
             else ()
         )
         return Step(
-            id=f"step_{index:02d}_{action.kind}_{slug}",
+            # Program addresses must not encode model-authored UI prose or customer data.
+            id=f"step_{index:02d}_{action.kind}",
             name=raw,
             action=action,
             target=recording.target,

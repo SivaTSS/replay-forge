@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -107,6 +108,13 @@ def test_compiler_accepts_a_different_task_shape() -> None:
     assert artifact.capability.id == "northstar_member_service.read_reference"
     assert artifact.outputs.required == ("reference_value",)
     assert len(artifact.steps) == 2
+    assert [step.id for step in artifact.steps] == ["step_01_type", "step_02_extract"]
+    assert artifact.steps[0].name == "Reference field"
+    # Changing descriptive prose must not change the program's control-flow addresses.
+    assert steps[0].target is not None
+    changed = steps[0].target.model_copy(update={"description": "Private customer reference"})
+    compiled = TraceArtifactCompiler._compile_step(1, replace(steps[0], target=changed))
+    assert compiled.id == artifact.steps[0].id
 
 
 def test_generic_compiler_rejects_missing_output() -> None:
