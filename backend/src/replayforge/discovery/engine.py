@@ -248,7 +248,7 @@ class DiscoveryEngine:
                         evidence_manifest=self.recorder.evidence_manifest_key,
                     )
 
-                action_fingerprint = self._proposal_fingerprint(proposal)
+                action_fingerprint = self._operation_fingerprint(proposal)
                 repeated_action = (
                     repeated_action + 1 if action_fingerprint == previous_action else 0
                 )
@@ -302,9 +302,13 @@ class DiscoveryEngine:
                     repeated_state = 0
                     if error.code == "target_ambiguous":
                         history.append(
-                            "Previous proposal was not executed (target_ambiguous); use "
-                            "ocr_relative with a unique nearby anchor, the complete target_text, "
-                            "and its observed relation."
+                            "Rejected proposal (not executed): "
+                            + self._proposal_fingerprint(proposal)
+                            + "\nPrevious proposal was not executed (target_ambiguous). "
+                            "Choose a different uniquely identifiable target or anchor from the "
+                            "current screenshot. Both the anchor and the related target must be "
+                            "unique; repeating this locator will not resolve the ambiguity. "
+                            "Escalate if no supported locator can distinguish the control."
                         )
                     elif error.code == "risk_classification_unresolved":
                         history.append(
@@ -659,6 +663,18 @@ class DiscoveryEngine:
             message=message,
             recoverable=False,
             evidence_manifest=self.recorder.evidence_manifest_key,
+        )
+
+    @staticmethod
+    def _operation_fingerprint(proposal: ActProposal) -> str:
+        """Compare executable intent, not changing confidence or explanatory prose."""
+        target = proposal.target.model_dump(mode="json") if proposal.target is not None else None
+        if target is not None:
+            target.pop("description", None)
+        return json.dumps(
+            {"action": proposal.action.model_dump(mode="json"), "target": target},
+            sort_keys=True,
+            separators=(",", ":"),
         )
 
     @staticmethod

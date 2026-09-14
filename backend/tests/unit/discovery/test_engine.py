@@ -566,6 +566,80 @@ def test_recoverable_effect_absent_locator_failure_is_replanned_without_raw_deta
     assert ("proposal_rejected", None) in engine.recorder.events
 
 
+def test_ambiguous_retry_remembers_rejected_locator_and_bounds_equivalent_actions(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[1]
+    proposal = ActProposal(
+        kind="act",
+        action=step.action,
+        target=step.target,
+        rationale="Submit the search.",
+        expected_effect="Show results.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    provider = QueueModelProvider(
+        [
+            proposal.model_copy(update={"rationale": f"Attempt {index}", "confidence": 0.99})
+            for index in range(3)
+        ]
+    )
+    session = FakeSurfaceSession(
+        resolve_error=SurfaceError(
+            "target_ambiguous",
+            "private raw diagnostics",
+            recoverable=True,
+            effect_absent=True,
+        ),
+        resolve_failures_remaining=10,
+    )
+    engine, _ = build_discovery(session, provider, artifact)
+
+    result = engine.execute(make_request())
+
+    assert isinstance(result, InterventionRequiredResult)
+    assert result.code == "repeated_action"
+    feedback = provider.calls[1].action_history[-1]
+    assert "Rejected proposal (not executed):" in feedback
+    assert '"target":' in feedback
+    assert "Both the anchor and the related target must be unique" in feedback
+    assert "private raw diagnostics" not in repr(provider.calls)
+    assert len(provider.calls) == 3
+
+
+def test_operation_fingerprint_ignores_explanation_but_preserves_target_changes(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    step = artifact.steps[1]
+    assert step.target is not None
+    proposal = ActProposal(
+        kind="act",
+        action=step.action,
+        target=step.target,
+        rationale="Search.",
+        expected_effect="Results.",
+        declared_risk=Risk.READ_ONLY,
+        confidence=1,
+    )
+    reworded = proposal.model_copy(
+        update={
+            "rationale": "Try again.",
+            "expected_effect": "Show results.",
+            "confidence": 0.99,
+            "target": step.target.model_copy(update={"description": "A different explanation"}),
+        }
+    )
+    assert DiscoveryEngine._operation_fingerprint(proposal) == (
+        DiscoveryEngine._operation_fingerprint(reworded)
+    )
+    assert DiscoveryEngine._operation_fingerprint(proposal) != (
+        DiscoveryEngine._operation_fingerprint(proposal.model_copy(update={"target": None}))
+    )
+
+
 def test_undeclared_extraction_is_rejected_before_execution(
     valid_artifact_data: dict[str, Any],
 ) -> None:

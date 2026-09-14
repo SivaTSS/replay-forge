@@ -95,6 +95,13 @@ requests cannot change the model or enlarge provider budgets. Contract planning 
 and the first exhausted request or provider budget stops discovery. Exact values and override
 rules are in [Constraints and policy](constraints-and-policy.md#execution-bounds).
 
+Repeated-action checks compare the action and locator, excluding confidence and explanatory
+prose. Rewording the same failed click therefore cannot buy more retries. After an ambiguous
+target, the model receives its rejected proposal in transient conversation history, explicitly
+marked **not executed**, so it can choose a different locator or escalate. Raw surface diagnostics
+are excluded; durable events retain only the bounded rejection code. This replaces generic retry
+advice that could repeatedly suggest the same ambiguous relation on dense screens.
+
 ## Completion is not trusted
 
 ```text
