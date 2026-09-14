@@ -1,5 +1,7 @@
 import { buildView, NAV } from "./workspace";
 import type { Option, Workspace } from "./workspace";
+import { wrapText } from "./text";
+import type { TextSelection } from "./text";
 
 export type Hit = {
   x: number;
@@ -11,11 +13,25 @@ export type Hit = {
   value?: string;
   options?: Option[];
   maxLength?: number;
+  textStart?: number;
+  fullY?: number;
+  fullHeight?: number;
+  inputY?: number;
 };
 export interface Scene {
   hits: Hit[];
   contentHeight: number;
   bodyHeight: number;
+  bodyTop: number;
+  scrollbar?: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    thumbY: number;
+    thumbHeight: number;
+    maxScroll: number;
+  };
 }
 export function paint(
   ctx: CanvasRenderingContext2D,
@@ -25,7 +41,7 @@ export function paint(
   scroll: number,
   focus: string,
   openSelect: string,
-  selectedAll: boolean,
+  selection: TextSelection,
 ): Scene {
   const hits: Hit[] = [];
   const summit = state.bank.tenant === "summit";
@@ -37,7 +53,7 @@ export function paint(
     border: "#949d9f",
     muted: "#59666a",
   };
-  const sidebar = width < 1000 ? 180 : 210;
+  const sidebar = 210;
   const left = sidebar + 22;
   const bodyTop = 164;
   const bodyBottom = height - 38;
@@ -105,21 +121,27 @@ export function paint(
       ctx.strokeRect(x + 4, y + 4, w - 8, 22);
       ctx.setLineDash([]);
     }
-    if (fixed || (y >= bodyTop && y + 30 <= bodyBottom))
-      hits.push({ x, y, w, h: 30, id, kind: "action" });
+    const top = fixed ? y : Math.max(y, bodyTop);
+    const bottom = fixed ? y + 30 : Math.min(y + 30, bodyBottom);
+    if (bottom > top)
+      hits.push({
+        x,
+        y: top,
+        w,
+        h: bottom - top,
+        id,
+        kind: "action",
+        ...(!fixed ? { fullY: y, fullHeight: 30 } : {}),
+      });
   };
-  const lines = (value: string, maxWidth: number): string[] => {
-    ctx.font = "14px Tahoma, Arial, sans-serif";
-    const result: string[] = [];
-    let line = "";
-    for (const word of value.split(/\s+/)) {
-      if (line && ctx.measureText(`${line} ${word}`).width > maxWidth) {
-        result.push(line);
-        line = word;
-      } else line = line ? `${line} ${word}` : word;
-    }
-    result.push(line);
-    return result;
+  const lines = (
+    value: string,
+    maxWidth: number,
+    size = 14,
+    bold = false,
+  ): string[] => {
+    ctx.font = `${bold ? "bold " : ""}${size}px Tahoma, Arial, sans-serif`;
+    return wrapText(value, maxWidth, (label) => ctx.measureText(label).width);
   };
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = colors.desktop;
@@ -168,7 +190,7 @@ export function paint(
       true,
     ),
   );
-  if (height > 645) {
+  if (height >= 700) {
     text("SESSION", 20, height - 143, sidebar - 34, 12, colors.muted, true);
     text(
       `Institution: ${state.bank.tenant}`,
@@ -248,11 +270,25 @@ export function paint(
     } else if (block.kind === "values") {
       for (const [label, value] of block.rows) {
         const labelWidth = Math.min(230, contentWidth * 0.32);
-        const wrapped = lines(value, contentWidth - labelWidth - 24);
-        const h = Math.max(35, wrapped.length * 21 + 12);
+        const wrapped = lines(value, contentWidth - labelWidth - 24, 14, true);
+        const labels = lines(label, labelWidth - 20, 13, true);
+        const h = Math.max(
+          35,
+          Math.max(wrapped.length, labels.length) * 21 + 12,
+        );
         box(left, y, labelWidth, h, "#eeeee6");
         box(left + labelWidth, y, contentWidth - labelWidth, h, "#fff");
-        text(label, left + 10, y + 23, labelWidth - 20, 13, colors.muted, true);
+        labels.forEach((line, index) =>
+          text(
+            line,
+            left + 10,
+            y + 23 + index * 21,
+            labelWidth - 20,
+            13,
+            colors.muted,
+            true,
+          ),
+        );
         wrapped.forEach((line, index) =>
           text(
             line,
@@ -286,36 +322,56 @@ export function paint(
         const value = field.options
           ? (field.options.find((o) => o.value === raw)?.label ?? "Select...")
           : raw;
-        if (selectedAll && focus === id && value) {
-          ctx.fillStyle = "#c1d4e4";
-          ctx.fillRect(
-            fx + 5,
-            fy + 29,
-            Math.min(fieldWidth - 34, ctx.measureText(value).width + 8),
-            24,
-          );
+        let textStart = 0;
+        if (field.options) {
+          text(value, fx + 8, fy + 47, fieldWidth - 40);
+        } else {
+          ctx.font = "14px Tahoma, Arial, sans-serif";
+          const availableWidth = fieldWidth - 20;
+          const caret =
+            focus === id ? Math.min(selection.caret, value.length) : 0;
+          while (
+            textStart < caret &&
+            ctx.measureText(value.slice(textStart, caret)).width >
+              availableWidth
+          )
+            textStart += Array.from(value.slice(textStart))[0]?.length ?? 1;
+          let visible = "";
+          for (const character of value.slice(textStart)) {
+            if (ctx.measureText(visible + character).width > availableWidth)
+              break;
+            visible += character;
+          }
+          if (focus === id && selection.anchor !== selection.caret) {
+            const start = Math.max(
+              textStart,
+              Math.min(selection.anchor, selection.caret),
+            );
+            const end = Math.min(
+              textStart + visible.length,
+              Math.max(selection.anchor, selection.caret),
+            );
+            if (end > start) {
+              ctx.fillStyle = "#c1d4e4";
+              ctx.fillRect(
+                fx + 8 + ctx.measureText(value.slice(textStart, start)).width,
+                fy + 29,
+                ctx.measureText(value.slice(start, end)).width,
+                24,
+              );
+            }
+          }
+          text(visible, fx + 8, fy + 47, availableWidth);
+          if (focus === id) {
+            ctx.fillStyle = colors.ink;
+            ctx.fillRect(
+              fx + 8 + ctx.measureText(value.slice(textStart, caret)).width,
+              fy + 31,
+              1,
+              20,
+            );
+          }
         }
-        // Long editable input shows its tail; the complete reviewed value is shown on confirmation.
-        text(
-          value.length > 50 && !field.options ? `…${value.slice(-48)}` : value,
-          fx + 8,
-          fy + 47,
-          fieldWidth - (field.options ? 40 : 16),
-        );
-        if (focus === id && !field.options && !selectedAll)
-          text(
-            "|",
-            fx +
-              Math.min(
-                fieldWidth - 16,
-                10 +
-                  ctx.measureText(
-                    value.length > 50 ? `…${value.slice(-48)}` : value,
-                  ).width,
-              ),
-            fy + 47,
-            10,
-          );
         if (field.options) {
           box(fx + fieldWidth - 28, fy + 25, 27, 32, "#e6e7e2");
           text("▼", fx + fieldWidth - 21, fy + 46, 20, 12);
@@ -330,8 +386,15 @@ export function paint(
           kind: field.options ? "select" : "field",
           options: field.options,
           maxLength: field.maxLength ?? 40,
+          textStart,
+          fullY: fy,
+          fullHeight: 58,
+          inputY: fy + 24,
         };
-        if (hit.y >= bodyTop && hit.y + hit.h <= bodyBottom) hits.push(hit);
+        const visibleTop = Math.max(fy, bodyTop);
+        const visibleBottom = Math.min(fy + 58, bodyBottom);
+        if (visibleBottom > visibleTop)
+          hits.push({ ...hit, y: visibleTop, h: visibleBottom - visibleTop });
         if (openSelect === id && field.options)
           dropdown = { hit, options: field.options };
       });
@@ -359,17 +422,24 @@ export function paint(
             : 1.2,
       );
       const hasActions = block.columns.at(-1) === "";
+      ctx.font = "bold 13px Tahoma, Arial, sans-serif";
+      const actionWidth = Math.max(
+        76,
+        ...block.rows
+          .filter((row) => row.action)
+          .map((row) => ctx.measureText(row.label ?? "Open").width + 30),
+      );
       const sum = weights
         .slice(0, hasActions ? -1 : undefined)
         .reduce((a, b) => a + b, 0);
       const widths = weights.map((w, index) =>
         hasActions && index === count - 1
-          ? 76
-          : ((contentWidth - (hasActions ? 76 : 0)) * w) / sum,
+          ? actionWidth
+          : ((contentWidth - (hasActions ? actionWidth : 0)) * w) / sum,
       );
       let x = left;
       const headers = block.columns.map((label, index) =>
-        lines(label, (widths[index] ?? 100) - 14),
+        lines(label, (widths[index] ?? 100) - 14, 12, true),
       );
       const headerHeight = Math.max(
         32,
@@ -392,7 +462,7 @@ export function paint(
       block.rows.forEach((row, rowIndex) => {
         x = left;
         const wrapped = row.cells.map((cell, index) =>
-          lines(cell, (widths[index] ?? 100) - 16),
+          lines(cell, (widths[index] ?? 100) - 16, 13),
         );
         const h = Math.max(40, ...wrapped.map((ls) => ls.length * 20 + 12));
         for (let index = 0; index < count; index += 1) {
@@ -441,10 +511,24 @@ export function paint(
     });
   }
   const bodyHeight = bodyBottom - bodyTop;
+  let scrollbar: Scene["scrollbar"];
   if (contentHeight > bodyHeight) {
     const trackX = width - 17;
     box(trackX, bodyTop, 9, bodyHeight, "#e0e1dc");
     const thumbHeight = Math.max(25, (bodyHeight * bodyHeight) / contentHeight);
+    const thumbY =
+      bodyTop +
+      (bodyHeight - thumbHeight) *
+        Math.min(1, scroll / (contentHeight - bodyHeight));
+    scrollbar = {
+      x: trackX,
+      y: bodyTop,
+      w: 9,
+      h: bodyHeight,
+      thumbY,
+      thumbHeight,
+      maxScroll: contentHeight - bodyHeight,
+    };
     ctx.fillStyle = colors.navy;
     ctx.fillRect(
       trackX + 1,
@@ -464,5 +548,5 @@ export function paint(
     11,
   );
   text("SESSION-LOCAL DATA", width - 150, height - 9, 140, 10, colors.muted);
-  return { hits, contentHeight, bodyHeight };
+  return { hits, contentHeight, bodyHeight, bodyTop, scrollbar };
 }

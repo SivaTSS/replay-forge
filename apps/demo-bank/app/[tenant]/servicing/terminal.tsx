@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import type { ClipboardEvent, KeyboardEvent } from "react";
 import type { Tenant } from "../../../lib/servicing/bank";
 import { act, createWorkspace } from "../../../lib/servicing/workspace";
 import { paint } from "../../../lib/servicing/renderer";
 import type { Hit, Scene } from "../../../lib/servicing/renderer";
+import {
+  deleteSelection,
+  endSelection,
+  moveSelection,
+  replaceSelection,
+} from "../../../lib/servicing/text";
+import type { TextSelection } from "../../../lib/servicing/text";
 
 export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
   const [state, setState] = useState(() => createWorkspace(tenant));
@@ -13,12 +20,21 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
   const [scroll, setScroll] = useState(0);
   const [focus, setFocus] = useState("");
   const [openSelect, setOpenSelect] = useState("");
-  const [selectedAll, setSelectedAll] = useState(false);
+  const [selection, setSelection] = useState<TextSelection>(endSelection(""));
   const canvas = useRef<HTMLCanvasElement>(null);
   const keyboard = useRef<HTMLTextAreaElement>(null);
-  const scene = useRef<Scene>({ hits: [], contentHeight: 0, bodyHeight: 1 });
-  const active = useRef({ focus, selectedAll, state });
-  active.current = { focus, selectedAll, state };
+  const scene = useRef<Scene>({
+    hits: [],
+    contentHeight: 0,
+    bodyHeight: 1,
+    bodyTop: 0,
+  });
+  const drag = useRef<{ y: number; scroll: number; ratio: number } | null>(
+    null,
+  );
+  const scrollbarClick = useRef(false);
+  const active = useRef({ focus, selection, state });
+  active.current = { focus, selection, state };
   useEffect(() => {
     if (focus.startsWith("field:"))
       keyboard.current?.focus({ preventScroll: true });
@@ -50,39 +66,73 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
       scroll,
       focus,
       openSelect,
-      selectedAll,
+      selection,
     );
     const max = Math.max(
       0,
       scene.current.contentHeight - scene.current.bodyHeight,
     );
     if (scroll > max) setScroll(max);
-  }, [state, size, scroll, focus, openSelect, selectedAll]);
+  }, [state, size, scroll, focus, openSelect, selection]);
   useEffect(() => {
     setScroll(0);
     setFocus("");
     setOpenSelect("");
-    setSelectedAll(false);
+    setSelection(endSelection(""));
   }, [state.page, state.memberId]);
-  const insert = (value: string) => {
+  const changeSelection = (next: TextSelection) => {
+    active.current.selection = next;
+    setSelection(next);
+  };
+  const edit = (
+    operation: (
+      value: string,
+      range: TextSelection,
+      limit: number,
+    ) => { value: string; selection: TextSelection },
+  ) => {
     const current = active.current;
     const hit = scene.current.hits.find(
       (h) => h.id === current.focus && h.kind === "field",
     );
     if (!hit) return;
     const key = hit.id.slice(6);
+    const edited = operation(
+      current.state.fields[key] ?? "",
+      current.selection,
+      hit.maxLength ?? 160,
+    );
+    active.current.state = {
+      ...current.state,
+      fields: { ...current.state.fields, [key]: edited.value },
+    };
     setState((s) => ({
       ...s,
       fields: {
         ...s.fields,
-        [key]:
-          `${current.selectedAll ? "" : (s.fields[key] ?? "")}${value.replace(/[\r\n\t]/g, " ")}`.slice(
-            0,
-            hit.maxLength ?? 160,
-          ),
+        [key]: edited.value,
       },
     }));
-    setSelectedAll(false);
+    changeSelection(edited.selection);
+  };
+  const insert = (value: string) =>
+    edit((text, range, limit) => replaceSelection(text, range, value, limit));
+  const copy = (event: ClipboardEvent<HTMLElement>, cut = false) => {
+    const current = active.current;
+    if (
+      !scene.current.hits.some(
+        (hit) => hit.id === current.focus && hit.kind === "field",
+      )
+    )
+      return;
+    event.preventDefault();
+    const value = current.state.fields[current.focus.slice(6)] ?? "";
+    const start = Math.min(current.selection.anchor, current.selection.caret);
+    const end = Math.max(current.selection.anchor, current.selection.caret);
+    if (end > start) {
+      event.clipboardData.setData("text/plain", value.slice(start, end));
+      if (cut) insert("");
+    }
   };
   const insertRef = useRef(insert);
   insertRef.current = insert;
@@ -115,11 +165,37 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
       input.removeEventListener("beforeinput", beforeInput);
     };
   }, []);
-  const activate = (hit: Hit) => {
-    setFocus(hit.id);
-    if (hit.id.startsWith("field:"))
+  const focusControl = (id: string) => {
+    setFocus(id);
+    active.current.focus = id;
+    changeSelection(
+      endSelection(active.current.state.fields[id.slice(6)] ?? ""),
+    );
+    const layout = scene.current;
+    const hit = layout.hits.find(
+      (item) => item.id === id && item.kind !== "option",
+    );
+    if (hit?.fullY !== undefined && hit.fullHeight) {
+      const top = layout.bodyTop;
+      const bottom = top + layout.bodyHeight;
+      const delta =
+        hit.fullY < top
+          ? hit.fullY - top
+          : Math.max(0, hit.fullY + hit.fullHeight - bottom);
+      if (delta)
+        setScroll((value) =>
+          Math.max(
+            0,
+            Math.min(layout.contentHeight - layout.bodyHeight, value + delta),
+          ),
+        );
+    }
+    if (id.startsWith("field:"))
       keyboard.current?.focus({ preventScroll: true });
-    setSelectedAll(false);
+    else canvas.current?.focus({ preventScroll: true });
+  };
+  const activate = (hit: Hit) => {
+    focusControl(hit.id);
     if (hit.kind === "action") {
       setState((s) => act(s, hit.id));
       setOpenSelect("");
@@ -146,7 +222,6 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
     if (event.key === "Escape") {
       event.preventDefault();
       setOpenSelect("");
-      setSelectedAll(false);
       return;
     }
     if (event.key === "PageDown" || event.key === "PageUp") {
@@ -170,14 +245,17 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
       event.preventDefault();
       const controls = scene.current.hits.filter((h) => h.kind !== "option");
       const index = controls.findIndex((h) => h.id === focus);
-      setFocus(
+      focusControl(
         controls[
-          (index + (event.shiftKey ? -1 : 1) + controls.length) %
+          (index < 0
+            ? event.shiftKey
+              ? controls.length - 1
+              : 0
+            : index + (event.shiftKey ? -1 : 1) + controls.length) %
             controls.length
         ]?.id ?? "",
       );
       setOpenSelect("");
-      setSelectedAll(false);
       return;
     }
     if (
@@ -212,27 +290,44 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
       event.preventDefault();
-      setSelectedAll(true);
+      changeSelection({
+        anchor: 0,
+        caret: (state.fields[hit.id.slice(6)] ?? "").length,
+      });
       return;
     }
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      changeSelection(
+        moveSelection(
+          state.fields[hit.id.slice(6)] ?? "",
+          active.current.selection,
+          event.key,
+          event.shiftKey,
+          event.ctrlKey || event.altKey,
+        ),
+      );
+      return;
+    }
     if (event.key === "Backspace" || event.key === "Delete") {
       event.preventDefault();
-      const key = hit.id.slice(6);
-      setState((s) => ({
-        ...s,
-        fields: {
-          ...s.fields,
-          [key]: selectedAll
-            ? ""
-            : event.key === "Backspace"
-              ? (s.fields[key] ?? "").slice(0, -1)
-              : (s.fields[key] ?? ""),
-        },
-      }));
-      setSelectedAll(false);
+      edit((value, range) =>
+        deleteSelection(
+          value,
+          range,
+          event.key === "Backspace",
+          event.ctrlKey || event.altKey,
+        ),
+      );
       return;
     }
+    if (
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      event.nativeEvent.isComposing
+    )
+      return;
     if (event.key.length === 1) {
       event.preventDefault();
       insert(event.key);
@@ -248,6 +343,8 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
         spellCheck={false}
         style={{ position: "fixed", left: -10000, top: 0, width: 1, height: 1 }}
         onKeyDown={onKey}
+        onCopy={copy}
+        onCut={(event) => copy(event, true)}
         onInput={(event) => {
           event.currentTarget.value = "";
         }}
@@ -268,11 +365,17 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
           caretColor: "transparent",
         }}
         onKeyDown={onKey}
+        onCopy={copy}
+        onCut={(event) => copy(event, true)}
         onPaste={(event) => {
           event.preventDefault();
           insert(event.clipboardData.getData("text/plain"));
         }}
         onClick={(event) => {
+          if (scrollbarClick.current) {
+            scrollbarClick.current = false;
+            return;
+          }
           canvas.current?.focus();
           const rect = event.currentTarget.getBoundingClientRect();
           const x = ((event.clientX - rect.left) * size.width) / rect.width;
@@ -282,11 +385,86 @@ export function ServicingTerminal({ tenant }: { tenant: Tenant }) {
             .find(
               (h) => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h,
             );
-          if (hit) activate(hit);
-          else {
+          if (openSelect && hit?.kind !== "option" && hit?.kind !== "select") {
+            setOpenSelect("");
+            return;
+          }
+          if (hit) {
+            activate(hit);
+            if (hit.kind === "field" && y >= (hit.inputY ?? hit.y + 24)) {
+              const value = state.fields[hit.id.slice(6)] ?? "";
+              const ctx = canvas.current?.getContext("2d");
+              if (ctx) {
+                ctx.font = "14px Tahoma, Arial, sans-serif";
+                const start = hit.textStart ?? 0;
+                let caret = start;
+                for (const character of value.slice(start)) {
+                  const width = ctx.measureText(
+                    value.slice(start, caret),
+                  ).width;
+                  if (
+                    x - hit.x - 8 <
+                    width + ctx.measureText(character).width / 2
+                  )
+                    break;
+                  caret += character.length;
+                }
+                changeSelection({ anchor: caret, caret });
+              }
+            }
+          } else {
             setOpenSelect("");
             setFocus("");
           }
+        }}
+        onPointerDown={(event) => {
+          const bar = scene.current.scrollbar;
+          if (!bar || event.button !== 0) return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const x = event.clientX - bounds.left;
+          const y = event.clientY - bounds.top;
+          if (x < bar.x || x > bar.x + bar.w || y < bar.y || y > bar.y + bar.h)
+            return;
+          event.preventDefault();
+          scrollbarClick.current = true;
+          setOpenSelect("");
+          const ratio = bar.maxScroll / (bar.h - bar.thumbHeight);
+          const initial =
+            y >= bar.thumbY && y <= bar.thumbY + bar.thumbHeight
+              ? scroll
+              : Math.max(
+                  0,
+                  Math.min(
+                    bar.maxScroll,
+                    (y - bar.y - bar.thumbHeight / 2) * ratio,
+                  ),
+                );
+          setScroll(initial);
+          drag.current = { y: event.clientY, scroll: initial, ratio };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const current = drag.current;
+          const bar = scene.current.scrollbar;
+          if (current && bar)
+            setScroll(
+              Math.max(
+                0,
+                Math.min(
+                  bar.maxScroll,
+                  current.scroll + (event.clientY - current.y) * current.ratio,
+                ),
+              ),
+            );
+        }}
+        onPointerUp={(event) => {
+          drag.current = null;
+          if (event.currentTarget.hasPointerCapture(event.pointerId))
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+          scrollbarClick.current = false;
         }}
       />
     </>

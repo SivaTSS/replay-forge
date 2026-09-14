@@ -19,6 +19,16 @@ test("review and cancel are non-mutating; confirmation commits once", () => {
   const start = transferForm();
   const review = act(start, "review-transfer");
   assert.equal(review.page, "review");
+  assert.ok(
+    buildView(review).blocks.some(
+      (b) => b.kind === "heading" && b.text === "Proposed internal transfer",
+    ),
+  );
+  assert.ok(
+    !buildView(review).blocks.some(
+      (b) => b.kind === "heading" && b.text === "Internal transfer posted",
+    ),
+  );
   assert.equal(review.bank, start.bank);
   assert.equal(act(review, "cancel").bank, start.bank);
   const done = act(review, "confirm");

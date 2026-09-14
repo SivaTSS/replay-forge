@@ -364,6 +364,15 @@ export function act(state: Workspace, action: string): Workspace {
 }
 
 const heading = (text: string): Block => ({ kind: "heading", text });
+const REVIEW_TITLES: Record<Command["kind"], string> = {
+  transfer: "Proposed internal transfer",
+  card: "Proposed card status change",
+  hold: "Proposed administrative hold",
+  release: "Proposed hold release",
+  quote: "Proposed payoff quote",
+  case: "Proposed service request",
+  resolve: "Proposed case resolution",
+};
 const note = (text: string, tone?: "warning" | "error"): Block => ({
   kind: "note",
   text,
@@ -724,7 +733,7 @@ export function buildView(state: Workspace): {
         "REVIEW ONLY — no changes have been posted. Cancel to return without changing records.",
         "warning",
       ),
-      heading(state.pending.receipt.title),
+      heading(REVIEW_TITLES[state.pending.command.kind]),
       { kind: "values", rows: state.pending.receipt.details },
       values(
         ["Operator role", bank.role],
