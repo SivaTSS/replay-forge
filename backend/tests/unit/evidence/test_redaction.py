@@ -51,6 +51,21 @@ def test_customer_tokens_are_stable_only_within_run_salt() -> None:
     assert first.content != other_run.content
 
 
+def test_public_run_id_does_not_make_pseudonyms_reproducible() -> None:
+    classifications = {"member_id": DataClassification.CUSTOMER_IDENTIFIER}
+    first = StructuredRedactor()
+    second = StructuredRedactor()
+    assert (
+        first.sanitize_json({"member_id": "12345"}, classifications, run_salt="public").content
+        != second.sanitize_json({"member_id": "12345"}, classifications, run_salt="public").content
+    )
+    assert (
+        first.sanitize_json({"member_id": "12345"}, classifications, run_salt="public").content
+        != first.sanitize_json({"member_id": 12345}, classifications, run_salt="public").content
+    )
+    assert "pseudonym_key" not in repr(first)
+
+
 @pytest.mark.parametrize(
     "unsafe_value",
     [

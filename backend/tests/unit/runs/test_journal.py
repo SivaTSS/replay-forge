@@ -9,7 +9,7 @@ import pytest
 
 from replayforge.evidence.local_store import LocalEvidenceStore
 from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
-from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
+from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.policy.types import DataClassification
 from replayforge.runs import journal as journal_module
 from replayforge.runs.journal import InMemoryRunJournal
@@ -48,11 +48,37 @@ def test_journal_drops_forbidden_detail_keys() -> None:
     assert recorder.events()[0].details == {"decision": "allow"}
 
 
-def test_journal_rejects_configured_secret_value() -> None:
+def test_journal_drops_unclassified_free_text_before_retention() -> None:
     recorder = journal(StructuredRedactor(configured_secrets=("highly-sensitive",)))
 
-    with pytest.raises(EvidenceRejectedError):
-        recorder.record("unsafe_event", recorder.run_id, details={"note": "highly-sensitive"})
+    recorder.record("unsafe_event", recorder.run_id, details={"note": "highly-sensitive"})
+    assert recorder.events()[0].details == {}
+
+
+def test_journal_does_not_retain_pii_in_unknown_fields_or_operational_shapes(
+    tmp_path: Path,
+) -> None:
+    recorder = journal()
+    recorder.evidence_store = LocalEvidenceStore(tmp_path, recorder.clock)
+    recorder.record(
+        "action_result",
+        recorder.run_id,
+        details={
+            "message": "Synthetic Person synthetic.person@example.invalid",
+            "facts": ["12345", {"name": "Synthetic Person"}],
+            "attempt": "12345",
+            "code": "Synthetic Person",
+            "synthetic.person@example.invalid": "value",
+            "operator_id": "synthetic.person@example.invalid",
+        },
+    )
+    assert recorder.events()[0].details["operator_id"].startswith("customer_")  # type: ignore[union-attr]
+    assert set(recorder.events()[0].details) == {"operator_id"}
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert b"Synthetic Person" not in path.read_bytes()
+            assert b"synthetic.person@example.invalid" not in path.read_bytes()
+            assert b"12345" not in path.read_bytes()
 
 
 @pytest.mark.parametrize(

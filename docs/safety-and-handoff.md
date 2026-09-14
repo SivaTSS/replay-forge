@@ -194,6 +194,20 @@ browser failure/handoff frame
 
 The redactor drops credential-, token-, password-, cookie-, authorization-, and secret-shaped keys; drops personal fields; tokenizes customer identifiers; and replaces financial values. It also rejects known provider, cloud, GitHub, bearer, and private-key patterns that survive redaction.
 
+Journal details use a positive retention schema: bounded operational codes, enums, counters,
+and opaque session identifiers survive; unknown fields, free-text messages, and wrong-shaped
+values do not. Operator labels are pseudonymized because a local label may contain a name or
+email address. Add new diagnostic fields in
+[the event privacy schema](../backend/src/replayforge/runs/privacy.py), not by passing arbitrary
+UI observations to the journal. This is a retention boundary, not a general-purpose PII detector.
+
+Customer and operator pseudonyms use HMAC-SHA-256 with an ephemeral random 256-bit key and
+the run ID as context; 128 digest bits are retained. The public run ID alone cannot reproduce
+them. Values correlate only within the same redactor lifetime and run, not across restarts or
+independent exports. An unkeyed hash was rejected because short member IDs can be enumerated.
+Pseudonymization is not anonymization, and neither it nor secret-pattern scanning certifies
+arbitrary artifact descriptions or image crops as free of personal information.
+
 The operator viewport is live and therefore unmasked for the authorized lease holder. Persisted failure and handoff screenshots are masked before capture.
 
 ## Decisions

@@ -26,6 +26,7 @@ from replayforge.evidence.models import (
 from replayforge.evidence.ports import EvidenceStore
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.policy.types import DataClassification
+from replayforge.runs.privacy import event_detail_classifications
 from replayforge.shared.clock import Clock
 from replayforge.shared.ids import EntityId, EntityKind, new_id, parse_id
 
@@ -82,7 +83,10 @@ class InMemoryRunJournal:
             raise ValueError("event type must be a lowercase stable identifier")
         if step_id is not None and _STEP_ID_PATTERN.fullmatch(step_id) is None:
             raise ValueError("step ID is invalid")
-        sanitized = self.redactor.sanitize_json(details or {}, {}, run_salt=self.run_id)
+        event_details = details or {}
+        sanitized = self.redactor.sanitize_json(
+            event_details, event_detail_classifications(event_details), run_salt=self.run_id
+        )
         cleaned = json.loads(sanitized.content)
         if not isinstance(cleaned, dict):
             raise RuntimeError("structured redactor must preserve mapping shape")

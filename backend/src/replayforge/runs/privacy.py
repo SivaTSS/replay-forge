@@ -1,0 +1,127 @@
+"""Positive retention schema for operational journal details.
+
+Runtime codes and counters are diagnostic evidence. Unstructured messages, UI facts,
+and newly introduced fields are not automatically trusted merely because they lack
+a password-shaped key. Extend this schema deliberately when adding an event field.
+"""
+
+from __future__ import annotations
+
+import re
+
+from replayforge.policy.types import DataClassification
+
+_IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,127}")
+_CODE_FIELDS = frozenset(
+    {
+        "code",
+        "reason",
+        "error_code",
+        "recovery_id",
+        "resume_at",
+        "output",
+        "input_binding",
+        "output_binding",
+        "transform",
+    }
+)
+_COUNT_FIELDS = frozenset(
+    {
+        "attempt",
+        "uses",
+        "use",
+        "lease_version",
+        "frame_depth",
+        "client_sequence",
+        "source_frame_sequence",
+        "viewport_height",
+        "viewport_width",
+        "x",
+        "y",
+        "character_count",
+    }
+)
+_ENUM_FIELDS = {
+    "decision": {"allow", "deny", "require_human_approval"},
+    "disposition": {"continue", "business_outcome"},
+    "proposal_kind": {"act", "complete", "escalate"},
+    "action_type": {
+        "click",
+        "type",
+        "select",
+        "press_keys",
+        "scroll",
+        "wait_for",
+        "assert",
+        "extract",
+    },
+    "declared_risk": {"read_only", "reversible", "sensitive", "irreversible"},
+    "evidence_frame": {"captured", "unavailable", "not_applicable"},
+    "input_type": {"pointer", "key", "text"},
+    "key": {
+        "Enter",
+        "Tab",
+        "Shift+Tab",
+        "Escape",
+        "Backspace",
+        "Delete",
+        "ArrowUp",
+        "ArrowDown",
+        "ArrowLeft",
+        "ArrowRight",
+        "Home",
+        "End",
+    },
+}
+_STRATEGIES = frozenset(
+    {
+        "role_name",
+        "label",
+        "test_id",
+        "text",
+        "css",
+        "relative_text",
+        "coordinates",
+        "ocr_relative",
+        "template",
+        "rendered_text",
+        "rendered_labeled_control",
+        "rendered_field_value",
+        "rendered_group_image",
+    }
+)
+
+
+def event_detail_classifications(details: dict[str, object]) -> dict[str, DataClassification]:
+    """Unknown fields and wrong-shaped operational values are personal by default."""
+
+    classifications = {}
+    for key, value in details.items():
+        if key == "operator_id":
+            # A locally supplied operator label may be a person's name or email address.
+            classifications[key] = DataClassification.CUSTOMER_IDENTIFIER
+            continue
+        safe = (
+            (
+                key in _CODE_FIELDS
+                and isinstance(value, str)
+                and _IDENTIFIER.fullmatch(value) is not None
+            )
+            or (key in _COUNT_FIELDS and type(value) is int and 0 <= value <= 1_000_000)
+            or (key in {"effect_absent", "target_present"} and isinstance(value, bool))
+            or (key in _ENUM_FIELDS and isinstance(value, str) and value in _ENUM_FIELDS[key])
+            or (
+                key in {"session_id", "intervention_id"}
+                and isinstance(value, str)
+                and re.fullmatch(r"(?:ses|int)_[0-9a-f]{32}", value) is not None
+            )
+            or (
+                key == "locator_strategies"
+                and isinstance(value, list)
+                and all(isinstance(item, str) and item in _STRATEGIES for item in value)
+            )
+        )
+        classifications[key] = (
+            DataClassification.OPERATIONAL if safe else DataClassification.PERSONAL
+        )
+    return classifications

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
+import secrets
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,6 +35,9 @@ class StructuredRedactor:
     configured_secrets: tuple[str, ...] = ()
     strict: bool = True
     _minimum_secret_length: int = field(default=8, init=False, repr=False)
+    _pseudonym_key: bytes = field(
+        default_factory=lambda: secrets.token_bytes(32), init=False, repr=False, compare=False
+    )
 
     def sanitize_json(
         self,
@@ -72,6 +77,10 @@ class StructuredRedactor:
         result: dict[str, Any] = {}
         for key, item in value.items():
             path = f"{prefix}.{key}" if prefix else key
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./-]{0,255}", key) is None:
+                # Dictionary keys and even redaction directives can contain PII.
+                directives.add("drop:untrusted-key")
+                continue
             normalized_key = key.casefold().replace("-", "_")
             if any(fragment in normalized_key for fragment in _FORBIDDEN_KEY_FRAGMENTS):
                 directives.add(f"drop:{path}")
@@ -114,9 +123,12 @@ class StructuredRedactor:
             return value
         return "[REDACTED_COMPLEX_VALUE]"
 
-    @staticmethod
-    def _tokenize(value: Any, run_salt: str) -> str:
-        digest = hashlib.sha256(f"{run_salt}:{value}".encode()).hexdigest()[:12]
+    def _tokenize(self, value: Any, run_salt: str) -> str:
+        # The public run ID provides separation, not secrecy. The random key never leaves
+        # this redactor's lifetime; even a small member-ID space cannot be enumerated from
+        # the evidence alone. Canonical JSON also separates strings from numeric values.
+        message = json.dumps([run_salt, value], sort_keys=True, separators=(",", ":")).encode()
+        digest = hmac.new(self._pseudonym_key, message, hashlib.sha256).hexdigest()[:32]
         return f"customer_{digest}"
 
     def _scan(self, text: str) -> None:
