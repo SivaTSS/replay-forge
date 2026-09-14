@@ -63,7 +63,7 @@ Replay a genuinely discovered task on the servicing workstation:
 ```bash
 curl --fail-with-body --silent --show-error \
   -H 'content-type: application/json' \
-  -d '{"tenant":"harbor","version":"1.0.1","inputs":{"member_id":"12346","payoff_date":"2026-09-21"}}' \
+  -d '{"tenant":"harbor","version":"1.0.2","inputs":{"member_id":"12346","payoff_date":"2026-09-21"}}' \
   http://127.0.0.1:8000/api/v1/capabilities/member.servicing_loan_payoff_quote/replays
 ```
 

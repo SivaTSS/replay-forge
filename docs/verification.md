@@ -51,10 +51,10 @@ sensitive step and an observable resume condition to a temporary artifact. The o
 acts in the real retained browser and replay completes in that same session. This tests control
 transfer without falsely publishing a special model-discovered handoff capability.
 
-The current three published artifacts cover successful business flows. They do **not** declare
-a member-not-found outcome, a permission-denied detector, or an application recovery. Unknown
-states fail closed; richer branches require genuine scenario discovery and validation. Engine
-test coverage must not be confused with those branches having been discovered for this UI.
+All three tasks have genuine successful-flow discovery evidence. Payoff `1.0.2` additionally
+declares two negative outcomes, two application failures, and one recovery, with genuine discovery
+and fresh replay on both tenants. Transaction/card exception coverage is still being established.
+Unknown states fail closed; engine tests alone do not prove application-specific branches.
 
 The submission gate also requires independently exported successful and failed model-free replay
 logs; merely finding valid discovery manifests is insufficient. The failure must include a richer
@@ -62,14 +62,14 @@ attachment. An empty evidence directory fails verification.
 
 ## Scenario matrix
 
-| Genuine discovery bundle | Published capability | Proof |
+| Original genuine discovery bundle | Original published version | Proof |
 |---|---|---|
 | [Transaction investigation](../evidence/discovery-servicing-transaction/manifest.json) | `member.transaction_investigation/1.0.1` | Six fields; transaction and account identity comparisons; Harbor/Summit validation |
 | [Loan payoff](../evidence/discovery-servicing-loan-payoff/manifest.json) | `member.servicing_loan_payoff_quote/1.0.1` | Issued quote and receipt; returned date matches requested date; Harbor/Summit validation |
 | [Temporary card lock](../evidence/discovery-servicing-card-lock/manifest.json) | `member.temporary_card_lock/1.0.1` | Reversible mutation, fresh pre/post card identity checks, exact final locked status, receipt; Harbor/Summit validation |
 
 The following are genuine **scenario discovery** bundles, extending the original payoff trace.
-They prove observed branch conditions and actions, not publication or successful recovery replay.
+Their distinct model-free replay proofs follow below.
 
 | Payoff scenario discovery | Observed evidence |
 |---|---|
@@ -78,6 +78,18 @@ They prove observed branch conditions and actions, not publication or successful
 | [Invalid calendar date](../evidence/discovery-payoff-invalid-payoff-date/manifest.json) | Actual invalid-date rejection, without substituting a date |
 | [Restricted member](../evidence/discovery-payoff-member-restricted/manifest.json) | Restriction observed without changing permissions |
 | [Member notice recovery](../evidence/discovery-payoff-acknowledge-member-notice/manifest.json) | Blocker marked before correction; corrective actions and restored-state assertion recorded |
+
+Payoff [version 1.0.2](../capabilities/member.servicing_loan_payoff_quote/1.0.2.yaml) was published
+only after this complete matrix passed with model credentials disabled:
+
+| Case | Exact result | Harbor replay | Summit replay |
+|---|---|---|---|
+| Normal task | `success` | [Evidence](../evidence/replay-payoff-harbor-primary/manifest.json) | [Evidence](../evidence/replay-payoff-summit-primary/manifest.json) |
+| Missing member | `business_outcome:member_not_found` | [Evidence](../evidence/replay-payoff-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-payoff-summit-member-not-found/manifest.json) |
+| Unavailable date | `business_outcome:quote_date_unavailable` | [Evidence](../evidence/replay-payoff-harbor-quote-date-unavailable/manifest.json) | [Evidence](../evidence/replay-payoff-summit-quote-date-unavailable/manifest.json) |
+| Invalid calendar date | `failure:invalid_payoff_date` | [Evidence](../evidence/replay-payoff-harbor-invalid-payoff-date/manifest.json) | [Evidence](../evidence/replay-payoff-summit-invalid-payoff-date/manifest.json) |
+| Restricted member | `failure:member_restricted` | [Evidence](../evidence/replay-payoff-harbor-member-restricted/manifest.json) | [Evidence](../evidence/replay-payoff-summit-member-restricted/manifest.json) |
+| Member notice | `success` + named `recovery_completed` | [Evidence](../evidence/replay-payoff-harbor-acknowledge-member-notice/manifest.json) | [Evidence](../evidence/replay-payoff-summit-acknowledge-member-notice/manifest.json) |
 
 | Model-free replay bundle | Result | Proof boundary |
 |---|---|---|
@@ -90,14 +102,15 @@ allocates the immutable published version. That expected difference is not a for
 
 Other failed or paused attempts stay in private runtime audit storage. They are not relabeled as
 success, and no manual UI action is substituted for model discovery. The replay bundles were
-captured from commit `a462cdf`; [reproduction instructions](../evidence/README.md) run the actual
+captured from `a462cdf` (original pair) and `7512f5e` (payoff branch matrix);
+[reproduction instructions](../evidence/README.md) run the actual
 saved capability with synthetic input data, not a scripted navigation substitute.
 
 ## Evidence bundle anatomy
 
 ```text
 scenario/
-├── artifact.yaml      Exact published executable contract
+├── artifact.yaml      Exact contract used by the recorded run
 ├── events.jsonl       Ordered, sanitized run events
 ├── result.json        Sanitized terminal result
 └── manifest.json      Provenance, command, redaction metadata, closed-set hashes

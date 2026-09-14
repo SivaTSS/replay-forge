@@ -1,6 +1,6 @@
 # Evidence
 
-Three genuine model discoveries target the single servicing workstation:
+Three primary model discoveries target the single servicing workstation:
 
 | Bundle | Business task |
 |---|---|
@@ -9,7 +9,7 @@ Three genuine model discoveries target the single servicing workstation:
 | [discovery-servicing-card-lock](discovery-servicing-card-lock/manifest.json) | Temporarily lock the selected card and verify the result |
 
 Each suite automatically validates Harbor and Summit before publication. The manifest binds the
-actual recording run, source revision, command, published artifact, redaction metadata, and hashes.
+actual recording run, source revision, command, exact run artifact, redaction metadata, and hashes.
 The primary result can name its draft version; suite finalization assigns the published version
 and validated tenant set.
 
@@ -23,6 +23,13 @@ credentials or artifact modifications:
 
 These recordings used source revision `a462cdf`. Their synthetic invocation data and expected
 results live in [the replay specification](../config/replay-evidence.yaml), not in the runtime.
+
+Payoff also has five genuine scenario-discovery bundles and twelve model-free validation bundles
+covering normal completion, two negative outcomes, two application failures, and notice recovery
+on both tenants. See the [complete linked matrix](../docs/verification.md#scenario-matrix).
+Discovery used `6699114`; the complete replay matrix used `7512f5e`. Those validation bundles
+contain the unpublished merged candidate; successful finalization published version `1.0.2`.
+Their exact artifact hashes distinguish that candidate from the original immutable source version.
 
 ```bash
 uv run python scripts/verify_evidence_bundles.py evidence --require-submission
@@ -40,6 +47,24 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
 uv run python scripts/capture_replay_evidence.py --spec config/replay-evidence.yaml \
   --commit-sha "$(git rev-parse HEAD)" --output-root .local/replay-reproduction
 ```
+
+To restore and revalidate the five saved payoff scenarios without any model calls:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
+uv run python scripts/validate_scenario_evidence.py \
+  --spec config/servicing-discovery.yaml --workflow servicing_loan_payoff_quote \
+  --primary-version 1.0.1 \
+  --scenario member_not_found=evidence/discovery-payoff-member-not-found \
+  --scenario quote_date_unavailable=evidence/discovery-payoff-quote-date-unavailable \
+  --scenario invalid_payoff_date=evidence/discovery-payoff-invalid-payoff-date \
+  --scenario member_restricted=evidence/discovery-payoff-member-restricted \
+  --scenario acknowledge_member_notice=evidence/discovery-payoff-acknowledge-member-notice
+```
+
+This performs real UI replays and publishes the next unused version only if every required case
+passes; existing versions are never overwritten. Optional `--output-root`, `--evidence-prefix`,
+and `--commit-sha` export those actual replay proofs to a new directory.
 
 Old-UI runs were removed, not relabeled as workstation runs. Browser regressions for policy-driven
 handoff use explicit temporary fixtures and real live control, not fabricated discovery evidence.

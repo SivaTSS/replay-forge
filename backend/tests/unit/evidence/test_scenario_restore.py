@@ -32,6 +32,9 @@ def test_restoration_uses_actual_recorded_boundary_and_original_run() -> None:
     assert scenario.result.branch is not None
     assert scenario.result.branch.after_step_count == 2
     assert scenario.result.branch.condition.kind == "rendered_text"
+    assert scenario.result.evidence_manifest.endswith(
+        "manifest-evd_d811385a37c046e98262601fd123d4a0.bin"
+    )
     assert "00000" not in repr(scenario)
 
 

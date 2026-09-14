@@ -33,9 +33,8 @@ flowchart TD
 
 ## Three-task coverage matrix
 
-These are **configured cases, not claims of completed end-to-end proof**. The five payoff scenario
-discoveries have [genuine bundles](verification.md#scenario-matrix); their publication and replay
-proof must be evaluated separately. The transaction and card exception cases remain unproven.
+Payoff's five cases now have [genuine discovery and two-tenant replay proof](verification.md#scenario-matrix)
+and are published in version `1.0.2`. The transaction and card exception cases remain unproven.
 The same verification matrix distinguishes original discoveries from model-free replay evidence.
 
 | Task | Scenario | Required disposition | Invariants |

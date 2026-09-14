@@ -86,8 +86,9 @@ the previous effect is absent; uncertain mutations are never blindly repeated.
 | `failure` | Application, policy, targeting, or verification failure with step/context |
 | `intervention_required` | Automation paused with the live session retained |
 
-Known notices, delayed loads, permission denial, and ambiguity have engine test coverage;
-the three published artifacts currently demonstrate successful business flows, not those branches.
+Known notices, delayed loads, permission denial, and ambiguity have engine test coverage.
+Payoff `1.0.2` also has genuine discovery and two-tenant replay evidence for two negative outcomes,
+two application failures, and notice recovery followed by verified task completion.
 Open-ended model recovery was rejected because replay must remain reproducible.
 
 ## 4. Heterogeneity & multi-tenant
@@ -167,8 +168,9 @@ deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines th
 Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
 assignment requests. Three genuine discovery bundles preserve the current UI's provenance. Tests exercise model-free
 reuse and real same-session handoff; policy-injection fixtures are explicitly separate from discovery.
-The current artifacts do not declare application-specific negative-outcome or recovery branches;
-those engine mechanisms have independent regression tests, not fabricated discovery evidence.
+Payoff now includes five genuinely discovered exception/recovery branches with complete replay
+proof. Transaction and card exception branches remain unproven; engine fixtures are not substituted
+for their discovery evidence. See the [proof matrix](docs/verification.md#scenario-matrix).
 
 | Deliberate cut | Reason / next condition |
 |---|---|

@@ -7,13 +7,14 @@ from replayforge.capabilities.models import AssertAction
 from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.models import DiscoverySuccess, ObservedBranch
 from replayforge.evidence.discovery_capture import ScenarioCaptureRequest
-from replayforge.evidence.export import verify_evidence_bundle
+from replayforge.evidence.export import EvidenceBundleManifest, verify_evidence_bundle
 from replayforge.evidence.models import EventEvidence
 from replayforge.runs.discovery_suite import DiscoveryScenario
 
 
 def restore_scenario(directory: Path, request: ScenarioCaptureRequest) -> DiscoveryScenario:
     verified = verify_evidence_bundle(directory)
+    manifest = EvidenceBundleManifest.model_validate_json((directory / "manifest.json").read_text())
     artifact = load_artifact_yaml((directory / "artifact.yaml").read_text())
     result = json.loads((directory / "result.json").read_text())
     events = tuple(
@@ -51,7 +52,7 @@ def restore_scenario(directory: Path, request: ScenarioCaptureRequest) -> Discov
             status="success",
             run_id=verified.run_id,
             artifact=artifact,
-            evidence_manifest=result["evidence_manifest"],
+            evidence_manifest=manifest.source_manifest.key,
             branch=ObservedBranch(offset, action.condition),
         ),
     )

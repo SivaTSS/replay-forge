@@ -18,8 +18,8 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 | Typed inputs/outputs | Implemented | Closed object contracts and runtime validation | Distinct transaction, payoff, and card contracts |
 | Success checkpoint | Evidenced | Route, visible text, output validity, input/output identity | Artifact conditions + exact-output browser tests |
 | Model-free replay | Evidenced | `ReplayEngine` has no provider import | Structural test + bundle |
-| Business outcome | Implemented, Tested | Declared outcome conditions and typed results | Engine tests; not declared in the three current artifacts |
-| Recoverable condition | Implemented, Tested | Finite, declared recovery with a fixed resume point | Engine tests; not declared in the current artifacts |
+| Business outcome | Evidenced | Declared outcome conditions and exact typed results | Payoff negative scenarios discovered and replayed on both tenants |
+| Recoverable condition | Evidenced | Bounded recovery, lease renewal, fixed resume point | Payoff notice recovery followed by verified task completion on both tenants |
 | Hard failure | Implemented, Tested | Typed application/mechanical failures and masked evidence | Engine tests; no UI-specific permission detector in current artifacts |
 | Explicit allowlist | Implemented | Origin/route/action/risk policy intersections | Policy decision tests |
 | Conservative risk | Evidenced | Sensitive pauses; irreversible denies | Policy and real-session browser tests |
