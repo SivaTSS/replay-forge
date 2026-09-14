@@ -208,6 +208,18 @@ independent exports. An unkeyed hash was rejected because short member IDs can b
 Pseudonymization is not anonymization, and neither it nor secret-pattern scanning certifies
 arbitrary artifact descriptions or image crops as free of personal information.
 
+Terminal evidence omits free-text failure messages, expected/observed payloads, and unclassified
+outputs. Declared output classifications still apply recursively; the API caller's live result is
+unchanged. Discovery terminal records contain an artifact identity and hash, not a duplicate of
+the complete artifact. Before publication, a deterministic artifact guard rejects configured
+secrets, email/SSN-shaped strings, and string invocation values of four or more characters copied
+into metadata, examples, or executable fields. Runtime-generated provenance is excluded only
+from invocation-substring matching to avoid accidental matches inside random run IDs.
+
+These guards deliberately fail closed on known matches. They do not identify every name,
+short input, encoded value, or personal image; synthetic-only discovery is the supported demo
+boundary. Do not point this deployment at real customer records on the strength of these checks.
+
 The operator viewport is live and therefore unmasked for the authorized lease holder. Persisted failure and handoff screenshots are masked before capture.
 
 ## Decisions

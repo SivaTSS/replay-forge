@@ -26,7 +26,7 @@ from replayforge.evidence.models import (
 from replayforge.evidence.ports import EvidenceStore
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.policy.types import DataClassification
-from replayforge.runs.privacy import event_detail_classifications
+from replayforge.runs.privacy import event_detail_classifications, terminal_classifications
 from replayforge.shared.clock import Clock
 from replayforge.shared.ids import EntityId, EntityKind, new_id, parse_id
 
@@ -192,7 +192,9 @@ class InMemoryRunJournal:
             raise ValueError("terminal result belongs to a different run")
         if result.get("status") not in {"success", "business_outcome", "failure"}:
             raise ValueError("only completed runs may be finalized")
-        sanitized = self.redactor.sanitize_json(result, classifications or {}, run_salt=self.run_id)
+        sanitized = self.redactor.sanitize_json(
+            result, terminal_classifications(result, classifications or {}), run_salt=self.run_id
+        )
         if len(sanitized.content) > MAX_EVENT_BYTES:
             raise ValueError("terminal result exceeds the evidence verification limit")
         with self._lock:

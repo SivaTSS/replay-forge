@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, cast
 
@@ -47,6 +47,8 @@ from replayforge.discovery.models import (
     RecordedDiscoveryStep,
 )
 from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelProviderError
+from replayforge.discovery.privacy import validate_artifact_privacy
+from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
     AUTOMATION_OWNER,
@@ -113,6 +115,7 @@ class DiscoveryEngine:
     policy_resolver: Callable[[DiscoveryRequest], EffectivePolicy] | None = None
     contract_planner: Callable[[PlanningContext], CapabilityDraftSpec] | None = None
     capability_id_resolver: Callable[[str, str], str] | None = None
+    privacy_redactor: StructuredRedactor = field(default_factory=StructuredRedactor)
 
     def execute(self, request: DiscoveryRequest) -> DiscoveryResult:
         session: SurfaceSession | None = None
@@ -215,6 +218,7 @@ class DiscoveryEngine:
                             tuple(getattr(session, "required_landmarks", ())),
                             tuple(getattr(session, "forbidden_landmarks", ())),
                         )
+                        validate_artifact_privacy(artifact, request.inputs, self.privacy_redactor)
                     except ValueError:
                         return self._failure(
                             request,

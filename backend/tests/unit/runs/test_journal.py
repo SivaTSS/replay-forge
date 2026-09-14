@@ -265,6 +265,28 @@ def test_journal_finalizes_once_and_redacts_terminal_result(tmp_path: Path) -> N
         recorder.record("action_result", recorder.run_id)
 
 
+def test_terminal_free_text_and_unclassified_outputs_do_not_enter_evidence(tmp_path: Path) -> None:
+    recorder = journal()
+    store = LocalEvidenceStore(tmp_path, recorder.clock)
+    recorder.evidence_store = store
+    recorder.record("replay_started", recorder.run_id)
+    manifest_key = recorder.finalize(
+        {
+            "run_id": recorder.run_id,
+            "status": "failure",
+            "code": "target_absent",
+            "message": "Synthetic Person",
+            "details": {"name": "Synthetic Person"},
+            "outputs": {"unexpected": ["Synthetic Person"], "nested": {"name": "Synthetic Person"}},
+        }
+    )
+    manifest = json.loads(store.read(manifest_key))
+    result = json.loads(store.read(manifest["terminal_result"]["key"]))
+    assert "message" not in result and "details" not in result
+    assert result["outputs"] == {"nested": {}}
+    assert result["code"] == "target_absent"
+
+
 @pytest.mark.parametrize(
     "result",
     [

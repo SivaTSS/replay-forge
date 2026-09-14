@@ -125,3 +125,46 @@ def event_detail_classifications(details: dict[str, object]) -> dict[str, DataCl
             DataClassification.OPERATIONAL if safe else DataClassification.PERSONAL
         )
     return classifications
+
+
+def terminal_classifications(
+    result: dict[str, object], declared: dict[str, DataClassification]
+) -> dict[str, DataClassification]:
+    """Keep result structure, but never implicitly retain diagnostics or output values."""
+
+    operational = {
+        "status",
+        "run_id",
+        "code",
+        "recoverable",
+        "step_id",
+        "evidence_manifest",
+        "capability",
+        "checkpoint",
+        "artifact_content_hash",
+    }
+    classifications = {
+        key: DataClassification.OPERATIONAL if key in operational else DataClassification.PERSONAL
+        for key in result
+        if key != "outputs"
+    }
+
+    def classify_outputs(value: object, path: str) -> None:
+        # A classified parent cannot be weakened by descendants.
+        if path in declared:
+            classifications[path] = declared[path]
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                classify_outputs(item, f"{path}.{key}")
+        else:
+            classifications[path] = DataClassification.PERSONAL
+
+    if "outputs" in result:
+        classify_outputs(result["outputs"], "outputs")
+    for path, classification in declared.items():
+        if path.startswith("outputs.") or classification not in {
+            DataClassification.OPERATIONAL,
+            DataClassification.PUBLIC,
+        }:
+            classifications[path] = classification
+    return classifications

@@ -46,6 +46,14 @@ from tests.unit.replay.test_engine import (
 )
 
 
+@pytest.fixture
+def valid_artifact_data(valid_artifact_data: dict[str, Any]) -> dict[str, Any]:
+    # Unlike the hand-authored compatibility fixture, discovery artifacts must
+    # not embed the actual invocation value as an example.
+    valid_artifact_data["inputs"]["properties"]["member_id"].pop("example", None)
+    return valid_artifact_data
+
+
 @dataclass
 class QueueModelProvider:
     proposals: list[DiscoveryProposal]

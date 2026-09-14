@@ -770,6 +770,7 @@ def build_runtime(settings: object) -> LocalRuntime:
             clock,
             policy_resolver=discovery_policy,
             contract_planner=run_provider.plan,
+            privacy_redactor=journal.redactor,
             capability_id_resolver=lambda family, operation: (
                 f"{application_registry.get(family).capability_namespace}.{operation}"
             ),
@@ -784,7 +785,11 @@ def build_runtime(settings: object) -> LocalRuntime:
             classifications = result_classifications[result.run_id]
         if isinstance(result, DiscoverySuccess):
             payload: dict[str, object] = {
-                "artifact": result.artifact.model_dump(mode="json"),
+                "capability": {
+                    "id": result.artifact.capability.id,
+                    "version": result.artifact.capability.version,
+                },
+                "artifact_content_hash": result.artifact.provenance.artifact_content_hash,
                 "evidence_manifest": result.evidence_manifest,
                 "run_id": result.run_id,
                 "status": result.status,
