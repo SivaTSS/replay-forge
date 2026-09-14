@@ -8,6 +8,11 @@ applications:
     base_variant: standard
     tenants: [harbor, summit]
     entry_points:
+      legacy_servicing:
+        path_template: /{tenant}/servicing
+        rendered_surface: true
+        required_landmarks:
+          - {kind: visual_text, value: Branch member directory}
       member_search:
         path_template: /{tenant}
         readiness_frame_title: Member operations
@@ -30,6 +35,7 @@ applications:
       /visual-workbench: /members/search
     policy:
       allowed_route_patterns:
+        - /servicing
         - /members/search
         - /accounts/:account_id/details
       allowed_action_types:

@@ -28,5 +28,6 @@ uv run mypy \
   scripts/capture_recovery_run.py
 uv run python scripts/verify_evidence_bundles.py evidence
 npx --yes pnpm@10.15.1 typecheck
+npx --yes pnpm@10.15.1 --filter @replayforge/demo-bank test
 npx --yes pnpm@10.15.1 build
 uv run pytest --cov=replayforge --cov-report=term-missing -q

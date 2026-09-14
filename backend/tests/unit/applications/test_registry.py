@@ -17,6 +17,21 @@ def test_checked_in_catalog_resolves_symbolic_target() -> None:
     assert launch.entry_points["member_search"].endswith("/summit")
 
 
+def test_servicing_workstation_is_a_separate_rendered_entry_point() -> None:
+    registry = load_application_registry(Path("config/applications.yaml"))
+    launch = registry.resolve("northstar_member_service", "harbor", "legacy_servicing")
+    assert launch.url == "http://127.0.0.1:3001/harbor/servicing"
+    assert launch.rendered_surface is True
+    registration = registry.get("northstar_member_service")
+    assert "/servicing" in registration.policy.allowed_route_patterns
+    assert registration.entry_points["legacy_servicing"].required_landmarks[0].value == (
+        "Branch member directory"
+    )
+    assert registration.entry_points["visual_member_workbench"].path_template == (
+        "/{tenant}/visual-workbench"
+    )
+
+
 def test_registration_reads_do_not_expose_mutable_registry_state() -> None:
     registry = load_application_registry(Path("config/applications.yaml"))
     registry.all()[0].entry_points.clear()
