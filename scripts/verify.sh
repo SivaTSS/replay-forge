@@ -8,7 +8,7 @@ export UV_CACHE_DIR PLAYWRIGHT_BROWSERS_PATH npm_config_cache
 
 uv sync --extra dev --frozen
 uv run python scripts/check_docs.py
-uv run python -m unittest discover -s scripts -p 'test_check_docs.py'
+uv run python -m unittest discover -s scripts -p 'test_*.py'
 uv run playwright install chromium
 npx --yes pnpm@10.15.1 install --frozen-lockfile
 uv run ruff format --check backend scripts pyproject.toml
@@ -21,8 +21,10 @@ uv run mypy \
   scripts/verify_evidence.py \
   scripts/export_evidence.py \
   scripts/verify_evidence_bundles.py \
-  scripts/capture_demo_workflows.py
-uv run python scripts/verify_evidence_bundles.py evidence
+  scripts/capture_demo_workflows.py \
+  scripts/capture_replay_evidence.py \
+  scripts/test_submission_evidence.py
+uv run python scripts/verify_evidence_bundles.py evidence --require-submission
 npx --yes pnpm@10.15.1 typecheck
 npx --yes pnpm@10.15.1 --filter @replayforge/demo-bank test
 npx --yes pnpm@10.15.1 build

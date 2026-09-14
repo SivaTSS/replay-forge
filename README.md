@@ -167,7 +167,7 @@ uv run pytest backend/tests/integration/test_visual_portability.py -q
 Verify only the committed evidence:
 
 ```bash
-UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bundles.py evidence
+UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/verify_evidence_bundles.py evidence --require-submission
 ```
 
 ## Repository map

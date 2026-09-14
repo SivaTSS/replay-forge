@@ -24,7 +24,7 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 | Explicit allowlist | Implemented | Origin/route/action/risk policy intersections | Policy decision tests |
 | Conservative risk | Evidenced | Sensitive pauses; irreversible denies | Policy and real-session browser tests |
 | No sensitive persistence | Hardened for synthetic demo; bounded | Restricted journal/terminal fields, keyed pseudonyms, artifact leak guard, full-frame masks, image capture disabled by default | Tested boundaries, not a universal PII detector; see [data policy](safety-and-handoff.md#data-exposure-boundaries) |
-| Structured evidence | Evidenced | Ordered events, result, hashes, manifest | Three genuine discovery bundles |
+| Structured evidence | Evidenced | Ordered events, result, hashes, manifest | Three genuine discoveries plus successful and failed model-free replay bundles |
 | Detect and route intervention | Implemented | Replay and blocked discovery route to the same operator surface | Discovery correction is not a post-publication approval stage |
 | Same-session control | Implemented, Tested | Retained context and worker; bounded human input | Live browser tests with explicit policy fixtures |
 | Explicit ownership | Implemented, Tested | TTL lease, owner, version, CAS | Conflict/race tests |

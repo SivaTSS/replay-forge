@@ -39,6 +39,7 @@ uv run python scripts/check_docs.py
 | Single deployed UI | [Route tests](../backend/tests/integration/test_demo_routes.py) | Old paths return 404 |
 | Bank correctness | [Workstation tests](../backend/tests/integration/test_servicing_workstation.py), [interaction tests](../backend/tests/integration/test_servicing_interactions.py), target unit tests | Scripted application tests, not discovery |
 | Same-session handoff | [Session test](../backend/tests/integration/test_playwright_surface.py), [console test](../backend/tests/integration/test_operator_console.py) | Sensitive policy injected into a temporary copy of the genuine payoff artifact |
+| Blocked discovery handoff | [Discovery console test](../backend/tests/integration/test_discovery_handoff.py), [continuation tests](../backend/tests/unit/discovery/test_continuation.py) | Explicit blocking provider; real browser control, same-session resume, re-pause, termination and shutdown; not genuine discovery evidence |
 | Live replay/history | [Console test](../backend/tests/integration/test_operator_console.py), [managed replay matrix](../backend/tests/integration/test_visual_portability.py) | Actual PNGs before completion; history remains read-only across resume; refresh reconnects without another run |
 | Viewer isolation | [Viewer unit tests](../backend/tests/unit/runs/test_viewing.py), [HTTP tests](../backend/tests/unit/api/test_viewing_api.py) | Token authorization, bounded frame/event retention, expiry, no-cache responses |
 | Error semantics | [Replay engine tests](../backend/tests/unit/replay/test_engine.py) | Declared outcomes, recoveries, ambiguous targets, safe retries, and failures |
@@ -55,6 +56,10 @@ a member-not-found outcome, a permission-denied detector, or an application reco
 states fail closed; richer branches require genuine scenario discovery and validation. Engine
 test coverage must not be confused with those branches having been discovered for this UI.
 
+The submission gate also requires independently exported successful and failed model-free replay
+logs; merely finding valid discovery manifests is insufficient. The failure must include a richer
+attachment. An empty evidence directory fails verification.
+
 ## Scenario matrix
 
 | Genuine discovery bundle | Published capability | Proof |
@@ -63,12 +68,19 @@ test coverage must not be confused with those branches having been discovered fo
 | [Loan payoff](../evidence/discovery-servicing-loan-payoff/manifest.json) | `member.servicing_loan_payoff_quote/1.0.1` | Issued quote and receipt; returned date matches requested date; Harbor/Summit validation |
 | [Temporary card lock](../evidence/discovery-servicing-card-lock/manifest.json) | `member.temporary_card_lock/1.0.1` | Reversible mutation, fresh pre/post card identity checks, exact final locked status, receipt; Harbor/Summit validation |
 
+| Model-free replay bundle | Result | Proof boundary |
+|---|---|---|
+| [Payoff success](../evidence/replay-servicing-payoff/manifest.json) | Verified success | Changed member and date; exact outputs checked before redacted export; no provider credentials |
+| [Missing record](../evidence/replay-servicing-missing-record/manifest.json) | `failure`, `target_absent` | Actual failed replay with masked screenshot; not a declared `business_outcome` |
+
 Each manifest records the actual run ID, recording commit, command, artifact identity, and hashes.
 Its primary result may identify the pre-publication draft: finalization adds validated tenants and
 allocates the immutable published version. That expected difference is not a forged result.
 
-Failed or paused attempts stay in private runtime audit storage. They are not relabeled as success,
-and no manual UI action is substituted for model discovery.
+Other failed or paused attempts stay in private runtime audit storage. They are not relabeled as
+success, and no manual UI action is substituted for model discovery. The replay bundles were
+captured from commit `a462cdf`; [reproduction instructions](../evidence/README.md) run the actual
+saved capability with synthetic input data, not a scripted navigation substitute.
 
 ## Evidence bundle anatomy
 

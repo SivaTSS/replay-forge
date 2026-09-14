@@ -29,11 +29,11 @@ Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo comma
 | `POST` | `/api/v1/capabilities/validate` | Parses, validates, and hashes supplied YAML |
 | `POST` | `/api/v1/capabilities/{id}/replays` | Runs replay synchronously; `202` only if paused |
 | `POST` | `/api/v1/capabilities/{id}/invoke` | Alias of the replay endpoint |
-| `GET` | `/api/v1/interventions?run_mode=replay` | Lists active replay interventions oldest first |
+| `GET` | `/api/v1/interventions` | Lists active interventions oldest first; optional `run_mode=replay` or `discovery` filter |
 | `GET` | `/api/v1/interventions/{id}` | Reads intervention and current lease |
 | `POST` | `/api/v1/interventions/{id}/claim` | Transfers paused ownership to one operator |
 | `POST` | `/api/v1/interventions/{id}/release` | Returns human ownership to paused state |
-| `POST` | `/api/v1/interventions/{id}/resume` | Revalidates fresh state and continues replay |
+| `POST` | `/api/v1/interventions/{id}/resume` | Revalidates fresh state and continues the retained replay or discovery |
 | `GET` | `/api/v1/interventions/{id}/viewport` | Returns non-cacheable PNG and sequence headers |
 | `POST` | `/api/v1/interventions/{id}/heartbeat` | Renews ownership and increments lease version |
 | `POST` | `/api/v1/interventions/{id}/input` | Applies one frame-bound click, text, or key action |
@@ -137,6 +137,11 @@ fixtures. `--output-directory` changes the private export root.
 | Expired human lease | `409 control_lease_expired` |
 | Stale frame/client input | `409 human_input_conflict` |
 | Valid replay failure | HTTP `200` with typed `failure` result |
-| Automation paused | HTTP `202` with `intervention_required` |
+| Replay invocation paused | HTTP `202` with `intervention_required` |
+| Direct discovery paused | Original synchronous request waits; operator inbox exposes the blockage |
+
+For discovery that may need human help, prefer the execution launcher: its `202` response gives
+an execution identity immediately. Direct capture requests have client timeouts; a timed-out client
+does not cancel a retained discovery session. Inspect the operator inbox before retrying.
 
 The distinction is deliberate: HTTP describes whether the runtime processed the request; the discriminated result describes the business/automation outcome.
