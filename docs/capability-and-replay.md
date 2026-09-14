@@ -1,16 +1,17 @@
 # Capability and deterministic replay
 
+[Documentation index](README.md)
+
 ## The artifact is the production program
 
 Discovery is temporary. The YAML artifact is the durable contract interpreted in production.
 
 ```text
-raw model exchange       recorded successful trace       published capability
-     discarded        ───────── compiler ─────────►   typed, hashed, reviewable
+verified trace → generic compiler → validated capability → immutable publication
 ```
 
-An artifact contains no Python, JavaScript, selector callback, model transcript, or persisted click
-coordinate. The task-independent discovery examples are
+An artifact contains no Python, JavaScript, selector callback, or model transcript. New schema `1.4`
+targets also reject persisted coordinates and relative geometry. The task-independent discovery examples are
 [`member.transaction_investigation`](../capabilities/member.transaction_investigation/1.0.0.yaml),
 [`member.loan_payoff_quote`](../capabilities/member.loan_payoff_quote/1.0.0.yaml), and
 [`member.temporary_card_lock`](../capabilities/member.temporary_card_lock/1.0.0.yaml). The last,
@@ -31,7 +32,7 @@ under `capabilities/_assets/`; evidence remains a separate audit record, not the
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
-    A[(Capability identity + semantic version)]
+    A[(Versioned capability)]
 
     A --> C0[Interface contract]
     C0 --> C[Compatibility]
@@ -49,7 +50,7 @@ flowchart LR
     G0 --> V[Provenance + SHA-256]
 ```
 
-For `member.lookup_savings_balance`, the external contract is:
+For `member.lookup_savings_balance/3.2.0`, the external contract is:
 
 ```text
 input  member_id: 5–10 digits
@@ -59,13 +60,22 @@ result success | business_outcome | failure | intervention_required
 
 Every required output must be bound by a main-flow extraction and checked by the final checkpoint. Artifact validation rejects a missing binding or check before a browser opens.
 
-The generic compiler has also produced these unrelated shapes without task-specific code:
+The generic compiler has also produced three related banking tasks with distinct contracts,
+without task-specific code:
 
 | Capability | Inputs | Outputs | Steps | Risk |
 |---|---|---|---:|---|
 | `member.transaction_investigation` | member, merchant, date, amount | reference, merchant, posted date, amount, currency, status | 15 | read-only |
 | `member.loan_payoff_quote` | member, payoff date | principal, interest, payoff amount, currency, good-through date | 11 | read-only |
 | `member.temporary_card_lock` | member, card suffix | card suffix, lock status, effective time, confirmation reference | 12 | reversible |
+
+Input references support dotted object paths for typing, selection, identity checks, and
+business-outcome details. Decimal strings must represent finite values. Missing or invalid inputs
+report declared paths and stable codes; unknown caller-supplied keys are never echoed.
+
+Schema `1.4` carries the compiled route allowlist and registered rendered-surface flag.
+Only observed routes, narrowed to application patterns, enter the artifact; replay intersects
+them again with application policy.
 
 ## Targeting
 
@@ -111,7 +121,7 @@ and recovery use are all schema-bounded; see [Constraints and policy](constraint
 
 ### Targeting decision
 
-| Option | Outcome | Reason |
+| Option | Decision | Reason |
 |---|---|---|
 | Persisted coordinates | Rejected | Not stable across viewport and layout changes |
 | OCR text | **Chosen for named actions and conditions** | Human-readable identity on rendered pixels |
@@ -122,9 +132,12 @@ and recovery use are all schema-bounded; see [Constraints and policy](constraint
 | Role/label + iframe scope | Optional fallback | Precise when a trustworthy semantic surface exists |
 | Generated CSS selector | Supported but not primary | Often encodes incidental markup |
 
-Coordinates exist only as ephemeral browser input dispatch values. Discovery may observe a transient icon region to create a signature, but the compiler publishes only rendered candidates; schema `1.4` rejects persisted coordinates, and rendered-only registrations reject legacy DOM targets recursively. Schemas `1.0`–`1.3` remain loadable for immutable fixtures.
+For new capabilities, coordinates exist only during frame-local grounding and input dispatch.
+Discovery may observe a transient icon region to create a signature, but the compiler publishes
+only rendered candidates. Schema `1.4` rejects persisted geometry; rendered-only registrations
+also reject legacy DOM targets recursively.
 
-### Contextual image anchors
+### Current-frame visual signatures
 
 Repeated-row interfaces need more than a global icon match. Version `3.2.0` first resolves the rendered `Savings` label with OCR, identifies same-group components in the current frame, then compares each component with the hashed signature. Three identical account icons therefore remain safe: a global match is ambiguous, while the semantic group plus signature has one permitted match. The resulting click region is transient and tied to the current frame hash.
 
@@ -136,58 +149,53 @@ Repeated-row interfaces need more than a global icon match. Version `3.2.0` firs
 | OCR anchor + saved relative template region | Rejected | Relative geometry still leaks recording-time layout |
 | OCR group label + current-frame component graph | **Chosen** | Binds the icon to the named business row without persisted geometry |
 
-Template matching extracts a bounded set of spatial peaks per scale and merges detections referring to the same physical icon. A close second match returns `target_ambiguous`; no first-match shortcut is used.
+The [vision policy](../config/vision-policy.yaml) owns the canonical signature size, similarity
+floor, uniqueness margin, and pixel/time budgets. DPR variation is handled by CSS-pixel screenshots
+and canonical normalization—not by storing a scale range in the artifact.
 
-The reviewed vision policy keeps a `0.72` normalized-signature floor, a `0.08` uniqueness margin, a `64×64` canonical canvas, and bounded pixel/time budgets. DPR variation is handled by CSS-pixel screenshots and canonical normalization—not by storing a scale range in the artifact.
+### Legacy compatibility
+
+Immutable schema `1.0`–`1.3` fixtures remain loadable. Savings versions `3.0.0` and `3.1.0`
+retain recorded relative regions and image-anchor strategies; they are not the current compiler's
+output. Legacy template matching extracts bounded spatial peaks per scale and merges detections
+of the same physical icon. A close second match returns `target_ambiguous`; it never chooses the
+first match. [Registration compatibility](heterogeneity-and-compatibility.md#what-is-enforced)
+defines which legacy semantics are accepted.
 
 ## Replay pipeline
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart TB
-    subgraph Admission[1 · Admission]
-        direction LR
-        Q([Invocation]) --> IV{Input valid?}
-        IV -- no --> IF([invalid_input])
-        IV -- yes --> TV{Tenant supported?}
-        TV -- no --> TF([incompatible_tenant])
-        TV -- yes --> B[Open isolated browser + automation lease]
-    end
-
-    subgraph Step[2 · Execute one declared step]
-        direction LR
-        PC[Verify preconditions] --> ST[Resolve target]
-        ST --> PO{Policy decision}
-        PO -- deny --> PF([policy_blocked])
-        PO -- human --> H([intervention_required])
-        PO -- allow --> AI[Record intent, execute, record result]
-    end
-
-    subgraph State[3 · Classify observed state]
-        direction LR
-        EX{Declared state?}
-        EX -- business --> BO([business_outcome])
-        EX -- failure --> HF([typed failure])
-        EX -- recovery --> RC[Bounded recovery]
-        EX -- expected effect --> NX{More steps?}
-    end
-
-    subgraph Verify[4 · Verify completion]
-        direction LR
-        CK{Checkpoint + outputs valid?}
-        CK -- no --> VF([verification failure])
-        CK -- yes --> OK([success + outputs])
-    end
-
-    B --> PC
-    AI --> EX
-    RC -->|declared resume step| ST
-    NX -- yes --> ST
-    NX -- no --> CK
-
+    Q([Invocation]) --> A[Validate inputs and compatibility]
+    A --> B[Open session and check readiness]
+    B --> S[Execute declared step]
+    S --> N{Step result}
+    N -->|verified; more steps| S
+    N -->|recoverable| R[Bounded recovery]
+    R -->|declared resume step| S
+    N -->|last step verified| C[Check outputs and checkpoint]
+    C --> OK([success])
+    N -->|business result| BO([business_outcome])
+    N -. pause .-> H([intervention_required])
+    A -. invalid .-> F([failure])
+    B -. incompatible .-> F
+    N -. failed .-> F
+    C -. invalid .-> F
 ```
 
 The engine validates inputs before opening Chromium, checks ownership before each action, and records action intent separately from result. A click dispatch is not success; postconditions and the final checkpoint must be observable.
+
+The step box includes preconditions, target resolution, policy evaluation, intent/result recording,
+and effect verification. Declared outcomes, failures, and recoveries are checked around actions
+and waits; the diagram summarizes branching, not every observation. Recovery failure terminates
+with a typed failure too.
+
+The interpreter owns condition actions: `assert` evaluates immediately, `wait_for` polls within
+the step timeout, and `checkpoint` evaluates the named final condition. A false condition stops
+the step or enters its declared recovery; it cannot become a successful no-op. Action conditions
+receive the same cross-reference validation as preconditions and postconditions. An ambiguous or
+broken target lookup is not proof that an element is absent.
 
 ## Error semantics
 
@@ -200,9 +208,11 @@ The engine validates inputs before opening Chromium, checks ownership before eac
 | Verification failure | Action ran but evidence does not prove the effect | Wrong member on detail page | `failure/checkpoint_mismatch` |
 | Safety pause | Action needs a person | Sensitive search submit in `2.0.0` | `intervention_required` |
 
-Retry occurs only when the artifact names the error, attempts remain, and the prior effect is known absent when required. Recoveries are named, capped at three uses by schema, cannot invoke nested recoveries, and cannot contain sensitive actions.
+Retry requires a named recoverable error, remaining attempts, and proof that the prior effect is
+absent. Recoveries are named and bounded, cannot invoke nested recoveries, and cannot contain
+sensitive actions. Exact limits are in [Constraints and policy](constraints-and-policy.md#execution-bounds).
 
-## Committed versions
+## Savings-balance fixture versions
 
 | Version | Purpose | Additional behavior |
 |---|---|---|
@@ -214,11 +224,13 @@ Retry occurs only when the artifact names the error, attempts remain, and the pr
 | `3.1.0` | Prior visual portability fixture | Richer repeated-row canvas with contextual relative template |
 | `3.2.0` | Geometry-free responsive replay | Semantic candidates, frame-local graph, canonical signature, six viewport/DPR cases, delayed response, recovery, and declared visual failures |
 
-No version means “latest,” currently `3.2.0`. Use `2.0.0` explicitly for human handoff and `3.0.0` for the original visual-terminal fixture.
+Omitting `version` resolves the latest publication for the requested capability ID. For the
+committed savings-balance fixtures, that is `3.2.0`; other task capabilities currently have `1.0.0`.
+Use savings `2.0.0` explicitly for handoff and `3.0.0` for the original visual-terminal fixture.
 
 ## Schema and version decisions
 
-| Decision | Alternatives | Why chosen |
+| Choice | Alternatives | Reason |
 |---|---|---|
 | YAML authoring + Pydantic validation | JSON only, executable scripts | YAML reviews well; strict models prevent free-form execution |
 | Symbolic input references | Record discovery values | One artifact can accept new member IDs without retaining the original value |
@@ -226,17 +238,3 @@ No version means “latest,” currently `3.2.0`. Use `2.0.0` explicitly for hum
 | SHA-256 over canonical serialization | Filename/version trust | Detects content changes independently of storage |
 | Explicit outcomes and checkpoints | Infer success from last click | Forces callers and reviewers to see what was actually proven |
 | Generic trace compiler + model draft | Direct model-authored artifact | The model proposes task semantics, but only observed, policy-approved actions become a durable artifact |
-
-Schema `1.4` carries the compiled capability route allowlist and the registered rendered-surface
-flag. The compiler records only routes observed during discovery, narrowed to application
-patterns; replay intersects them again with the application policy.
-
-The interpreter owns condition actions: `assert` evaluates immediately, `wait_for` polls within
-the step timeout, and `checkpoint` evaluates the named final condition. A false condition stops
-the step or enters its declared recovery; it cannot become a successful no-op. Conditions inside
-actions receive the same cross-reference validation as preconditions and postconditions.
-
-Input references support dotted object paths, including typing, selection, identity checks, and
-business-outcome details. Decimal strings must represent finite values. Missing inputs and invalid
-values report declared paths and stable codes; unknown caller-supplied keys are never echoed.
-An ambiguous or broken target lookup is not proof that an element is absent.

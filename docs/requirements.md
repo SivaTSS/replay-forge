@@ -1,5 +1,7 @@
 # Assignment requirements
 
+[Documentation index](README.md)
+
 This matrix distinguishes implementation from design. It does not credit planned behavior as complete.
 
 | Requirement | Status | Concrete implementation | Proof / limit |
@@ -7,7 +9,7 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Goal + target input | Implemented | `DiscoveryInvocation` accepts goal, family, tenant, entry point, inputs, limits | Target is registered, not an arbitrary URL |
 | Live LLM loop | Evidenced | `DiscoveryEngine` + `OpenAIModelProvider` | `evidence/discovery-success` |
 | Real UI actions | Evidenced | Chromium mouse/keyboard on iframe and canvas surfaces | Local synthetic target |
-| Bias beyond clean DOM | Implemented, tested | Local OCR, frame-local layout graph, canonical visual signatures | Canonical flow has no DOM targets |
+| Bias beyond clean DOM | Implemented, Tested | Local OCR, frame-local layout graph, canonical visual signatures | Canonical flow has no DOM targets |
 | Typed reusable artifact | Evidenced | Strict Pydantic aggregate serialized as YAML | Legacy fixtures plus independently discovered task artifacts |
 | Robust control identity | Implemented | Rendered text, label relations, frame-local components, canonical signature, uniqueness gate | Fails closed on absent or ambiguous matches |
 | Typed inputs/outputs | Implemented | Closed object contracts and runtime validation | Distinct contracts for balance, transaction, payoff, and card tasks |
@@ -25,10 +27,10 @@ This matrix distinguishes implementation from design. It does not credit planned
 | Explicit ownership | Evidenced | TTL lease, owner, version, CAS | Conflict/race tests |
 | Safe resume | Evidenced for replay | Fresh location, postcondition, and changed-fingerprint checks | Discovery continuation is cut |
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
-| Canvas visual control | Implemented, tested | One canvas-only workbench exposes three substantial tasks using geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
+| Canvas visual control | Implemented, Tested | One canvas-only workbench exposes three substantial tasks using geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
 | Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
 | Multi-tenant reuse | Evidenced | `3.2.0` uses one artifact across Harbor and Summit with reordered rows | Visual/DPR matrix and discovered-task tenant validation |
-| Per-tenant/version drift | Implemented checks; extension designed | Pre-launch registration contract and live entry landmarks; per-step verification | No vendor-release detector or overlay repository; [design](heterogeneity-and-compatibility.md) |
+| Per-tenant/version drift | Implemented checks; extension Designed | Pre-launch registration contract and live entry landmarks; per-step verification | No vendor-release detector or overlay repository; [design](heterogeneity-and-compatibility.md) |
 | Human operator surface | Implemented | Next.js intervention console | No run list, auth, or WebSocket |
 | Agent-facing invocation | Implemented | `/invoke` with typed arguments and discriminated result | Capability catalog endpoint is not implemented |
 
@@ -67,6 +69,6 @@ goal
 - Registration and semantic landmark compatibility are enforced. Observation hashes remain
   provenance; they are not literal pixel-equality drift gates.
 - Published capabilities and evidence survive restart; operational run and handoff state does not.
-- The control plane is not a complete product UI.
+- The operator console is not a complete product UI.
 - The API is synchronous and has no WebSocket endpoint.
 - Authentication, authorization, retention enforcement, PostgreSQL, object storage, and distributed workers are not implemented.

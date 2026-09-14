@@ -1,5 +1,7 @@
 # Constraints and policy
 
+[Documentation index](README.md)
+
 ReplayForge uses layered bounds. The caller may choose a value only inside the domain envelope;
 reviewed configuration limits model and vision work; capability artifacts bound individual replay
 steps; policy can only remove authority.
@@ -88,7 +90,7 @@ run one application at a time for the same resource-predictability reason.
 
 ## Decisions
 
-| Option | Decision | Why |
+| Option | Decision | Reason |
 |---|---|---|
 | One timeout for every operation | Rejected | Provider, browser step, discovery run, and lease expiry address different failures |
 | Environment variables for every number | Rejected | Safety and cost ceilings must remain reviewed, versioned inputs |

@@ -1,5 +1,7 @@
 # Architecture
 
+[Documentation index](README.md)
+
 ## System shape
 
 ReplayForge is a modular monolith with two separate Next.js applications: one is the synthetic target, the other is the operator console.
@@ -7,61 +9,27 @@ ReplayForge is a modular monolith with two separate Next.js applications: one is
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
-    subgraph Clients[Clients]
-        direction TB
-        C([Calling agent or curl])
-        O([Human operator])
-    end
-
-    subgraph Runtime[ReplayForge runtime · one Python process]
-        direction TB
-        API[FastAPI adapter]
-        API --> RS[Replay application service]
-        API --> DS[Discovery application service]
-        API --> SS[Discovery suite service]
-        API --> IS[Intervention service]
-        RS --> RE[Replay engine]
-        DS --> DE[Discovery engine]
-        SS --> DS
-        DE --> MP[ModelProvider port]
-        RE --> SP[Surface ports]
-        DE --> SP
-        RE --> PE[Policy evaluator]
-        DE --> PE
-        RE --> EJ[Run journal]
-        DE --> EJ
-    end
-
-    subgraph Adapters[Adapters and local dependencies]
-        direction TB
-        OA[OpenAI adapter]
-        PW[Playwright adapter]
-        DB[Demo bank]
-        FS[(Local evidence store)]
-        AR[(Application registry YAML)]
-        LF[Local Langfuse]
-    end
-
-    C -->|JSON / HTTP| API
-    O -->|Next.js proxy / HTTP| API
-    MP --> OA
-    SP --> PW
-    PW --> DB
-    EJ --> FS
-    API --> AR
-    PW --> AR
-    OA --> LF
-
+    C([Calling agent]) -->|HTTP| R[FastAPI runtime]
+    O([Human operator]) --> UI[Operator console]
+    UI -->|HTTP proxy| R
+    R -->|discovery only| M[OpenAI adapter]
+    M --> LF[Local Langfuse metrics]
+    R --> P[Playwright adapter]
+    P --> B[Synthetic bank UI]
+    R --> F[(Capabilities and evidence)]
+    A[(Application registration)] --> R
 ```
 
 ### Deployable units
 
-| Unit | Port | Responsibility | Does not do |
-|---|---:|---|---|
-| FastAPI runtime | `8000` | Discovery, replay, policy, sessions, evidence, intervention | Render the target or operator UI |
-| Control plane | `3000` | Claim and operate a paused live session | Browse runs or edit capabilities |
-| Demo bank | `3001` | Synthetic two-tenant target and controlled faults | Expose a task-completion API |
-| Langfuse stack | `3100` | Local model-call metrics for discovery | Participate in replay |
+| Unit | Responsibility | Does not do |
+|---|---|---|
+| FastAPI runtime | Discovery, replay, policy, sessions, evidence, intervention | Render the target or operator UI |
+| Operator console | Claim and operate a paused live session | Browse runs or edit capabilities |
+| Demo bank | Synthetic two-tenant target and controlled faults | Expose a task-completion API |
+| Langfuse stack | Local model-call metrics for discovery | Participate in replay |
+
+Local addresses and configuration are in [Operations](operations.md#local-topology).
 
 PostgreSQL is not part of the implemented runtime. Published capabilities and content-addressed visual assets are immutable local files; sanitized evidence is also written to disk. Lease, intervention, journal, and discovery-suite state remains in process memory. The application catalog is checked-in YAML so onboarding is reviewable.
 
@@ -118,7 +86,7 @@ and replacing Playwright does not require changing the replay state machine.
 | `providers` | OpenAI translation plus its reviewed model/cost policy | [`providers/openai.py`](../backend/src/replayforge/providers/openai.py) |
 | `observability` | Bounded model-call metrics | [`observability/model_calls.py`](../backend/src/replayforge/observability/model_calls.py) |
 | `runtime` | Settings, dependency wiring, worker/session retention | [`runtime/composition.py`](../backend/src/replayforge/runtime/composition.py) |
-| `shared` | Stable IDs and clocks only | [`shared/ids.py`](../backend/src/replayforge/shared/ids.py) |
+| `shared` | Stable IDs, clocks, and unambiguous YAML parsing | [`shared`](../backend/src/replayforge/shared) |
 
 See [Data models](data-models.md) for the objects passed across these boundaries.
 
@@ -126,6 +94,10 @@ The capability schema is the intentional shared execution language: discovery pr
 interprets it, and a surface adapter executes its typed actions and conditions. Application
 identity is not part of the Playwright adapter. Every driver receives an `ApplicationRegistry`;
 there is no hardcoded demo-bank fallback.
+
+The production discovery compiler is task-independent. The historical savings compiler lives only
+in [`backend/tests/legacy_compiler.py`](../backend/tests/legacy_compiler.py) to reproduce old fixtures;
+runtime composition cannot import it.
 
 | Failure owner | Boundary behavior |
 |---|---|
@@ -167,11 +139,15 @@ sequenceDiagram
 
 Playwright's synchronous objects are thread-affine. `SerialSessionWorker` therefore gives each run one bounded queue and one owner thread. API requests for viewport capture or human input are marshalled back to that thread.
 
+Native computation and shared OCR inference are bounded to avoid multiplying machine-wide thread
+pools per run. Frontend builds are sequential. [Constraints and policy](constraints-and-policy.md#storage-and-payload-bounds)
+records the limits and rationale; this design does not claim fleet throughput.
+
 ## Surface reality
 
 The production path is rendered-surface first. Playwright is still the browser transport, but the canonical capability uses it only for CSS-pixel screenshots and input dispatch; it never asks Playwright for a target element.
 
-| Option considered | Decision | Reason |
+| Option | Decision | Reason |
 |---|---|---|
 | Persisted coordinates or relative ROIs | Rejected | Reflow and responsive breakpoints invalidate recorded geometry |
 | Raw CSS/XPath recording | Rejected as primary | Couples artifacts to markup shape and generated identifiers |
@@ -187,12 +163,12 @@ lock. Harbor and Summit vary palette, typography, placement, row order, and layo
 task-independent engine plans each contract, records only actions that actually execute and verify,
 then compiles a distinct artifact. Geometry-free OCR relationships disambiguate repeated `Open`
 actions by the current account-row text; label/control and label/value relationships survive stacked
-and horizontal layouts. No artifact target stores coordinates or target-specific geometry; schema
+and horizontal layouts. New artifact targets store no coordinates or target-specific geometry; schema
 `1.4` rejects them recursively while legacy fixtures remain loadable.
 
 ## Decisions
 
-| Stage | Alternatives | Chosen | Why |
+| Decision | Alternatives | Choice | Reason |
 |---|---|---|---|
 | Process topology | Microservices, queued workers, monolith | Modular monolith | Preserves explicit boundaries without adding deployment failure modes |
 | Browser concurrency | Shared browser thread, async Playwright, worker per run | Worker per run | Keeps the synchronous Playwright session on one thread, including handoff |
@@ -203,7 +179,7 @@ and horizontal layouts. No artifact target stores coordinates or target-specific
 | DPR handling | Rescale stored pixels, screenshot in device pixels, CSS-pixel capture | CSS-pixel capture + explicit context DPR | Mouse coordinates and screenshot regions remain in one coordinate space |
 | Live control | WebSocket stream, headed browser, polling | Versioned HTTP polling/input | Minimal real same-session control with stale-command protection |
 
-## Honest extension path
+## Surface extension
 
 ```text
 Capability semantics stay stable
@@ -216,13 +192,5 @@ Capability semantics stay stable
 
 A new transport must define observation normalization, input dispatch, screenshots, and condition evaluation. The visual grounding layer is transport-independent over PNG frames and viewport dimensions; a native desktop adapter can reuse it, but no native transport is claimed here.
 
-The production discovery compiler is task-independent. The historical savings compiler lives only
-in `backend/tests/legacy_compiler.py` to reproduce old fixtures; runtime composition cannot import it.
 Application compatibility and the vendor-version extension are described in
 [Heterogeneity and compatibility](heterogeneity-and-compatibility.md).
-
-OpenCV and ONNX use one native computation thread each: concurrency already exists at the run
-worker boundary, and machine-wide default pools can exhaust grounding deadlines through
-oversubscription. Shared RapidOCR initialization/inference is serialized because the library mutates
-call parameters. This favors predictable local resource use; it does not claim fleet throughput.
-Frontend builds run sequentially to avoid two compiler workloads competing for memory.

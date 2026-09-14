@@ -6,19 +6,17 @@ ReplayForge turns one model-guided UI run into a typed capability, then replays 
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
     G([Goal + typed input]) --> D[Guided discovery]
-    D --> A[(Reviewed YAML artifact)]
+    D --> A[(Published capability)]
     A --> R[Deterministic replay]
     R --> X{Result}
     X --> S([Success + outputs])
     X --> B([Business outcome])
-    X --> F([Failure + evidence])
-    X --> H([Human intervention])
+    X -. failure .-> F([Failure + evidence])
+    X -. pause .-> H([Human intervention])
 ```
 
-Every diagram uses the same grammar: rectangles are work, cylinders are stored
-artifacts, diamonds are decisions, rounded nodes are boundaries or outcomes, and
-dashed arrows are exceptional transfers. Node colors come from the Markdown
-renderer; connectors use one neutral, high-contrast gray in light and dark modes.
+Discovery suites validate and publish automatically; there is no human approval stage.
+Human intervention belongs to a paused live run.
 
 ## Read by question
 
@@ -35,7 +33,23 @@ renderer; connectors use one neutral, high-contrast gray in light and dark modes
 | What do the tests and committed evidence prove? | [Verification](verification.md) |
 | How does the implementation map to the assignment? | [Requirements](requirements.md) |
 
-The concise assignment write-up is [REPORT.md](../REPORT.md). Setup and the shortest reviewer path are in the root [README.md](../README.md).
+Start with the root [quickstart](../README.md), then read Architecture → Data models →
+Capability and replay. [REPORT.md](../REPORT.md) is the required seven-part design summary.
+
+## Shared terminology
+
+| Term | Meaning |
+|---|---|
+| Application registration | Configuration for an application's origin, tenants, entry points, readiness, and policy ceiling |
+| Discovery suite | A task draft, observed scenarios, deterministic validation, and automatic publication |
+| Capability artifact | The immutable, versioned execution contract; not its evidence bundle |
+| Run | One discovery or replay invocation |
+| Operator console | The intervention UI in `apps/control-plane`; not a general operations dashboard |
+| Evidence bundle | Sanitized records proving a particular execution; not input to replay |
+
+“Reviewed configuration” means checked-in application or budget policy, not approval of
+each discovery result. New task artifacts use schema `1.4`; older immutable fixtures retain
+their documented legacy semantics.
 
 ## Status vocabulary
 
@@ -44,6 +58,7 @@ Every page uses these labels consistently:
 | Label | Meaning |
 |---|---|
 | **Implemented** | Executable code is present in this repository. |
+| **Tested** | Automated checks exercise it; this alone does not claim a genuine model run. |
 | **Evidenced** | A committed, hash-verified run bundle demonstrates it. |
 | **Designed** | A typed seam exists or the extension is explained, but the behavior is not built. |
 | **Cut** | Intentionally outside this submission. |
@@ -52,12 +67,31 @@ Every page uses these labels consistently:
 
 | Area | Status | Boundary |
 |---|---|---|
-| Browser discovery | Implemented, evidenced | OpenAI + screenshots + local OCR; DOM facts optional |
-| Browser replay | Implemented, evidenced | Rendered semantic candidates first, optional DOM locators second; no model dependency |
-| Same-session handoff | Implemented, evidenced | Polling PNG viewport and bounded HTTP input |
-| Two tenant variants | Implemented, evidenced | One artifact supports `harbor` and `summit` |
+| Browser discovery | Implemented, Evidenced | OpenAI + screenshots + local OCR; DOM facts optional |
+| Browser replay | Implemented, Evidenced | Rendered semantic candidates first, optional DOM locators second; no model dependency |
+| Same-session handoff | Implemented, Evidenced | Polling PNG viewport and bounded HTTP input |
+| Two tenant variants | Implemented, Evidenced | One artifact supports `harbor` and `summit` |
 | Persistence | Implemented for required durable objects | Atomic capability/assets and evidence on disk; live operational state in memory |
-| Canvas/non-DOM browser control | Implemented, tested | Canvas-only visual-terminal and visual-workbench; OCR, frame-local relations, canonical signatures |
+| Canvas/non-DOM browser control | Implemented, Tested | Canvas-only visual-terminal and visual-workbench; OCR, frame-local relations, canonical signatures |
 | Native desktop control | Designed | Surface ports exist; no OS adapter executes them |
 | Full operations UI | Cut | The UI is an intervention console only |
 | Distributed runtime | Cut | One process; one thread-affine worker per browser run |
+
+## Documentation conventions
+
+Each reference page owns one subject; other pages summarize and link to it. Decision tables
+name the alternatives, the choice, and the reason. Numeric limits belong in
+[Constraints and policy](constraints-and-policy.md); environment settings and ports belong in
+[Operations](operations.md). Verification counts are dated by a commit checkpoint, not promises
+about future test runs.
+
+Flowcharts use rectangles for components, work, or data structures; cylinders for durable stores;
+diamonds for decisions; and rounded nodes for inputs or outcomes. Dashed flowchart edges mark
+failure or handoff. Sequence diagrams use dashed replies and state diagrams use native notation.
+Labels stay short, HTML labels are disabled, and all diagrams share one initialization directive.
+Node colors follow the Markdown renderer's theme; neutral gray connectors work in light and dark
+themes. A renderer must support Mermaid and switch its theme to follow the page.
+
+Run `uv run python scripts/check_docs.py` for local links, heading anchors, report structure,
+index coverage, and diagram-style checks. This is a structural gate, not a substitute for rendering
+diagrams in the Markdown viewer used for publication.

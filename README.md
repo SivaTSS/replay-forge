@@ -15,7 +15,7 @@ flowchart LR
 The canvas-only member workbench supports three non-trivial servicing tasks: investigate an exact
 transaction, calculate a dated loan payoff quote, and temporarily lock a selected card. Discovery
 creates a separate typed capability for each goal; the runtime and compiler contain no task names,
-route constants, output names, or required action order. Durable targets store semantic identity,
+route constants, output names, or required action order. These artifacts store semantic target identity,
 never coordinates or relative regions, and are resolved again from each current frame. The earlier
 savings-balance versions remain immutable regression and handoff fixtures.
 
@@ -85,7 +85,10 @@ Expected: `status: success`, five validated outputs, and checkpoint `savings_bal
 | Hard failure | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_hard_failure_run.py` | `failure/permission_denied` + masked frame |
 | Human handoff | `UV_CACHE_DIR=/tmp/replayforge-uv-cache uv run python scripts/capture_handoff_run.py` | Claim, same-session input, resume, `success` |
 
-Omitting `version` selects the latest artifact, currently visual workbench `3.2.0`. Request `2.0.0` explicitly for the intervention/handoff demonstration, `3.0.0` for the original visual-terminal regression path, or `3.1.0` for its prior repeated-row fixture.
+All versions in this table refer to `member.lookup_savings_balance`. Omitting `version` selects
+the latest publication for that capability, currently `3.2.0` in the committed registry.
+Request `2.0.0` for handoff, `3.0.0` for the original visual-terminal fixture, or `3.1.0`
+for its prior repeated-row fixture.
 
 ## Operator console
 
@@ -95,7 +98,10 @@ Start it after the target and runtime:
 npm_config_cache=/tmp/replayforge-npm-cache npx --yes pnpm@10.15.1 --filter @replayforge/control-plane dev --hostname 127.0.0.1 --port 3000
 ```
 
-Open `http://127.0.0.1:3000`. The replay appears in the active-intervention inbox with its capability, tenant, interrupted step, surface route, and safe pause reason. Select it, claim the retained browser, provide the manual input, and choose **Resume automation**. Direct ID lookup remains available for debugging.
+Open `http://127.0.0.1:3000` and invoke savings-balance version `2.0.0` using the replay command
+above. The paused replay appears in the active-intervention inbox with its capability, tenant,
+interrupted step, route, and pause reason. Select it, claim the retained browser, provide the
+manual input, and choose **Resume automation**. Direct ID lookup remains available for debugging.
 
 The console polls because this slice needs a minimal real handoff, not continuous co-browsing. Every transition uses an exclusive, expiring, monotonically versioned lease. Heartbeats preserve active ownership; an abandoned expired claim can be reclaimed without allowing an active lease to be stolen. Operator IDs are local caller-supplied labels, not authentication.
 
@@ -145,7 +151,7 @@ The reviewed [model policy](config/model-policy.yaml) fixes provider, model, rea
 bash scripts/verify.sh
 ```
 
-This runs locked dependency setup, Ruff, strict mypy, a 90% branch-aware domain-coverage gate, evidence verification, TypeScript checks, both frontend builds, and real Chromium integration tests.
+This runs documentation checks, locked dependency setup, Ruff, strict mypy, a 90% branch-aware domain-coverage gate, evidence verification, TypeScript checks, both frontend builds, and real Chromium integration tests.
 
 Run the focused visual portability matrix after starting or building the demo bank:
 
@@ -176,28 +182,24 @@ backend/src/replayforge/
 ├── evidence/        redaction, hashing, manifests, local store
 ├── runs/            application services, results, audit journal
 ├── providers/       OpenAI adapter
-└── runtime/         settings, composition, worker, telemetry
+├── observability/   bounded model-call metrics
+├── shared/          IDs, clocks, unique-key YAML parser
+└── runtime/         settings, composition, session worker
 
 apps/demo-bank/      synthetic target on :3001
 apps/control-plane/  intervention console on :3000
-capabilities/        reviewed immutable YAML versions
+capabilities/        published immutable YAML versions
 evidence/            committed reviewer bundles; runtime output is ignored
 docs/                implementation-accurate design documentation
 ```
 
 ## Documentation
 
-- [Architecture and trade-offs](docs/architecture.md)
-- [Domain data models](docs/data-models.md)
-- [Tenant and surface compatibility](docs/heterogeneity-and-compatibility.md)
-- [Capability schema and replay semantics](docs/capability-and-replay.md)
-- [Discovery loop and model boundary](docs/discovery.md)
-- [Safety, evidence, and human handoff](docs/safety-and-handoff.md)
-- [Implemented API and operations](docs/operations.md)
-- [Tests and evidence](docs/verification.md)
-- [Assignment requirement matrix](docs/requirements.md)
-- [Required seven-part design report](REPORT.md)
+The [documentation index](docs/README.md) routes each question to its reference page and defines
+shared terminology. Start with [Architecture](docs/architecture.md),
+[Data models](docs/data-models.md), and [Capability and replay](docs/capability-and-replay.md).
+[REPORT.md](REPORT.md) is the required seven-part design summary.
 
 ## Deliberate cuts
 
-Published capability artifacts, content-addressed visual assets, and sanitized evidence are durable local files. Run journals, discovery-suite progress, leases, interventions, and live browser sessions remain in memory. The control plane is an intervention console, not a complete run or capability UI. There is no PostgreSQL adapter, WebSocket, distributed queue, authentication layer, native desktop adapter, or discovery continuation after human takeover. The visual adapter is implemented for browser-rendered surfaces; Citrix and native desktop transport remain outside this slice.
+Published capability artifacts, content-addressed visual assets, and sanitized evidence are durable local files. Run journals, discovery-suite progress, leases, interventions, and live browser sessions remain in memory. The operator console is not a complete run or capability UI. There is no PostgreSQL adapter, WebSocket, distributed queue, authentication layer, native desktop adapter, or discovery continuation after human takeover. The visual adapter is implemented for browser-rendered surfaces; Citrix and native desktop transport remain outside this slice.

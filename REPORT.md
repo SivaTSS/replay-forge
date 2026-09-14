@@ -8,9 +8,9 @@ banking workbench with transaction investigation, dated loan payoff quoting, and
 locking. Its controls and values are painted on a canvas.
 
 ```mermaid
-%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"}}}%%
-flowchart LR
-    G[Goal and inputs] --> D[Model discovery]
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
+flowchart TB
+    G([Goal and inputs]) --> D[Model discovery]
     D --> A[(Typed capability)]
     A --> R[Deterministic replay]
     D --> S[Surface session]
@@ -156,7 +156,7 @@ end-to-end evidence; tests exercise current code against immutable artifacts.
 | Tenant overlay engine | Shared-artifact validation proves reuse; specialization design is documented |
 | LLM replay fallback | Finite deterministic recovery preserves the production model boundary |
 
-`bash scripts/verify.sh` checks formatting, typing, evidence integrity, sequential frontend builds,
+`bash scripts/verify.sh` checks documentation, formatting, typing, evidence integrity, sequential frontend builds,
 and unit/Chromium tests with a 90% configured domain-coverage gate. Setup, genuine discovery, and
 invocation commands are in [README](README.md); the full traceability matrix is in
 [Requirements](docs/requirements.md).

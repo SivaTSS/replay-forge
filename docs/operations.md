@@ -1,5 +1,7 @@
 # Operations and HTTP contract
 
+[Documentation index](README.md)
+
 ## Local topology
 
 ```text
@@ -90,7 +92,7 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 
 ## Operational decisions
 
-| Option | Decision | Why |
+| Option | Decision | Reason |
 |---|---|---|
 | Asynchronous queue and polling API | Rejected for this slice | Adds persistence and worker lifecycle without improving the core demonstration |
 | Synchronous invocation | **Chosen** | Exact behavior is visible in one request; browser work still stays on its owner thread |
@@ -98,6 +100,8 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 | Environment-selected model | Rejected | Prevents callers from bypassing reviewed cost and reasoning limits |
 | Local evidence path in API | Rejected | Callers receive opaque `evidence://` keys rather than filesystem paths |
 | Public target | Rejected | Cannot guarantee availability, fault injection, or acceptable automation terms |
+
+## Discovery publication and capture
 
 The `visual_member_workbench` entry point is one canvas-only application with three substantial
 tasks: transaction investigation, loan payoff calculation, and temporary card locking. The first

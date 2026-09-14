@@ -1,19 +1,21 @@
 # Heterogeneity and compatibility
 
+[Documentation index](README.md)
+
 Reuse follows a vendor application's task contract. A tenant name selects a registered instance;
 it does not select a different program. Discovery-suite validation executes the same draft on each
 requested tenant and records support only after success.
 
 ```mermaid
-%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"}}}%%
+%%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart TB
     A[(Versioned capability)] --> C[Registration compatibility]
-    T[Tenant and entry point] --> C
+    T([Tenant and entry point]) --> C
     C --> L[Live landmark checks]
     L --> R[Resolve each current target]
     R --> P[Policy and action]
     P --> V[Verify effect and outputs]
-    C -. mismatch .-> F[Structured failure]
+    C -. mismatch .-> F([Structured failure])
     L -. mismatch .-> F
     R -. absent or ambiguous .-> F
 ```
@@ -61,14 +63,14 @@ artifact and record the resulting hash in evidence. Output meaning, step order, 
 remain governed by the base contract; semantic changes require a new capability. Fail validation
 if an override's base hash has changed. Fleet rollout and vendor-version detection are unimplemented.
 
-| Alternative | Decision and reason |
-|---|---|
-| One copy per tenant | Avoid: obscures shared behavior and creates independent maintenance drift |
-| Unrestricted patches | Avoid: can change business meaning or expand authority without discovery |
-| Shared artifact plus measured tenant validation | Implemented: smallest model that proves actual reuse |
-| Compare screenshot hashes at startup | Avoid: rejects harmless changes in layout, values, or branding |
-| Contract and semantic landmark checks | Implemented: stable checks with explicit failure reasons |
-| Build fleet infrastructure now | Defer: the PDF asks for credible design; this slice needs executable reuse proof |
+| Option | Decision | Reason |
+|---|---|---|
+| One copy per tenant | Rejected | Obscures shared behavior and creates independent maintenance drift |
+| Unrestricted patches | Rejected | Can change business meaning or expand authority without discovery |
+| Shared artifact plus measured tenant validation | Chosen | Smallest model that proves actual reuse |
+| Compare screenshot hashes at startup | Rejected | Rejects harmless changes in layout, values, or branding |
+| Contract and semantic landmark checks | Chosen | Stable checks with explicit failure reasons |
+| Build fleet infrastructure now | Deferred | The PDF asks for credible design; this slice needs executable reuse proof |
 
 ## Surface extension
 

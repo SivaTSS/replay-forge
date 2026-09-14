@@ -1,5 +1,7 @@
 # Data models
 
+[Documentation index](README.md)
+
 ReplayForge separates data by trust and lifetime. Serialized boundaries use strict Pydantic
 models with unknown fields rejected; durable contracts reject field reassignment. Internal state
 uses frozen dataclasses. Nested dictionaries remain ordinary Python mappings, so capability and
@@ -13,7 +15,8 @@ flowchart TB
     U[Untrusted input] --> B[Boundary models]
     B --> D[Domain values]
     D --> R[Repository ports]
-    R --> P[(Persisted records)]
+    R --> P[(Capabilities and evidence)]
+    R --> M[In-memory coordination]
     D --> T[Transient session state]
 ```
 
@@ -102,7 +105,7 @@ flowchart TB
     P --> X[Policy and execution]
     X --> S[Verified recording]
     S --> Q[Suite validation]
-    Q --> PUB[Published version]
+    Q --> PUB[(Published version)]
 ```
 
 `ProviderContext` and `PlanningContext` are transient and may contain the goal, synthetic inputs,
@@ -142,18 +145,23 @@ flowchart TB
     L1[Platform layer] --> I[Intersection]
     L2[Application layer] --> I
     L3[Capability layer] --> I
+    L4[Tenant and invocation layers] --> I
     C[Observed action context] --> E[Evaluator]
     I --> E
     E --> D{Decision}
-    D --> AL[Allow]
-    D --> DN[Deny]
-    D --> HU[Human required]
+    D --> AL([Allow])
+    D -. deny .-> DN([Deny])
+    D -. pause .-> HU([Human required])
 ```
 
 Each `PolicyLayer` contains credential-free HTTP origins, safe route patterns, action identifiers,
 a risk ceiling, and forbidden data classes. Intersection keeps only shared allowlists, unions
 forbidden classes, and chooses the lowest risk ceiling. Empty intersections are valid and fail
 closed.
+
+The diagram shows replay's five layers. Discovery intersects platform and application policy;
+replay's tenant and invocation layers currently inherit existing ceilings rather than expose
+independent overrides. See [Policy composition](safety-and-handoff.md#policy-composition).
 
 Discovery and replay pass the bound input's classification into policy, including forbidden
 classifications in parent objects. Discovery also rejects nested credential/secret fields and
@@ -180,7 +188,7 @@ stateDiagram-v2
     Claimed --> Claimed: expired reassignment
     Claimed --> Resuming: resume requested
     Resuming --> Open: validation failed
-    Resuming --> Resolved: checkpoint passed
+    Resuming --> Resolved: resume validated
     Open --> Terminated: terminate
     Claimed --> Terminated: terminate
 ```
@@ -196,7 +204,7 @@ stateDiagram-v2
 Every ownership change increments the lease version exactly once. Opening, claiming, releasing,
 heartbeating, resuming, reopening, resolving, and terminating use a paired compare-and-swap
 repository. Reads also return the pair under the same lock, so no caller can observe half a local
-transition. The repository protocol is the required transaction boundary for PostgreSQL.
+transition. A future persistent adapter must preserve this same transaction boundary.
 
 Operator input is tied to both the current frame sequence and lease version. Pointer coordinates
 are transient input coordinates inside the source viewport—not stored replay locators. Audit data
@@ -211,10 +219,10 @@ flowchart TB
     RUN[Run] --> MAN[Events and attachments]
     RUN --> STATE{Run state}
     STATE --> DONE[Terminal result]
-    STATE --> LIVE[Intervention required]
-    DONE --> OK[Success and checkpoint]
-    DONE --> BO[Business outcome]
-    DONE --> FAIL[Failure]
+    STATE -. pause .-> LIVE([intervention_required])
+    DONE --> OK([success])
+    DONE --> BO([business_outcome])
+    DONE -. failure .-> FAIL([failure])
     OK --> MAN
     BO --> MAN
     FAIL --> MAN
@@ -230,7 +238,7 @@ opaque key, media type, bounded size, SHA-256 hash, retention class, directives,
 The authoritative `RunEvidenceManifest` requires unique evidence identities, unique run-owned keys,
 and separate JSON events, binary attachments, and optional terminal result.
 
-## Choice record
+## Decisions
 
 | Decision | Alternatives considered | Chosen and why |
 |---|---|---|

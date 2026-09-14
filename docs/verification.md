@@ -1,5 +1,7 @@
 # Verification and evidence
 
+[Documentation index](README.md)
+
 ## One command
 
 ```bash
@@ -8,26 +10,43 @@ bash scripts/verify.sh
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-flowchart TB
-    V([verify.sh]) --> PY[Python]
-    V --> WEB[Web applications]
-    V --> SYS[System evidence]
-
-    PY --> D[Locked dependency sync]
-    PY --> F[Ruff format + lint]
-    PY --> M[Strict mypy]
-    PY --> U[Tests + 90% coverage gate]
-    WEB --> T[TypeScript checks]
-    WEB --> B[Two Next.js builds]
-    SYS --> E[Evidence bundle verification]
-    SYS --> I[Real Chromium integration tests]
-
+flowchart LR
+    subgraph Contracts[Contract checks]
+        direction TB
+        D[Documentation] --> P[Ruff and mypy]
+        P --> E[Evidence integrity]
+    end
+    subgraph Web[Web applications]
+        direction TB
+        T[TypeScript] --> B[Sequential builds]
+    end
+    subgraph Runtime[Runtime verification]
+        direction TB
+        U[Unit and Chromium tests] --> C[90% coverage gate]
+    end
+    Contracts --> Web
+    Web --> Runtime
 ```
 
 The 90% branch-aware coverage gate covers deterministic domain code. Thin HTTP, provider, launch-registry,
 suite-orchestration, composition, and Playwright adapters are excluded from that percentage and
 covered by contract tests, real Chromium integration, and genuine discovery evidence. Unit and
 integration tests run in one coverage process so browser-executed domain paths count.
+
+For documentation-only changes, run the lightweight gate and its regression tests:
+
+```bash
+uv run python scripts/check_docs.py
+uv run python -m unittest discover -s scripts -p 'test_check_docs.py'
+```
+
+These check local links and heading anchors, index coverage, the required report sections, fenced
+blocks, and shared Mermaid styling. They do not fetch external links or prove rendered layout.
+
+The documentation consistency pass also rendered all 20 diagrams with Mermaid `11.12.0` in
+Chromium, using both default and dark themes. No text extended beyond its SVG viewport; key
+architecture, replay, and handoff diagrams were visually inspected. Renderer versions and host
+themes can differ, so this is a recorded layout check, not a cross-viewer guarantee.
 
 ## What is proved where
 
@@ -70,7 +89,7 @@ The genuine discovery bundles are historical executions tied to their recorded c
 verified, not regenerated or relabeled during the audit. Browser integration tests exercise today's
 runtime against those unchanged artifact contracts; synthetic test providers remain test fixtures.
 
-### Audit checkpoint
+### Audit checkpoint: `a71b7b0`
 
 | Gate | Result |
 |---|---|
@@ -158,7 +177,7 @@ No Playwright trace archive is committed. This is an explicit optional evidence 
 
 ## Testing decisions
 
-| Option | Decision | Why |
+| Option | Decision | Reason |
 |---|---|---|
 | Mock-only browser tests | Rejected | Would not prove iframe, locator, navigation, or screenshot behavior |
 | Live-model tests on every CI run | Rejected | Non-deterministic, credentialed, and paid |

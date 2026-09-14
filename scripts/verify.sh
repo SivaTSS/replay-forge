@@ -7,6 +7,8 @@ set -euo pipefail
 export UV_CACHE_DIR PLAYWRIGHT_BROWSERS_PATH npm_config_cache
 
 uv sync --extra dev --frozen
+uv run python scripts/check_docs.py
+uv run python -m unittest discover -s scripts -p 'test_check_docs.py'
 uv run playwright install chromium
 npx --yes pnpm@10.15.1 install --frozen-lockfile
 uv run ruff format --check backend scripts pyproject.toml
@@ -14,6 +16,8 @@ uv run ruff check backend scripts
 uv run mypy \
   backend/src \
   backend/tests \
+  scripts/check_docs.py \
+  scripts/test_check_docs.py \
   scripts/verify_evidence.py \
   scripts/export_evidence.py \
   scripts/verify_evidence_bundles.py \

@@ -1,19 +1,21 @@
 # Safety, evidence, and human handoff
 
+[Documentation index](README.md)
+
 ## One action, three gates
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR
     A([Proposed action]) --> O{Owns current lease?}
-    O -- no --> D([Deny])
-    O -- yes --> L{Origin, route, action allowlisted?}
-    L -- no --> D
+    O -. no .-> D([Deny])
+    O -- yes --> L{Scope and fields allowed?}
+    L -. no .-> D
     L -- yes --> R{Effective risk}
-    R -- irreversible --> D
-    R -- above ceiling --> D
-    R -- sensitive --> H([Pause for human])
-    R -- allowed --> E([Record intent, execute, record result])
+    R -. irreversible .-> D
+    R -. above ceiling .-> D
+    R -. sensitive .-> H([Pause for human])
+    R -- allowed --> E[Record and execute]
 ```
 
 ### Policy composition
@@ -52,7 +54,8 @@ The model and artifact therefore cannot lower an independently detected risk.
 
 ## Control ownership
 
-Every browser session has one versioned lease with a 30-second TTL.
+Every browser session has one versioned lease. Its TTL and renewal bound are documented in
+[Constraints and policy](constraints-and-policy.md#execution-bounds).
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -82,7 +85,11 @@ An active human lease cannot be stolen. If its heartbeat expires, the claim tran
 
 ## Same-session handoff
 
-The operator does not copy an opaque ID from a terminal. The console polls the active replay inbox and shows safe routing context before control is claimed: capability and version, application and tenant, interrupted step, normalized route, trigger, and explanation. Invocation inputs and extracted values are absent. The unmasked live viewport remains restricted to the current lease holder.
+The default operator path needs no ID copied from a terminal. The console polls the active replay
+inbox and shows safe routing context before control is claimed: capability and version, application
+and tenant, interrupted step, normalized route, trigger, and explanation. Invocation inputs and
+extracted values are absent. The unmasked live viewport is restricted to the current lease holder;
+operator labels are not authentication.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -102,10 +109,11 @@ sequenceDiagram
     R->>B: capture masked before-frame
     R-->>A: intervention_required
     O->>R: claim(expected version)
-    loop every 2 seconds
+    loop while operator owns session
         O->>R: viewport(current lease)
         R->>B: screenshot on owner thread
-        B-->>O: PNG + frame/viewport/sequence headers
+        B-->>R: PNG screenshot
+        R-->>O: PNG + frame/viewport/sequence headers
     end
     O->>R: click/text/key bound to latest frame
     R->>B: execute on same page and context
@@ -149,12 +157,12 @@ remains authoritative; the UI guard prevents misleading context, not a substitut
 domain event / terminal result
         → structured redaction
         → forbidden-secret scan
-        → atomic local write
-        → SHA-256 + metadata sidecar
+        → SHA-256 + atomic local write
+        → metadata sidecar
         → new manifest snapshot
 
 browser failure/handoff frame
-        → mask inputs, details, account table
+        → mask DOM values or the entire canvas
         → PNG signature and size validation
         → atomic local write + manifest
 ```
@@ -165,7 +173,7 @@ The operator viewport is live and therefore unmasked for the authorized lease ho
 
 ## Decisions
 
-| Stage | Alternatives | Chosen | Why |
+| Decision | Alternatives | Choice | Reason |
 |---|---|---|---|
 | Policy | Single boolean guard, adapter-specific checks, layered policy | Layer intersection | Every authority can only narrow permission; decisions stay auditable |
 | Risky replay action | Allow with logging, deny all, human intervention | Sensitive → human; irreversible → deny | Demonstrates safe progress without pretending irreversible recovery is solved |
@@ -175,7 +183,7 @@ The operator viewport is live and therefore unmasked for the authorized lease ho
 | Ownership | UI convention, mutex only, versioned lease | Versioned lease + CAS | Makes stale and concurrent commands explicit conflicts |
 | Identity | Pretend login, external identity provider, local label | Local operator label | Keeps the trust boundary honest; real authentication belongs with deployment authorization |
 | Transport | WebSocket/CDP stream, headed browser, HTTP polling | HTTP polling | Minimal real control path; sequence checks compensate for stale frames |
-| UI verification | Mocked network calls, real browser path | Real browser path | Proves the console drives the retained runtime rather than only rendering mocked states |
+| UI verification | Mock-only, real handoff only, both | Real handoff + controlled response ordering | Real browser control proves integration; delayed-response tests reproduce races deterministically |
 | Persistence | Database transactions, process memory | Memory for control metadata | Fits the local slice; restart loses interventions and is documented |
 
 ## Known limits

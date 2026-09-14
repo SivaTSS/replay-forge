@@ -1,5 +1,7 @@
 # Model-guided discovery
 
+[Documentation index](README.md)
+
 ## Contract
 
 Discovery accepts a goal, registered application family, tenant, symbolic entry point, invocation inputs, and step/time limits. A contract-planning pass first produces a typed `CapabilityDraftSpec`; the action loop then returns a validated draft, a typed failure, or an intervention request. The legacy one-shot endpoint publishes read-only drafts for compatibility; discovery suites keep drafts unpublished until finalization.
@@ -11,11 +13,11 @@ OpenAI key configured
         ∩
 local Langfuse credentials authenticate
         ∩
-demo target responds
+registered target responds
         = discovery ready
 ```
 
-Replay needs none of these model dependencies.
+Replay still needs its registered target, but neither OpenAI nor Langfuse.
 
 ## Observe → decide → act
 
@@ -86,22 +88,12 @@ not depend on inputs that its published capability would reject.
 
 ## Bounds
 
-| Bound | Implementation |
-|---|---|
-| Steps | Request range `1..50`; default `20` |
-| Wall time | Request range `10..600s`; default `120s` |
-| Repeated state | Intervene after the configured repeated fingerprint limit |
-| Repeated action | Intervene after the configured equivalent-proposal limit |
-| Confidence | Intervene below `0.6` |
-| Model calls | Maximum `20` per run |
-| Provider timeout | `30s` per call |
-| Output tokens | Maximum `1,200` per call |
-| Screenshot | Maximum `1.5 MiB` |
-
-The model policy is loaded from `config/model-policy.yaml`. API requests and environment variables cannot select a different model or enlarge these budgets.
-The request and engine share one domain definition for step and wall-time bounds. These bounds are
-layered: contract planning consumes one model call, and discovery stops at whichever request or
-provider budget is exhausted first. See [Constraints and policy](constraints-and-policy.md).
+The request and engine share domain-defined step and wall-time bounds. Repeated observations,
+equivalent proposals, and low confidence trigger intervention. The
+[model policy](../config/model-policy.yaml) caps calls, tokens, time, frame bytes, and cost;
+requests cannot change the model or enlarge provider budgets. Contract planning consumes one call,
+and the first exhausted request or provider budget stops discovery. Exact values and override
+rules are in [Constraints and policy](constraints-and-policy.md#execution-bounds).
 
 ## Completion is not trusted
 
@@ -146,7 +138,7 @@ is retained as sanitized drift metadata and never changes `supported_variants`.
 
 ## Perception decision
 
-| Option | Decision | Why |
+| Option | Decision | Reason |
 |---|---|---|
 | Full DOM sent to the model | Rejected | Large, noisy, can contain data, and overfits markup |
 | Screenshot only with free-form clicks | Rejected | General, but produces opaque and brittle recordings |
@@ -163,7 +155,7 @@ Replay re-resolves every action from a fresh frame and never calls the model.
 
 ## Provider decision
 
-| Option | Decision | Why |
+| Option | Decision | Reason |
 |---|---|---|
 | Provider SDK types throughout the engine | Rejected | Would couple domain behavior and tests to one vendor |
 | Multiple providers | Rejected | Breadth without improving the evaluated core |
