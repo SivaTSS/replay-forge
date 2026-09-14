@@ -267,6 +267,18 @@ Subsequent model-free tests, with no provider credentials configured, reused tha
 artifact on both tenants at 1440×900 with a different member and payoff date. Exact output checks
 passed after correcting the shared transform semantics described above.
 
+Transaction privacy-fix verification on runtime commit `a0a9e66` remains **incomplete**:
+
+| Genuine attempt | Observed result |
+|---|---|
+| `run_674002c2e5f64e42a3cbad3d4f168f01` | Model escalated with `target_ambiguous` before publication |
+| `run_baf04bcd9b9341b2bf0b4d659cd252cc` | Model escalated with `inconsistent_output_requirements` after its first extraction |
+
+Neither attempt reached the publication guard, produced a capability, or ran tenant validation.
+Both paused test sessions were explicitly terminated without human UI actions; their private
+runtime evidence remains intact. Unit regressions verify the schema-symbol and annotation
+redaction fixes, but these two live attempts do not establish end-to-end transaction success.
+
 ## Provider decision
 
 | Option | Decision | Reason |
