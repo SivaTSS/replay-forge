@@ -404,6 +404,28 @@ class DiscoveryEngine:
                             "scenario_branch_missing",
                             "Scenario completion requires a verified branch marker.",
                         )
+                    if (
+                        request.scenario is not None
+                        and request.scenario.kind == "recovery"
+                        and observed_branch is not None
+                        and not self._rejoin_ready(
+                            request, session, observed_branch, outputs, effective_policy
+                        )
+                    ):
+                        renew_control()
+                        self.recorder.record(
+                            "proposal_rejected",
+                            request.run_id,
+                            details={"code": "recovery_rejoin_not_ready", "effect_absent": True},
+                        )
+                        history.append(
+                            "Completion rejected: the exact next primary target or preconditions "
+                            "are not ready. Acknowledging the blocker alone is insufficient. "
+                            "Restore the original surface, including scrolling when necessary; "
+                            "do not click the rejoin target. Assert a distinctive condition on the "
+                            "currently visible restored surface before completing again."
+                        )
+                        continue
                     return self._complete(
                         request,
                         session,
@@ -600,6 +622,31 @@ class DiscoveryEngine:
         finally:
             if session is not None:
                 session.close()
+
+    @staticmethod
+    def _rejoin_ready(
+        request: DiscoveryRequest,
+        session: SurfaceSession,
+        branch: ObservedBranch,
+        outputs: dict[str, Any],
+        policy: EffectivePolicy,
+    ) -> bool:
+        assert request.scenario is not None
+        primary = request.scenario.primary
+        if branch.after_step_count >= len(primary.steps):
+            return False
+        step = primary.steps[branch.after_step_count]
+        try:
+            if step.target is not None:
+                target = bind_target_inputs(
+                    step.target, request.inputs, primary.inputs, policy.forbidden_field_classes
+                )
+                session.resolve(target, step.timeout_ms)
+            return all(
+                session.evaluate(item, outputs, request.inputs) for item in step.preconditions
+            )
+        except (SurfaceError, ContractValidationError):
+            return False
 
     def _complete(
         self,

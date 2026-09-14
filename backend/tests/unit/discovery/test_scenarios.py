@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from hashlib import sha256
+from typing import cast
 
 import pytest
 
@@ -20,12 +21,14 @@ from replayforge.discovery.models import (
     BranchProposal,
     CompleteProposal,
     DiscoverySuccess,
+    ObservedBranch,
     RecordedActionProposal,
     ScenarioContext,
 )
 from replayforge.discovery.scenarios import scenario_expected_condition
 from replayforge.runs.results import FailureResult
-from replayforge.surfaces.models import NormalizedObservation
+from replayforge.surfaces.models import NormalizedObservation, SurfaceError
+from replayforge.surfaces.ports import SurfaceSession
 from tests.artifacts import sample_artifact
 from tests.unit.discovery.test_engine import QueueModelProvider, build_discovery, make_request
 from tests.unit.replay.test_engine import FakeSurfaceSession
@@ -126,6 +129,55 @@ def test_unobserved_branch_is_not_compiled() -> None:
     assert isinstance(result, FailureResult)
     assert result.code == "action_condition_not_verified"
     assert surface.closed
+
+
+@pytest.mark.parametrize(
+    "blocked, missing, ready", [(True, False, True), (False, True, False), (False, False, True)]
+)
+def test_recovery_rejoin_requires_next_target_even_if_original_notice_remains_visible(
+    blocked: bool,
+    missing: bool,
+    ready: bool,
+) -> None:
+    condition = TextCondition(kind="text", value="No member found")
+    engine, _provider, primary, surface = scenario_engine(condition, observed=blocked)
+    surface.resolve_error = (
+        SurfaceError("target_absent", "Rejoin target is off screen.") if missing else None
+    )
+    surface.resolve_failures_remaining = -1
+    request = make_request(scenario=ScenarioContext(primary, "recovery"))
+    assert engine.effective_policy is not None
+    assert (
+        engine._rejoin_ready(
+            request,
+            cast(SurfaceSession, surface),
+            ObservedBranch(1, condition),
+            {},
+            engine.effective_policy,
+        )
+        is ready
+    )
+    assert surface.executed_targets == []  # Readiness never clicks the next primary target.
+
+
+def test_unready_recovery_completion_is_replanned_not_published(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from replayforge.discovery.models import EscalateProposal
+
+    condition = TextCondition(kind="text", value="No member found")
+    engine, provider, primary, _surface = scenario_engine(condition)
+    monkeypatch.setattr(DiscoveryEngine, "_rejoin_ready", staticmethod(lambda *_args: False))
+    provider.proposals.append(
+        EscalateProposal(
+            kind="escalate",
+            reason_code="needs_reorientation",
+            rationale="The rejoin surface is unavailable",
+        )
+    )
+    result = engine.execute(make_request(scenario=ScenarioContext(primary, "recovery")))
+    assert not isinstance(result, DiscoverySuccess)
+    assert any("Completion rejected" in item for item in provider.calls[-1].action_history)
 
 
 @pytest.mark.parametrize("mode", [None, "business_outcome"])
