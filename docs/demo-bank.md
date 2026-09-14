@@ -19,9 +19,13 @@ Start the demo using the [quickstart](../README.md#run-the-core-replay), then op
 
 The application is designed for staff desktops, starting at **800 × 600 CSS pixels**. Smaller
 windows scroll the document rather than silently shrinking text. Inside the workstation, use the
-mouse wheel or Page Up/Down to scroll records. Tab cycles visible controls, Enter activates them,
-F2 returns to inquiry, and Escape closes a selection list. Clicking an input's label focuses the
-field; Ctrl/Cmd+A replaces its value. Dropdowns support pointer selection and arrow keys.
+mouse wheel, scrollbar track/drag, or Page Up/Down to scroll records. Tab cycles visible controls
+and brings partially visible controls into view; Enter activates them. F2 starts a new inquiry and
+clears the selected member, without clearing the session ledger. Escape closes a selection list.
+Click an input's label to focus it, or click its text to position the caret. Home/End, arrows,
+Shift-selection, Backspace/Delete, and Ctrl/Cmd+A/C/X/V support editing and copy/cut/paste.
+Dropdowns support pointer selection and arrow keys; clicking outside dismisses the list without
+activating the underlying action.
 
 Business date is fixed at **2026-09-13**. All names, balances, cards, and transactions are synthetic.
 Each browser tab has independent in-memory state; reload resets that tab. No customer data is
@@ -82,7 +86,9 @@ confirmation controls under its own policy.
 
 The UI controller prepares a detached preview. Confirmation runs validation again against the
 current revision and publishes the resulting state as one replacement. It does not reuse an old
-preview's ledger changes. Cross-member navigation clears the pending operation. Exceptions leave
+preview's ledger changes. Reviews use **Proposed** titles; only the completed receipt reports a
+successful operation. Cancel restores the entered instructions for correction. Navigation discards
+the pending operation, and a new inquiry requires a new member selection. Exceptions leave
 the original state untouched. This is atomicity within one tab, not a database transaction or
 multi-user concurrency guarantee.
 
@@ -147,6 +153,7 @@ list summaries. Data lives only in that tab's React state; bundled source is not
 | [bank.ts](../apps/demo-bank/lib/servicing/bank.ts) | Dataset, money/date rules, account ownership, permission checks, atomic commands, receipts |
 | [workspace.ts](../apps/demo-bank/lib/servicing/workspace.ts) | Screen transitions, selected-record context, search/filter state, review/cancel/confirm |
 | [renderer.ts](../apps/demo-bank/lib/servicing/renderer.ts) | Dated visual language, responsive layout, clipping, current-layout hit regions |
+| [text.ts](../apps/demo-bank/lib/servicing/text.ts) | Cursor/selection editing, bounded insertion, Unicode code-point boundaries, measured text wrapping |
 | [terminal.tsx](../apps/demo-bank/app/[tenant]/servicing/terminal.tsx) | Canvas lifecycle, input, focus, scrolling, resize and DPR |
 
 ## Decisions and accepted limits
@@ -173,13 +180,38 @@ After building the demo, run the real Chromium target tests:
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
-uv run pytest backend/tests/integration/test_servicing_workstation.py -q
+uv run pytest backend/tests/integration/test_servicing_workstation.py \
+  backend/tests/integration/test_servicing_interactions.py -q
 ```
 
-The browser tests use current screenshot text to find controls, then real pointer and keyboard
-events. They are target-application tests, **not model-guided discovery evidence**. Domain tests
-cover funds conservation, ownership, permissions, invalid input, idempotency, stale review, holds,
-card inverse operations, payoff arithmetic, and case lifecycle.
+Two complementary browser suites use real pointer and keyboard events:
+
+| Suite | Observation boundary | Coverage |
+|---|---|---|
+| `test_servicing_workstation.py` | Current screenshots and local OCR, with no drawing instrumentation | Independent visual checks of card, transfer, quote, case, and viewport workflows |
+| `test_servicing_interactions.py` | Test-injected canvas drawing observation, including clipping/viewport visibility; no React state or private hit-map access | Broad functional regressions across both tenants: every servicing area, errors, editing, review/cancel, resizing, long text, scrollbars, and tab/reload isolation |
+
+The drawing probe exists only in the browser tests; it is not shipped in the target and is never a
+discovery/replay input. These suites verify the application, **not model-guided discovery**.
+Domain/controller/editor tests additionally exercise the tenant/member/role matrix, every command's
+duplicate-confirmation behavior, a 100-transfer conservation sequence, all 31 valid payoff dates,
+amount/reason boundaries, and stale-review rejection.
+
+### Defects corrected in the workflow audit
+
+| Defect | Correction / regression boundary |
+|---|---|
+| An unsuccessful new search could leave the previous member selected | New inquiry clears member/account context and pending instructions |
+| Cancel discarded the form needed for correction | Restore the reviewed form without publishing a business mutation |
+| Review headings prematurely claimed completed operations | Distinct proposal titles; success wording belongs to receipts |
+| Text entry only appended; cursor/delete/clipboard behavior was incomplete | Explicit caret and selection editing, real browser keyboard and clipboard tests |
+| Release labels and long review text could be truncated | Measure action-column width and wrap values with the actual drawing font |
+| A partially visible button could ignore clicks | Clip its active pointer region to its visible region; focus reveals clipped controls |
+| The scrollbar looked interactive but did not accept dragging | Actual track/drag interaction, alongside wheel and keyboard scrolling |
+| A valid request key could collide with an inherited object property | Own-property lookup, verified across repeated confirmations |
+
+The supported verification surface is desktop Chromium. Passing these checks is bounded evidence,
+not a claim of zero defects across every browser, input method, or future dataset.
 
 The new registered entry point is `legacy_servicing`, with route `/servicing`. Existing
 `member_search`, `visual_member_search`, and `visual_member_workbench` routes remain unchanged

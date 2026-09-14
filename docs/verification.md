@@ -110,7 +110,7 @@ total. That new case first reproduced the stale-selection bug against the previo
 It mocks response timing; the separate handoff case drives the real retained browser session.
 Starlette emits one upstream AnyIO deprecation warning; no test is skipped to suppress it.
 
-### Demo workstation checkpoint
+### Initial demo workstation checkpoint
 
 | Gate | Result |
 |---|---|
@@ -126,6 +126,27 @@ This is the scoped demo-expansion checkpoint, not a rerun of the full backend co
 recorded above. Browser tests inspect screenshots and send real input; they do not read the target's
 React state. OCR limitations and the remaining fresh-discovery requirement are documented in the
 [demo-bank guide](demo-bank.md#verification-and-evidence-status).
+
+### Demo workflow audit: `90ab61c`
+
+The follow-up audit reproduced and corrected stale member context, discarded canceled forms,
+premature success wording, incomplete text editing, truncated controls/review values, inactive
+partially visible controls, a non-interactive scrollbar, and inherited request-key collisions.
+See the [defect and correction table](demo-bank.md#defects-corrected-in-the-workflow-audit).
+
+| Gate | Result |
+|---|---|
+| Domain, controller, and text editor | 32 passing tests, including the complete seeded tenant/member/role matrix and 100 consecutive funds-conserving transfers |
+| Instrumented Chromium interaction tests | 32 passing cases across Harbor and Summit; includes resize during a filled form at 800×600, 1024×768, and 1440×900 |
+| Independent screenshot/OCR tests | All six existing workstation cases passed against the audited build, without drawing instrumentation |
+| Preserved discovered workflows | Six successful model-free replays: transaction investigation, loan payoff, and temporary card lock on both Harbor and Summit |
+| Static checks and build | Strict mypy, Ruff, TypeScript, and the demo production build passed |
+| Retained evidence | All ten historical bundles verified unchanged |
+
+The fast browser suite observes actual canvas drawing calls and their viewport/clip visibility,
+then uses real input events. It does not read React state or the private hit map. The independent
+screenshot/OCR suite remains separate; neither suite substitutes for genuine model discovery.
+The audit covers the supported desktop Chromium target, not every possible browser or input method.
 
 ## Evidence bundle anatomy
 
