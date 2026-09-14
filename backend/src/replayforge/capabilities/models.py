@@ -535,9 +535,56 @@ class TypeAction(ArtifactModel):
     clear: bool = True
 
 
+type KeyboardKey = Literal[
+    "Enter",
+    "Space",
+    "Tab",
+    "Escape",
+    "Backspace",
+    "Delete",
+    "Insert",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "Control",
+    "Shift",
+    "Alt",
+    "Meta",
+    "A",
+]
+
+
 class PressKeysAction(ArtifactModel):
     kind: Literal["press_keys"]
-    keys: tuple[str, ...] = Field(min_length=1, max_length=4)
+    keys: tuple[KeyboardKey, ...] = Field(min_length=1, max_length=4)
+
+    @model_validator(mode="after")
+    def validate_chord(self) -> Self:
+        modifiers = {"Control", "Shift", "Alt", "Meta"}
+        if self.keys[-1] in modifiers or any(key not in modifiers for key in self.keys[:-1]):
+            raise ValueError("a key chord requires modifiers followed by one supported key")
+        if len(set(self.keys)) != len(self.keys):
+            raise ValueError("a key chord cannot repeat a modifier")
+        if self.keys[-1] == "A" and not ({"Control", "Meta"} & set(self.keys[:-1])):
+            raise ValueError("text entry requires a type action; A is only a select-all shortcut")
+        return self
 
 
 class SelectAction(ArtifactModel):

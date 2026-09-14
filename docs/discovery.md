@@ -91,6 +91,12 @@ An unbound operand is a rejected proposal, not evidence of a failed UI state: th
 the missing field and replan. Nested conditions receive the same check. Once both values are
 bound, a failed comparison remains terminal; the engine never substitutes a model claim for it.
 
+Keyboard proposals use the same closed key-name vocabulary as artifacts. Each action is one
+chord (modifiers, then a supported navigation/function key or select-all shortcut), not a list of
+successive keystrokes or arbitrary text. Domain validation rejects malformed chords before
+dispatch; text entry must use a typed value binding. This replaces unrestricted key strings that
+could reach the browser as unsupported commands.
+
 ## Bounds
 
 The request and engine share domain-defined step and wall-time bounds. Repeated observations,
@@ -178,6 +184,7 @@ was explicitly authorized on 2026-09-14. Early genuine attempts exposed several 
 | `run_e3bc149bcb234864a0b6598056ca006d` | Primary discovery succeeded; Summit replay failed before opening the member | Reproduced a missed input rectangle being associated with a distant table cell |
 | `run_d46aeb169b7e41edadfc83597f111afd` | Model escalated after ambiguous navigation | Made `below` column-aligned, symmetric with the row-aligned `right_of` relation |
 | `run_fa3c4ff44a114da483b3b49e60463d86` | Quote issued, but the model asserted equality before any extraction | Added explicit unbound-condition rejection; independently checked production typing and date extraction |
+| `run_4489ea9042714e39b9c39847a1ed8705` | Keyboard dispatch failed after entering the member query | Constrained key names and validated single-chord structure before dispatch |
 
 None of these attempts yielded a published portable capability. Their local runtime records
 are not relabeled as successful exported bundles.

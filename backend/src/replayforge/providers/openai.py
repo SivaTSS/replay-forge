@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from replayforge.capabilities.models import (
     InputValue,
     JsonValueType,
+    KeyboardKey,
     LiteralValue,
     MatchMode,
     ObjectContract,
@@ -54,6 +55,9 @@ anchor, the action text as target_text, and the observed spatial relation. Never
 for a text-labeled control.
 The anchor itself must occur exactly once. right_of requires row alignment; below requires
 column alignment. More than one matching target within that relation remains ambiguous.
+press_keys is one chord: modifier names first, then one supported key (for example Enter).
+Use type with an input binding for text, not press_keys.
+A is only a Control/Meta select-all shortcut.
 Rendered text, labels, and anchors must use an exact complete string from visual_tokens; never use
 a partial word or contains matching.
 Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.
@@ -142,7 +146,7 @@ class ProviderSelectAction(ProviderModel):
 
 class ProviderPressKeysAction(ProviderModel):
     kind: Literal["press_keys"]
-    keys: tuple[str, ...] = Field(min_length=1, max_length=4)
+    keys: tuple[KeyboardKey, ...] = Field(min_length=1, max_length=4)
 
 
 class ProviderScrollAction(ProviderModel):

@@ -10,6 +10,7 @@ from replayforge.capabilities.models import (
     LocatorCandidate,
     NormalizedRegion,
     OcrAnchor,
+    PressKeysAction,
     RelativeRegion,
     RenderedFieldValueCandidate,
     RenderedGroupImageCandidate,
@@ -18,6 +19,30 @@ from replayforge.capabilities.models import (
     RetryPolicy,
     ValueSchema,
 )
+
+
+@pytest.mark.parametrize("keys", [["Enter"], ["Shift", "Tab"], ["Control", "A"], ["F2"]])
+def test_key_chords_accept_supported_navigation_and_shortcuts(keys: list[str]) -> None:
+    action = PressKeysAction.model_validate({"kind": "press_keys", "keys": keys})
+    assert tuple(keys) == action.keys
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [
+        ["ENTER"],
+        ["Return"],
+        ["Enter", "Tab"],
+        ["Control"],
+        ["Control", "Control", "A"],
+        ["A"],
+        ["12345"],
+        ["Control+A"],
+    ],
+)
+def test_key_chords_reject_arbitrary_text_and_invalid_sequences(keys: list[str]) -> None:
+    with pytest.raises(ValidationError):
+        PressKeysAction.model_validate({"kind": "press_keys", "keys": keys})
 
 
 def add_recovery(artifact: dict[str, Any]) -> dict[str, Any]:
