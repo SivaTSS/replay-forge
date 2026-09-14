@@ -87,8 +87,6 @@ def compilation(valid_artifact_data: dict[str, Any]) -> dict[str, Any]:
         ("unverified_completion", "completion lacks"),
         ("undeclared_input", "undeclared input"),
         ("undeclared_output", "undeclared output"),
-        ("repeated_output", "more than once"),
-        ("literal_identifier", "literal customer value"),
         ("missing_output", "missing required outputs"),
         ("risk_ceiling", "risk exceeds"),
         ("action_ceiling", "action outside"),
@@ -115,9 +113,7 @@ def test_compilation_fails_closed(compilation: dict[str, Any], mutation: str, me
         compilation["steps"] = (
             replace(step, action=ExtractAction(kind="extract", output="missing")),
         )
-    elif mutation == "repeated_output":
-        compilation["steps"] = (step, step)
-    elif mutation in {"literal_identifier", "missing_output"}:
+    elif mutation == "missing_output":
         compilation["steps"] = (
             replace(
                 step,
@@ -125,7 +121,7 @@ def test_compilation_fails_closed(compilation: dict[str, Any], mutation: str, me
                     kind="type",
                     value=LiteralValue(
                         source="literal",
-                        value="12345" if mutation == "literal_identifier" else "label",
+                        value="label",
                     ),
                 ),
             ),
@@ -149,6 +145,15 @@ def test_compilation_chooses_narrowest_registered_route(compilation: dict[str, A
     compilation["allowed_route_patterns"] = frozenset({"/*", "/details", "/unrelated/path"})
     artifact = TraceArtifactCompiler(CLOCK).compile(**compilation)
     assert artifact.policy.allowed_route_patterns == frozenset({"/details"})
+
+
+def test_compiler_retains_before_and_after_captures(compilation: dict[str, Any]) -> None:
+    step = compilation["steps"][0]
+    compilation["steps"] = (step, step)
+    artifact = TraceArtifactCompiler(CLOCK).compile(**compilation)
+    assert len(artifact.steps) == 2
+    assert artifact.steps[0].action == artifact.steps[1].action
+    assert artifact.steps[0].id != artifact.steps[1].id
 
 
 @pytest.mark.parametrize("kind", ["all", "any", "not", "not_output"])

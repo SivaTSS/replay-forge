@@ -16,9 +16,8 @@ from replayforge.capabilities import artifact_content_hash, load_artifact_yaml
 from replayforge.evidence import discovery_capture
 from replayforge.evidence.discovery_capture import (
     SuiteCaptureRequest,
-    capture,
+    _request_json,
     capture_suite,
-    invoke,
     validate_result,
     write_new_artifact,
 )
@@ -83,7 +82,9 @@ def test_validates_and_writes_owner_only_artifact(tmp_path: Path) -> None:
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
 
 
-def test_invokes_bounded_synthetic_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_invokes_caller_supplied_discovery_without_task_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     observed: dict[str, object] = {}
 
     def fake_urlopen(request: Request, timeout: int) -> JsonResponse:
@@ -92,12 +93,16 @@ def test_invokes_bounded_synthetic_discovery(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(discovery_capture, "urlopen", fake_urlopen)
 
-    assert invoke("http://localhost:8000/", 120) == {"status": "success"}
+    payload = {"goal": "Find a shipment", "inputs": {"tracking": "SHIP-42"}}
+    assert _request_json(
+        "http://localhost:8000/", "/api/v1/discoveries", 120, method="POST", payload=payload
+    ) == {"status": "success"}
     assert observed["url"] == "http://localhost:8000/api/v1/discoveries"
     assert observed["timeout"] == 150
     body = observed["body"]
     assert isinstance(body, bytes)
-    assert b'"member_id":"12345"' in body
+    assert b'"tracking":"SHIP-42"' in body
+    assert b"member" not in body
 
 
 def test_rejects_http_and_non_object_responses(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -106,7 +111,7 @@ def test_rejects_http_and_non_object_responses(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(discovery_capture, "urlopen", fail)
     with pytest.raises(RuntimeError, match="HTTP 503"):
-        invoke("http://localhost:8000", 120)
+        _request_json("http://localhost:8000", "/api/v1/discovery-suites", 120)
 
     monkeypatch.setattr(
         discovery_capture,
@@ -114,22 +119,7 @@ def test_rejects_http_and_non_object_responses(monkeypatch: pytest.MonkeyPatch) 
         lambda *_args, **_kwargs: JsonResponse(b"[]"),
     )
     with pytest.raises(RuntimeError, match="non-object"):
-        invoke("http://localhost:8000", 120)
-
-
-def test_capture_returns_review_summary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    result = discovery_result()
-    monkeypatch.setattr(discovery_capture, "invoke", lambda *_args: result)
-    output = tmp_path / "discovered.yaml"
-
-    summary = capture("http://localhost:8000", 120, output)
-
-    assert summary["status"] == "success"
-    assert summary["run_id"] == result["run_id"]
-    assert summary["model"] == "test-vision-model"
-    assert summary["artifact_provenance_manifest"].endswith("manifest-compile-snapshot.bin")
-    assert summary["artifact_output"] == str(output)
-    assert output.is_file()
+        _request_json("http://localhost:8000", "/api/v1/discovery-suites", 120)
 
 
 def test_suite_capture_requires_real_provenance_and_validated_contract(

@@ -16,7 +16,6 @@ from replayforge.capabilities.models import (
     ExtractAction,
     InputValue,
     Landmark,
-    LiteralValue,
     LocatorStrategy,
     MatchMode,
     NotCondition,
@@ -276,22 +275,7 @@ class TraceArtifactCompiler:
             if isinstance(action, ExtractAction):
                 if action.output not in draft.outputs.properties:
                     raise CompilationError("trace extracts an undeclared output")
-                if action.output in extracted:
-                    raise CompilationError("trace extracts an output more than once")
                 extracted.add(action.output)
-            literal_source = (
-                action.value
-                if isinstance(action, TypeAction)
-                else action.option
-                if isinstance(action, SelectAction)
-                else None
-            )
-            if (
-                isinstance(literal_source, LiteralValue)
-                and isinstance(literal_source.value, str)
-                and literal_source.value.isdigit()
-            ):
-                raise CompilationError("trace contains a literal customer value")
             if (
                 recording.target is not None
                 and not recording.target.visual_candidates

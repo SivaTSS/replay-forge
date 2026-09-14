@@ -32,35 +32,6 @@ class SuiteCaptureRequest:
     max_steps: int = 40
 
 
-def invoke(base_url: str, timeout_seconds: int) -> dict[str, Any]:
-    payload = json.dumps(
-        {
-            "goal": "Look up the synthetic member and return the current savings balance.",
-            "application_family": "northstar_member_service",
-            "tenant": "harbor",
-            "entry_point": "member_search",
-            "inputs": {"member_id": "12345"},
-            "max_steps": 20,
-            "timeout_seconds": timeout_seconds,
-        },
-        separators=(",", ":"),
-    ).encode()
-    request = Request(
-        f"{base_url.rstrip('/')}/api/v1/discoveries",
-        data=payload,
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urlopen(request, timeout=timeout_seconds + 30) as response:
-            parsed = json.loads(response.read())
-    except HTTPError as exc:
-        raise RuntimeError(f"discovery API returned HTTP {exc.code}") from exc
-    if not isinstance(parsed, dict):
-        raise RuntimeError("ReplayForge returned a non-object discovery result")
-    return parsed
-
-
 def _request_json(
     base_url: str,
     path: str,
@@ -202,23 +173,6 @@ def write_new_artifact(path: Path, artifact: CapabilityArtifact) -> None:
     except BaseException:
         path.unlink(missing_ok=True)
         raise
-
-
-def capture(base_url: str, timeout_seconds: int, artifact_output: Path) -> dict[str, str]:
-    result = invoke(base_url, timeout_seconds)
-    artifact = validate_result(result)
-    write_new_artifact(artifact_output, artifact)
-    return {
-        "artifact_content_hash": artifact.provenance.artifact_content_hash or "",
-        "artifact_output": str(artifact_output),
-        "artifact_provenance_manifest": artifact.provenance.evidence_manifest_key,
-        "capability_id": artifact.capability.id,
-        "evidence_manifest": str(result["evidence_manifest"]),
-        "model": artifact.provenance.model,
-        "run_id": str(result["run_id"]),
-        "status": str(result["status"]),
-        "version": artifact.capability.version,
-    }
 
 
 def capture_suite(

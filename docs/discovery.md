@@ -164,7 +164,9 @@ all planned outputs validate
 suite finalization applies the risk publication gate
 ```
 
-`TraceArtifactCompiler` is task-independent. It validates symbolic inputs, exactly-once output bindings, stable targets, observed routes, risk ceilings, and verified checkpoints without knowing a page name, output name, or action count. New traces emit schema `1.4`, whose non-empty route policy is matched to the registered application. Rendered-only registrations enforce geometry-free targets; legacy schemas `1.0`–`1.3` remain loadable unchanged. Scenario traces are held by a discovery suite and can contribute observed business outcomes or application failures before publication.
+`TraceArtifactCompiler` is task-independent. It validates symbolic inputs, declared outputs, stable targets, observed routes, risk ceilings, and verified checkpoints without knowing a page name, output name, or action count. An output can be recaptured after a state change; the latest extraction supplies the returned value, while both observations and their checks remain in the trace. This supports identity checks before and after a mutation. `output_equals` compares an extracted state exactly; `identity_matches` compares an output with an invocation input. Neither model prose nor a visible label substitutes for these executed checks.
+
+New traces emit schema `1.4`, whose non-empty route policy is matched to the registered application. Rendered-only registrations enforce geometry-free targets. Scenario traces are held by a discovery suite and can contribute observed business outcomes or application failures before publication.
 
 ## Discovery suites
 

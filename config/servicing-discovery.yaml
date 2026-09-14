@@ -1,5 +1,24 @@
 schema_version: "1.0"
 workflows:
+  transaction_investigation:
+    goal: >-
+      Investigate the transaction identified by transaction_reference in account_id belonging
+      to member_id. Return exactly transaction_reference, account_id, amount, posted_date,
+      description, and posting_status from the actual transaction details. Verify the returned
+      transaction reference and account identity against the supplied inputs. Do not change
+      any account or transaction state.
+    application_family: northstar_member_service
+    tenant: harbor
+    validation_tenants: [summit]
+    entry_point: legacy_servicing
+    inputs:
+      member_id: "12345"
+      account_id: "12345-01"
+      transaction_reference: "POS-80419"
+    expected_capability_id: member.transaction_investigation
+    expected_risk: read_only
+    expected_inputs: [member_id, account_id, transaction_reference]
+    expected_outputs: [transaction_reference, account_id, amount, posted_date, description, posting_status]
   servicing_loan_payoff_quote:
     goal: >-
       In the synthetic servicing workstation, find the member identified by member_id,
@@ -23,3 +42,22 @@ workflows:
     expected_risk: read_only
     expected_inputs: [member_id, payoff_date]
     expected_outputs: [payoff_amount, good_through_date, confirmation_reference]
+  temporary_card_lock:
+    goal: >-
+      Temporarily lock the card identified by card_id belonging to member_id, recording reason
+      as the maintenance reason. Verify the selected card identity before changing its state.
+      Return exactly card_id, lock_status, and confirmation_reference from the completed result.
+      Verify the returned card identity against the supplied card_id and the exact final locked
+      status. This is a reversible temporary lock, not card cancellation or replacement.
+    application_family: northstar_member_service
+    tenant: harbor
+    validation_tenants: [summit]
+    entry_point: legacy_servicing
+    inputs:
+      member_id: "12345"
+      card_id: "12345-D1"
+      reason: "Member requested a temporary precautionary lock"
+    expected_capability_id: member.temporary_card_lock
+    expected_risk: reversible
+    expected_inputs: [member_id, card_id, reason]
+    expected_outputs: [card_id, lock_status, confirmation_reference]

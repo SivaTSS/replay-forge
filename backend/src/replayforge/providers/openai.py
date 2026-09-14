@@ -92,16 +92,18 @@ read_only. Opening a review or confirmation screen without applying its mutation
 read_only. A temporary state change with an explicit visible inverse is reversible; data being
 financial or personal does not by itself make an action sensitive. Target descriptions must name
 only the control or displayed value, not broader data.
-Never click a static displayed value. On a details view, use extract once for each required
+Never click a static displayed value. On a details view, use extract for each required
 output field, then complete only after every required field has been captured. When selecting a
 role_name target, use the exact role and name from actionable_controls and require count one.
 For a relative_text following_value extraction, use the exact anchor from extractable_fields and
 require count one. Extractable field labels are structural names only; their values are omitted.
-For extract actions, use each required output field's preferred_transform exactly. Extract only
-remaining_output_fields, through stable field labels or structural accessors. Never put a displayed
+For extract actions, use each required output field's preferred_transform exactly. Extract declared
+outputs through stable field labels or structural accessors. A later extraction replaces the
+previous binding: use this when identity or state must be checked both before and after a change,
+not to repeat an already verified observation. Never put a displayed
 output value in an extraction locator (including ocr_relative target_text). Use rendered_field_value
-for labeled values. Never extract a field listed in captured_output_fields or any undeclared
-output. Complete when remaining_output_fields is empty and the requested result is verified."""
+for labeled values. Never extract an undeclared output. Complete when remaining_output_fields is
+empty and the requested result is verified from the final state."""
 
 
 _PLAN_INSTRUCTIONS = """Plan a reusable capability from the natural-language goal and initial

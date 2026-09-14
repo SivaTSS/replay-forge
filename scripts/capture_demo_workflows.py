@@ -33,7 +33,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--timeout-seconds", type=int, default=180)
-    parser.add_argument("--spec", type=Path, default=Path("config/demo-discovery.yaml"))
+    parser.add_argument(
+        "--spec", type=Path, required=True, help="Goal-only discovery suite specification"
+    )
     parser.add_argument("--workflow", action="append", help="Workflow key; omit to capture all")
     parser.add_argument("--resume-suite", help="Resume validation for one existing suite ID")
     parser.add_argument("--output-directory", type=Path, default=Path(".local/discovery-captures"))

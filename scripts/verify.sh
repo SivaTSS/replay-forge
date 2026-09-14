@@ -21,7 +21,6 @@ uv run mypy \
   scripts/verify_evidence.py \
   scripts/export_evidence.py \
   scripts/verify_evidence_bundles.py \
-  scripts/capture_discovery_run.py \
   scripts/capture_demo_workflows.py \
   scripts/capture_handoff_run.py \
   scripts/capture_hard_failure_run.py \

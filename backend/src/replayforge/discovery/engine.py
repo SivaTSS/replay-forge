@@ -501,9 +501,8 @@ class DiscoveryEngine:
             if isinstance(proposal.action, SelectAction)
             else None
         )
-        if isinstance(value_source, LiteralValue) and (
-            self._contains_input_literal(request.inputs, str(value_source.value))
-            or (isinstance(value_source.value, str) and value_source.value.isdigit())
+        if isinstance(value_source, LiteralValue) and self._contains_input_literal(
+            request.inputs, str(value_source.value)
         ):
             return self._failure(
                 request,
@@ -526,13 +525,6 @@ class DiscoveryEngine:
                 raise SurfaceError(
                     "output_not_declared",
                     "Extraction output is not declared by the capability contract.",
-                    recoverable=True,
-                    effect_absent=True,
-                )
-            if output_name in outputs:
-                raise SurfaceError(
-                    "output_already_captured",
-                    "Extraction output was already captured in this run.",
                     recoverable=True,
                     effect_absent=True,
                 )
