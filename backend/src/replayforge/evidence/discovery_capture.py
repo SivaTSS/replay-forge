@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,7 @@ def invoke_suite(
     timeout_seconds: int,
     request: SuiteCaptureRequest,
     suite_id: str | None = None,
+    on_scenario: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     suite = (
         _request_json(
@@ -190,6 +192,8 @@ def invoke_suite(
                 timeout_seconds,
             ),
         }
+        if on_scenario is not None:
+            on_scenario(scenario.code, scenario_results[scenario.code])
 
     for tenant in request.validation_tenants:
         suite = _request_json(
@@ -274,7 +278,13 @@ def capture_suite(
     request: SuiteCaptureRequest,
     suite_id: str | None = None,
 ) -> dict[str, str]:
-    response = invoke_suite(base_url, timeout_seconds, request, suite_id)
+    def retain_scenario(code: str, result: dict[str, Any]) -> None:
+        write_new_artifact(
+            artifact_output.with_name(f"{artifact_output.stem}.{code}.yaml"),
+            validate_result(result),
+        )
+
+    response = invoke_suite(base_url, timeout_seconds, request, suite_id, retain_scenario)
     primary = response["primary"]
     result = {
         "status": primary.get("status"),
@@ -304,11 +314,6 @@ def capture_suite(
     if not required_tenants.issubset(supported):
         raise RuntimeError("published artifact omitted a validated tenant")
     write_new_artifact(artifact_output, artifact)
-    for code, scenario in response["scenarios"].items():
-        write_new_artifact(
-            artifact_output.with_name(f"{artifact_output.stem}.{code}.yaml"),
-            validate_result(scenario),
-        )
     return {
         "artifact_content_hash": artifact.provenance.artifact_content_hash or "",
         "artifact_output": str(artifact_output),

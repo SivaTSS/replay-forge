@@ -235,6 +235,37 @@ def test_suite_capture_requires_real_provenance_and_validated_contract(
     assert output.is_file()
 
 
+def test_verified_scenario_is_retained_if_a_later_scenario_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    result = discovery_result()
+    request = SuiteCaptureRequest(
+        goal="Inspect a synthetic record",
+        application_family="warehouse",
+        tenant="example",
+        entry_point="home",
+        inputs={},
+        validation_tenants=(),
+        expected_capability_id="warehouse.inspect",
+        expected_risk="read_only",
+        expected_inputs=(),
+        expected_outputs=("status",),
+    )
+
+    def partially_complete(*args: Any) -> dict[str, Any]:
+        args[4]("verified_case", result)
+        raise RuntimeError("later scenario failed")
+
+    monkeypatch.setattr(discovery_capture, "invoke_suite", partially_complete)
+    output = tmp_path / "suite.yaml"
+    with pytest.raises(RuntimeError, match="later scenario"):
+        capture_suite("http://localhost:8000", 120, output, request)
+    retained = tmp_path / "suite.verified_case.yaml"
+    assert retained.is_file()
+    assert stat.S_IMODE(retained.stat().st_mode) == 0o600
+    assert not output.exists()
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [

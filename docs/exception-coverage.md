@@ -96,8 +96,10 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
 ```
 
 Run `servicing_loan_payoff_quote` and `temporary_card_lock` separately to keep browser/model
-resource use bounded. Capture stops on an unsuccessful discovery or validation. Private capture
-files are not submission evidence: export and verify sanitized bundles using the
+resource use bounded. Capture stops on an unsuccessful discovery or validation. Each successful
+scenario artifact is saved immediately with owner-only permissions, even if a later case fails.
+The primary artifact is saved only after publication. Private capture files are not submission
+evidence: export and verify sanitized bundles using the
 [evidence workflow](verification.md), including actual run IDs and the recording commit.
 
 To extend a committed example without rediscovering its successful path, add
