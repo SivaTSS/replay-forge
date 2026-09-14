@@ -4,6 +4,7 @@ import pytest
 
 from replayforge.capabilities.models import CapabilityArtifact, LocatorBundle
 from replayforge.discovery.privacy import (
+    ArtifactPrivacyError,
     extraction_locator_contains_value,
     validate_artifact_privacy,
 )
@@ -37,6 +38,33 @@ def test_structural_artifact_without_invocation_literals_is_allowed(
     validate_artifact_privacy(
         CapabilityArtifact.model_validate(valid_artifact_data), {"member_id": "12345"}
     )
+
+
+def test_privacy_diagnostic_reports_only_schema_location(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["capability"]["description"] = "Look up Private Person."
+    with pytest.raises(ArtifactPrivacyError) as error:
+        validate_artifact_privacy(
+            CapabilityArtifact.model_validate(valid_artifact_data), {"query": "Private Person"}
+        )
+    assert error.value.source == "invocation"
+    assert error.value.location == "artifact.capability.description"
+    assert "Private Person" not in str(error.value)
+
+
+def test_privacy_diagnostic_does_not_echo_untrusted_dictionary_keys(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    valid_artifact_data["inputs"]["properties"]["private_identifier"] = valid_artifact_data[
+        "inputs"
+    ]["properties"]["member_id"].copy()
+    with pytest.raises(ArtifactPrivacyError) as error:
+        validate_artifact_privacy(
+            CapabilityArtifact.model_validate(valid_artifact_data), {"query": "private_identifier"}
+        )
+    assert error.value.location == "artifact.inputs.properties.*:key"
+    assert "private_identifier" not in str(error.value)
 
 
 @pytest.mark.parametrize("classification", ["financial", "personal"])

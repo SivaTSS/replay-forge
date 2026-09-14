@@ -51,6 +51,7 @@ from replayforge.discovery.models import (
 )
 from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelProviderError
 from replayforge.discovery.privacy import (
+    ArtifactPrivacyError,
     extraction_locator_contains_value,
     target_contains_invocation_literal,
     validate_artifact_privacy,
@@ -231,6 +232,8 @@ class DiscoveryEngine:
                         validate_artifact_privacy(
                             artifact, request.inputs, self.privacy_redactor, outputs
                         )
+                    except ArtifactPrivacyError as error:
+                        return self._failure(request, "artifact_privacy_rejected", str(error))
                     except EvidenceRejectedError:
                         return self._failure(
                             request,

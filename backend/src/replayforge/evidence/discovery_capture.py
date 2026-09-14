@@ -100,6 +100,10 @@ def invoke_suite(
     if primary.get("status") != "success":
         code = primary.get("code")
         suffix = f" ({code})" if isinstance(code, str) else ""
+        # This is the public failure's runtime-owned safe message, never outputs or a draft.
+        message = primary.get("message")
+        if isinstance(message, str):
+            suffix += f": {message}"
         raise RuntimeError(f"model-driven discovery suite did not return success{suffix}")
 
     for tenant in request.validation_tenants:
