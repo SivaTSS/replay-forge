@@ -117,6 +117,21 @@ browser test exposed replay silently changing a value that discovery had preserv
 
 ## Bounds
 
+### Input-dependent targets
+
+`input_text` binds an invocation string to an exact rendered identity, optionally anchoring a
+named control in the same row or column. Both discovery and replay use the same transient resolver;
+the recorded target retains only the symbolic input path. There is no selector interpolation,
+coordinate offset, or bank-specific record lookup. Missing, undeclared, non-string, or forbidden
+bindings stop before grounding. Known invocation literals in proposed targets are rejected before
+execution, with feedback to use a symbolic binding. Structural UI labels still belong in discovered
+artifacts; they are observed interface identity, not a hardcoded runtime procedure.
+
+Unknown invocation data defaults to personal/redacted regardless of field name. A suffix such as
+`_id` does not establish a privacy classification or justify retaining a weaker representation.
+
+### Execution limits
+
 The request and engine share domain-defined step and wall-time bounds. Repeated observations,
 equivalent proposals, and low confidence trigger intervention. The
 [model policy](../config/model-policy.yaml) caps calls, tokens, time, frame bytes, and cost;

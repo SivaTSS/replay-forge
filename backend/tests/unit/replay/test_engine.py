@@ -10,6 +10,8 @@ from replayforge.capabilities.models import (
     AllCondition,
     CapabilityArtifact,
     Condition,
+    InputTextCandidate,
+    InputValue,
     LocatorBundle,
     OutputValidCondition,
     RouteCondition,
@@ -291,6 +293,38 @@ def test_extraction_transforms_are_canonical() -> None:
     assert ReplayEngine._transform(" Savings ", "lowercase") == "savings"
     assert ReplayEngine._transform(" $1,420.57 ", "decimal") == "1420.57"
     assert ReplayEngine._transform(" unchanged ", "text") == " unchanged "
+
+
+@pytest.mark.parametrize("identifier", ["12345", "54321"])
+def test_replay_binds_record_identity_from_each_invocation(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch, identifier: str
+) -> None:
+    symbolic = LocatorBundle(
+        description="Requested record",
+        visual_candidates=(
+            InputTextCandidate(
+                strategy="input_text", value=InputValue(source="input", path="member_id")
+            ),
+        ),
+    )
+    valid_artifact_data["steps"][1]["target"] = symbolic.model_dump(mode="json")
+    targets: list[LocatorBundle] = []
+    original = FakeSurfaceSession.resolve
+
+    def resolve(session: FakeSurfaceSession, target: object, timeout_ms: int) -> ResolvedTarget:
+        assert isinstance(target, LocatorBundle)
+        targets.append(target)
+        return original(session, target, timeout_ms)
+
+    monkeypatch.setattr(FakeSurfaceSession, "resolve", resolve)
+    engine, _, _ = build_engine(FakeSurfaceSession())
+    request = request_for(valid_artifact_data)
+    from dataclasses import replace
+
+    result = engine.execute(replace(request, inputs={"member_id": identifier}))
+    assert isinstance(result, SuccessResult)
+    assert f'"value":"{identifier}"' in targets[1].model_dump_json()
+    assert request.artifact.steps[1].target == symbolic
 
 
 @pytest.mark.parametrize("kind", ["assert", "wait_for", "checkpoint"])

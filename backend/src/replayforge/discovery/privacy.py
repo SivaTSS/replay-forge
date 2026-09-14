@@ -25,6 +25,24 @@ _PERSONAL_PATTERNS = (
 )
 
 
+def target_contains_invocation_literal(target: LocatorBundle, inputs: dict[str, Any]) -> bool:
+    """Known invocation strings cannot become a selector or target description."""
+    content = target.model_dump_json().casefold()
+
+    def contains(value: object) -> bool:
+        if isinstance(value, dict):
+            return any(contains(item) for item in value.values())
+        if isinstance(value, list):
+            return any(contains(item) for item in value)
+        return (
+            isinstance(value, str)
+            and len(value.strip()) >= 4
+            and json.dumps(value, ensure_ascii=False)[1:-1].casefold() in content
+        )
+
+    return contains(inputs)
+
+
 def validate_artifact_privacy(
     artifact: CapabilityArtifact,
     inputs: dict[str, Any],

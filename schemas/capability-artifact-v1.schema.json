@@ -898,6 +898,57 @@
       "title": "ImageAnchorCandidate",
       "type": "object"
     },
+    "InputTextCandidate": {
+      "additionalProperties": false,
+      "description": "A runtime-bound identity, optionally anchoring a nearby named control.",
+      "properties": {
+        "relation": {
+          "anyOf": [
+            {
+              "enum": [
+                "right_of",
+                "below",
+                "same_row"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relation"
+        },
+        "strategy": {
+          "const": "input_text",
+          "title": "Strategy",
+          "type": "string"
+        },
+        "target_text": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Text"
+        },
+        "value": {
+          "$ref": "#/$defs/InputValue"
+        }
+      },
+      "required": [
+        "strategy",
+        "value"
+      ],
+      "title": "InputTextCandidate",
+      "type": "object"
+    },
     "InputValue": {
       "additionalProperties": false,
       "properties": {
@@ -1065,6 +1116,7 @@
             "discriminator": {
               "mapping": {
                 "image_anchor": "#/$defs/ImageAnchorCandidate",
+                "input_text": "#/$defs/InputTextCandidate",
                 "ocr_relative": "#/$defs/OcrRelativeCandidate",
                 "ocr_text": "#/$defs/OcrTextCandidate",
                 "rendered_field_value": "#/$defs/RenderedFieldValueCandidate",
@@ -1075,6 +1127,9 @@
               "propertyName": "strategy"
             },
             "oneOf": [
+              {
+                "$ref": "#/$defs/InputTextCandidate"
+              },
               {
                 "$ref": "#/$defs/OcrTextCandidate"
               },

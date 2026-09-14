@@ -21,6 +21,7 @@ from replayforge.capabilities.models import (
     TypeAction,
     WaitForAction,
 )
+from replayforge.capabilities.targeting import bind_target_inputs, target_input_paths
 from replayforge.capabilities.transforms import transform_extracted_text
 from replayforge.capabilities.values import (
     ContractValidationError,
@@ -51,6 +52,7 @@ from replayforge.discovery.models import (
 from replayforge.discovery.ports import ArtifactCompiler, ModelProvider, ModelProviderError
 from replayforge.discovery.privacy import (
     extraction_locator_contains_value,
+    target_contains_invocation_literal,
     validate_artifact_privacy,
 )
 from replayforge.evidence.redaction import StructuredRedactor
@@ -320,6 +322,12 @@ class DiscoveryEngine:
                             "unique; repeating this locator will not resolve the ambiguity. "
                             "Escalate if no supported locator can distinguish the control."
                         )
+                    elif error.code == "literal_input_target":
+                        history.append(
+                            "Previous proposal was not executed: invocation data appeared in its "
+                            "target. Use input_text with the relevant symbolic input path; "
+                            "optionally add the observed control text and its row/column relation."
+                        )
                     elif error.code == "extraction_locator_value_bound":
                         history.append(
                             "Previous extraction was rejected and its output was not bound: "
@@ -528,8 +536,39 @@ class DiscoveryEngine:
                     recoverable=True,
                     effect_absent=True,
                 )
-        target = session.resolve(proposal.target, 10_000) if proposal.target else None
-        stable_target = session.capture_locator(target) if target else None
+        if proposal.target and target_contains_invocation_literal(proposal.target, request.inputs):
+            raise SurfaceError(
+                "literal_input_target",
+                "Use an input_text symbolic binding for invocation-dependent record identity.",
+                recoverable=True,
+                effect_absent=True,
+            )
+        try:
+            bound_target = (
+                bind_target_inputs(
+                    proposal.target,
+                    request.inputs,
+                    input_contract,
+                    effective_policy.forbidden_field_classes,
+                )
+                if proposal.target
+                else None
+            )
+        except ContractValidationError as error:
+            raise SurfaceError(
+                error.code,
+                "Target input binding is unavailable or forbidden.",
+                recoverable=error.code != "target_input_forbidden",
+                effect_absent=True,
+            ) from error
+        target = session.resolve(bound_target, 10_000) if bound_target else None
+        stable_target = (
+            proposal.target
+            if proposal.target and target_input_paths(proposal.target)
+            else session.capture_locator(target)
+            if target
+            else None
+        )
         decision = self.policy_evaluator.evaluate(
             effective_policy,
             ActionContext(

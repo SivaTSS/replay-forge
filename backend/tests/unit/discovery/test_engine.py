@@ -12,6 +12,7 @@ from replayforge.capabilities.models import (
     Condition,
     ExtractAction,
     IdentityMatchesCondition,
+    InputTextCandidate,
     InputValue,
     LiteralValue,
     LocatorBundle,
@@ -201,6 +202,78 @@ def test_planned_input_contract_is_checked_before_any_action(
     assert provider.calls == []
     assert session.executed_targets == []
     assert session.closed
+
+
+def test_discovery_grounds_bound_identity_but_records_only_symbolic_target(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    symbolic = LocatorBundle(
+        description="Requested record action",
+        visual_candidates=(
+            InputTextCandidate(
+                strategy="input_text",
+                value=InputValue(source="input", path="member_id"),
+                target_text="Open",
+                relation="same_row",
+            ),
+        ),
+    )
+    targets: list[LocatorBundle] = []
+    original = FakeSurfaceSession.resolve
+
+    def resolve(session: FakeSurfaceSession, target: object, timeout_ms: int) -> ResolvedTarget:
+        assert isinstance(target, LocatorBundle)
+        targets.append(target)
+        return original(session, target, timeout_ms)
+
+    monkeypatch.setattr(FakeSurfaceSession, "resolve", resolve)
+    provider = QueueModelProvider(
+        [
+            ActProposal(
+                kind="act",
+                action=artifact.steps[1].action,
+                target=symbolic,
+                rationale="Select requested record",
+                expected_effect="Record details",
+                declared_risk=Risk.READ_ONLY,
+                confidence=1,
+            ),
+            ActProposal(
+                kind="act",
+                action=artifact.steps[2].action,
+                target=artifact.steps[2].target,
+                rationale="Read result",
+                expected_effect="Output bound",
+                declared_risk=Risk.READ_ONLY,
+                confidence=1,
+            ),
+            CompleteProposal(kind="complete", rationale="Verified"),
+        ]
+    )
+    literal = LocatorBundle.model_validate(
+        {
+            "description": "Requested record",
+            "visual_candidates": [{"strategy": "rendered_text", "value": "12345"}],
+        }
+    )
+    provider.proposals.insert(0, provider.proposals[0].model_copy(update={"target": literal}))
+    engine, compiler = build_discovery(FakeSurfaceSession(), provider, artifact)
+    draft = CapabilityDraftSpec(
+        operation_slug="read_value",
+        name="Read",
+        description="Read value",
+        inputs=artifact.inputs,
+        outputs=artifact.outputs,
+        risk=Risk.READ_ONLY,
+    )
+    engine = replace(engine, contract_planner=lambda context: draft)
+    assert isinstance(engine.execute(make_request()), DiscoverySuccess)
+    assert '"anchor":"12345"' in targets[0].model_dump_json()
+    assert compiler.calls[0][0].target == symbolic
+    assert len(targets) == 2
+    assert len(compiler.calls[0]) == 2
+    assert "12345" not in str(provider.calls[-1].action_history)
 
 
 @pytest.mark.parametrize("nested", [False, True])

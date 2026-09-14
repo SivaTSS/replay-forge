@@ -234,6 +234,16 @@ def test_provider_wire_schema_is_minimal_and_uses_supported_union_shape() -> Non
     }.issubset(schema["$defs"])
 
 
+def test_unknown_input_privacy_does_not_depend_on_field_names() -> None:
+    from replayforge.providers.openai import _input_contract
+
+    contract = _input_contract({"employee_id": "A-82", "shipment": "BOX-91", "label": "Private"})
+    assert all(
+        field.data_classification.value == "personal" for field in contract.properties.values()
+    )
+    assert all(field.persistence.value == "redacted" for field in contract.properties.values())
+
+
 def test_provider_plan_requires_text_output_fields() -> None:
     with pytest.raises(ValidationError, match="string"):
         ProviderOutputField(

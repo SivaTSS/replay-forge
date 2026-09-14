@@ -24,6 +24,7 @@ from replayforge.capabilities.models import (
     TypeAction,
     WaitForAction,
 )
+from replayforge.capabilities.targeting import bind_target_inputs
 from replayforge.capabilities.transforms import transform_extracted_text
 from replayforge.capabilities.values import (
     ContractValidationError,
@@ -340,7 +341,24 @@ class ReplayEngine:
                         session=session,
                     )
             observation = session.observe()
-            target = session.resolve(step.target, step.timeout_ms) if step.target else None
+            try:
+                bound_target = (
+                    bind_target_inputs(
+                        step.target,
+                        inputs,
+                        request.artifact.inputs,
+                        self.effective_policy.forbidden_field_classes,
+                    )
+                    if step.target
+                    else None
+                )
+            except ContractValidationError as error:
+                raise SurfaceError(
+                    error.code,
+                    "Target input binding is unavailable or forbidden.",
+                    effect_absent=True,
+                ) from error
+            target = session.resolve(bound_target, step.timeout_ms) if bound_target else None
             source = (
                 step.action.value
                 if isinstance(step.action, TypeAction)

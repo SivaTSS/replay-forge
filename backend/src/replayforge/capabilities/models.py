@@ -369,6 +369,21 @@ class ImageAnchorCandidate(ArtifactModel):
         return self
 
 
+class InputTextCandidate(ArtifactModel):
+    """A runtime-bound identity, optionally anchoring a nearby named control."""
+
+    strategy: Literal["input_text"]
+    value: InputValue
+    target_text: str | None = Field(default=None, min_length=1, max_length=200)
+    relation: Literal["right_of", "below", "same_row"] | None = None
+
+    @model_validator(mode="after")
+    def require_complete_relation(self) -> Self:
+        if (self.target_text is None) != (self.relation is None):
+            raise ValueError("an input-relative target requires both target_text and relation")
+        return self
+
+
 class RenderedTextCandidate(ArtifactModel):
     """Semantic text target resolved from the current rendered frame."""
 
@@ -405,7 +420,8 @@ class RenderedGroupImageCandidate(ArtifactModel):
 
 
 VisualLocatorCandidate = Annotated[
-    OcrTextCandidate
+    InputTextCandidate
+    | OcrTextCandidate
     | OcrRelativeCandidate
     | ImageAnchorCandidate
     | RenderedTextCandidate
@@ -905,6 +921,7 @@ def _validate_condition_references(
 
 
 _GEOMETRY_FREE_CANDIDATE_TYPES = (
+    InputTextCandidate,
     RenderedTextCandidate,
     RenderedLabeledControlCandidate,
     RenderedFieldValueCandidate,
@@ -1068,6 +1085,12 @@ class CapabilityArtifact(ArtifactModel):
             if not set(failure.allowed_after_steps) <= all_step_id_set:
                 raise ValueError(f"application failure {failure.code} references an unknown step")
         for step in (*self.steps, *recovery_steps):
+            if step.target is not None:
+                for candidate in step.target.visual_candidates:
+                    if isinstance(candidate, InputTextCandidate) and not _contract_has_path(
+                        self.inputs, candidate.value.path
+                    ):
+                        raise ValueError("target references an unknown input")
             is_recovery_step = step.id not in main_step_ids
             if step.action.kind not in self.policy.allowed_action_types:
                 raise ValueError(f"step {step.id} uses a disallowed action type")

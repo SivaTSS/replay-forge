@@ -91,6 +91,7 @@ class TraceArtifactCompiler:
             all(
                 candidate.strategy
                 in {
+                    "input_text",
                     "rendered_text",
                     "rendered_labeled_control",
                     "rendered_field_value",

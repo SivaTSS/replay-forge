@@ -13,6 +13,7 @@ from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from replayforge.capabilities.models import (
+    InputTextCandidate,
     InputValue,
     JsonValueType,
     KeyboardKey,
@@ -44,6 +45,11 @@ from replayforge.providers.policy import ModelPolicy
 logger = logging.getLogger(__name__)
 
 _INSTRUCTIONS = """You select exactly one safe next step for UI workflow discovery.
+Discover the procedure from the goal and current surface; no task-specific route is preprogrammed.
+To select a record identified by a supplied input, use an input_text candidate with its symbolic
+value binding. To select an action in that record's row, also specify its observed target_text
+and relation. Never copy the displayed record identity into a literal locator. These bindings
+match exact text; they are not CSS, regular expressions, coordinates, or executable templates.
 Return only the provided structured proposal. Use symbolic input paths, never literal customer
 values. Supplied input values are omitted from this text context. Never assume a prefilled field
 matches an invocation input. When the goal uses an input as a form value, type or select its
@@ -303,7 +309,8 @@ class ProviderLocatorBundleBase(ProviderModel):
 
 class ProviderClickLocatorBundle(ProviderLocatorBundleBase):
     visual_candidates: tuple[
-        ProviderOcrTextCandidate
+        InputTextCandidate
+        | ProviderOcrTextCandidate
         | ProviderOcrRelativeCandidate
         | ProviderRenderedTextCandidate
         | ProviderRenderedGroupImageCandidate,
@@ -453,15 +460,11 @@ def _input_contract(inputs: dict[str, Any]) -> ObjectContract:
             value_type = JsonValueType.STRING
         else:
             raise ValueError("discovery inputs must be local primitive values")
-        classification = (
-            DataClassification.CUSTOMER_IDENTIFIER
-            if name.endswith("_id") or name == "id"
-            else DataClassification.PERSONAL
-        )
         properties[name] = ValueSchema(
             type=value_type,
             description=f"Invocation value for {name.replace('_', ' ')}.",
-            data_classification=classification,
+            # Names do not establish whether data is safe. Unknown invocation data is private.
+            data_classification=DataClassification.PERSONAL,
             persistence=PersistenceMode.REDACTED,
         )
     return ObjectContract(required=tuple(properties), properties=properties)
