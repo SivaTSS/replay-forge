@@ -134,7 +134,8 @@ flowchart TB
 
 `ProviderContext` and `PlanningContext` are transient and may contain the goal, synthetic inputs,
 and an unmasked live PNG. These authorized discovery frames are distinct from masked evidence
-frames; they are not retained locally. A provider response is only a proposal. It becomes a recording
+frames; they are not written to local evidence. Managed viewing retains only the latest discovery
+frame in memory. A provider response is only a proposal. It becomes a recording
 after policy allows it, the adapter executes it, and deterministic postconditions pass.
 
 `DiscoverySuccess` binds a typed run ID to that run's evidence manifest. An extension of a

@@ -26,6 +26,23 @@ credentials or artifact modifications:
 These recordings used source revision `a462cdf`. Their synthetic invocation data and expected
 results live in [the replay specification](../config/replay-evidence.yaml), not in the runtime.
 
+### Read a failed run
+
+The [failed replay's events](replay-servicing-missing-record/events.jsonl) show permitted search
+input and search submission, then `replay_failed` at the recorded Open action. Its
+[result](replay-servicing-missing-record/result.json) reports `target_absent`; the matching
+[artifact](replay-servicing-missing-record/artifact.yaml) identifies the expected target. The
+manifest binds the fully masked failure PNG and every structured record.
+
+This proves that replay stopped when it could not establish the target. It does **not** prove
+that no member exists: that requires a positively observed business-outcome detector, as in the
+newer scenario bundles. `recoverable: true` classifies the error; it does not promise another
+attempt, an open human session, or successful recovery. The masked PNG cannot reconstruct the
+failed page, and retained logs omit raw expected/observed values. These
+[diagnostic limits](../docs/requirements.md#remaining-concerns) remain explicit.
+
+### Expanded scenario proof
+
 Payoff also has five genuine scenario-discovery bundles and twelve model-free validation bundles
 covering normal completion, two negative outcomes, two application failures, and notice recovery
 on both tenants. See the [complete linked matrix](../docs/verification.md#scenario-matrix).

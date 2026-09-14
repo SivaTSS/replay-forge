@@ -185,6 +185,7 @@ accepted with each choice, not an unimplemented feature presented as delivered.
 | Current-frame visual grounding before DOM | [Targeting decisions](capability-and-replay.md#targeting-decision) | OCR and segmentation have bounded applicability; ambiguous targets stop |
 | Separate model planning from replay | [Discovery decisions](discovery.md#provider-decision) | No model fallback to repair unseen production drift |
 | Explicit checkpoints and effect-absent retries | [Replay semantics](capability-and-replay.md#error-semantics) | Correctness is limited to declared checks; uncertain effects cannot be retried |
+| Observed branch markers and exact replay validation | [Exception decisions](exception-coverage.md#decisions-that-keep-this-general) | Each scenario needs a genuine observed trace; happy-path success cannot validate recovery |
 | Strict models and detached repository snapshots | [Model decisions](data-models.md#decisions) | Nested mappings require copying; frozen objects alone are insufficient |
 | Registration plus measured tenant validation | [Compatibility choices](heterogeneity-and-compatibility.md#version-changes-and-specialization) | New apps need registration; unseen vendor releases are not automatically certified |
 | Layered authority and centrally bounded work | [Constraint decisions](constraints-and-policy.md#decisions) | Callers cannot expand budgets or permissions for convenience |
@@ -192,6 +193,10 @@ accepted with each choice, not an unimplemented feature presented as delivered.
 | Redaction before storage and local metrics | [Data exposure](safety-and-handoff.md#data-exposure-boundaries) | Masked evidence intentionally loses visual detail |
 | Files for durable objects; memory for live state | [Durability](data-models.md#durability) | Published artifacts survive restart; active work does not |
 | Unit fakes, real browsers, historical live evidence | [Testing decisions](verification.md#testing-decisions) | Historical model runs prove their recorded execution, not every later commit |
+| Read-only replay history and separate control authority | [Viewer decisions](live-viewing.md#decisions) | Screens expire; viewing a historical frame never authorizes input |
+
+Decisions explain intent; the [remaining-concern register](requirements.md#remaining-concerns)
+records where implemented routing or diagnostics still falls short of the broader requirement.
 
 ### Architecture decisions
 

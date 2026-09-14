@@ -2,191 +2,129 @@
 
 ## 1. Architecture
 
-ReplayForge turns a natural-language goal into a verified UI recording, publishes it as a typed
-capability, and executes later invocations without model decisions. The real target is one synthetic
-bank servicing workstation with transaction investigation, dated loan payoff quoting, and temporary card
-locking. Its controls and values are painted on a canvas.
-
-The [single staff workstation](docs/demo-bank.md) also supports connected balances, transfers,
-holds, and service cases. Genuine discoveries cover transaction research, payoff
-quotation, and card locking on this UI; each current capability passes automatic Harbor/Summit replay validation.
-Other functions have application tests, not published automation capabilities.
+ReplayForge learns a UI task once, saves a typed capability, and replays it without model
+decisions. One synthetic bank-staff workstation provides transaction investigation, dated payoff
+quoting, and temporary card locking. Its dense canvas surface exposes no task controls through
+the DOM and no task-completion API.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
-flowchart TB
-    G([Goal and inputs]) --> D[Model discovery]
-    D --> A[(Typed capability)]
-    A --> R[Deterministic replay]
-    D --> S[Surface session]
-    R --> S
-    S --> B[Real Chromium UI]
-    R -. pause .-> H[Human control]
-    D -. blocked .-> H
-    H --> S
+flowchart LR
+    D[Model discovery] --> V[Replay validation]
+    V --> A[(Typed capability)]
+    A --> R[Model-free replay]
+    D -. blocked .-> H[Same-session human control]
+    R -. intervention .-> H
 ```
 
-A modular monolith keeps policy, discovery, replay, evidence, and intervention behind typed ports.
-FastAPI composes these modules; separate Next.js applications serve the target and operator console.
-Each browser run has one owner thread, retained across handoff. Structural tests prohibit runtime
-imports from domain modules and model imports from replay.
+A Python/FastAPI monolith unites OCR, typed validation, and execution; ports isolate Playwright,
+OpenAI, and storage. Separate Next.js target/operator UIs preserve boundaries. Owner-thread browsers
+preserve Playwright affinity during handoff. Microservices would add unnecessary coordination.
+Structural tests enforce dependency direction and prohibit model imports in replay.
 
-Microservices and queues would add coordination without improving this slice. Atomic local files
-preserve capabilities, visual assets, and evidence; in-memory repositories own live coordination.
-OpenCV/ONNX computation is bounded and shared OCR calls are serialized to prevent oversubscription
-and mutable-provider races. [Architecture](docs/architecture.md) explains module ownership.
+OpenAI Responses supplies screenshot-based contract planning and one structured action proposal
+at a time. The pinned `gpt-5.6-luna`/`low` profile completed the committed runs; no comparative benchmark is
+claimed. Independent verification replaces unrestricted agent execution.
+The [decision index](docs/architecture.md#critical-decision-index) records alternatives.
 
 ## 2. Artifact schema
 
-The artifact is strict, versioned YAML—not executable generated code or a model transcript.
+The program is strict, versioned YAML, not generated executable code or a model transcript.
 
-| Component | Contract |
+| Contract | Enforced meaning |
 |---|---|
-| Identity and compatibility | Capability ID/version, application family, tenants, surface contract, entry point, landmarks |
-| Inputs and outputs | Closed typed objects, constraints, classifications, nested input references |
-| Program | Ordered actions, unique targets, pre/postconditions, timeouts, finite retries/recoveries |
-| Result semantics | Explicit business outcomes, application failures, final checkpoint |
-| Authority and provenance | Policy ceiling, discovery run, model/compiler versions, evidence key, canonical hash |
+| Identity and compatibility | Immutable ID/version, registered application, supported tenants, surface contract |
+| Inputs and outputs | Closed typed objects, constraints, classifications, symbolic input references |
+| Execution | Ordered actions, unique targets, conditions, finite retries/recoveries, explicit outcomes/failures |
+| Completion and authority | Required-output checkpoint, policy ceiling, discovery provenance, canonical hash |
 
-Pydantic rejects unknown fields and invalid references; the YAML loader rejects duplicate keys.
-Schema 1.4 rejects persistent coordinates and binds provenance evidence to its discovery run.
-Every required output must be extracted and referenced by the checkpoint; runtime validates actual
-output values before success. Registry snapshots isolate nested mutable mappings, while immutable
-file publication prevents replacing an existing version.
+Pydantic rejects extra fields and invalid references; YAML rejects duplicate keys. Schema `1.4`
+rejects persistent target coordinates. Every required output must be extracted and checked.
+Transaction checks account/reference identity, payoff checks the requested date, and card lock
+checks identity before and after mutation plus exact locked status.
 
-Checks are only as strong as the artifact declares. Transaction replay compares both account and
-transaction identities; payoff replay compares the returned date with the input. Card locking
-checks identity and the exact final status. The
-[worked example](docs/capability-and-replay.md#worked-example-temporary-card-lock) states the proof boundary.
-
-Discovery validates supplied inputs against its planned contract before acting and applies the same
-bound-input classification rules as replay, including forbidden parent-object classifications.
-
-YAML was chosen for reviewability, typed models for enforceable semantics, and canonical SHA-256
-for content identity. The generic compiler accepts executed, verified trace steps rather than an
-arbitrary model-written program. The old task-specific compiler has been removed; synthetic contracts remain only in unit fixtures.
-See [Data models](docs/data-models.md) and [Replay contract](docs/capability-and-replay.md).
+The generic compiler accepts executed, verified traces rather than model-written programs.
+Symbolic bindings parameterize inputs. Immutable files and detached snapshots prevent silent
+mutation; SHA-256 identifies content, not authorship. See [data models](docs/data-models.md).
 
 ## 3. Determinism & error handling
 
-Replay validates inputs and registered compatibility, opens an isolated session, checks live
-landmarks, and executes each step under an ownership lease and intersected policy. Targets resolve
-uniquely from the current frame. Click dispatch is not proof of effect: postconditions and the
-business checkpoint establish completion.
+Replay validates inputs and compatibility, opens an isolated browser, checks readiness, then
+resolves, authorizes, executes, and verifies each declared step. Local OCR and current-frame
+label/control relationships are primary; semantic DOM locators are optional. Saved coordinates
+and offsets were rejected because reflow invalidates them. Multiple plausible matches fail
+closed. Determinism means fixed execution rules—not identical outputs despite changed business state.
 
-`assert` checks its condition, `wait_for` polls within the step budget, and `checkpoint` evaluates the
-named condition. Missing or ambiguous targets stop execution. Recovery follows declared steps and
-a fixed resume point. Retries require a named eligible error, remaining attempts, and proof that
-the previous effect is absent; uncertain mutations are never blindly repeated.
+Results distinguish verified `success`, positively observed `business_outcome`, terminal `failure`,
+and live `intervention_required`. Failures carry a stable code, available step/context, and evidence.
 
-| Result | Meaning |
-|---|---|
-| `success` | Checkpoint and typed outputs verified |
-| `business_outcome` | A legitimate negative result, such as no matching member |
-| `failure` | Application, policy, targeting, or verification failure with step/context |
-| `intervention_required` | Automation paused with the live session retained |
-
-Known notices, delayed loads, permission denial, and ambiguity have engine test coverage.
-Payoff `1.0.2` also has genuine discovery and two-tenant replay evidence for two negative outcomes,
-two application failures, and notice recovery followed by verified task completion.
-Card lock `1.0.2` proves six exception/recovery cases; transaction `1.0.3` proves two negative
-outcomes after explicit account selection. Across all three tasks, 13 genuinely discovered
-branches and 32 model-free matrix replays cover each declared case and normal completion on both tenants.
-Open-ended model recovery was rejected because replay must remain reproducible.
+Waits are bounded. Retry requires a named eligible error, remaining attempts, and proof of no
+prior effect. Recovery executes declared corrections and rejoins a fixed step; uncertain mutations
+are not repeated. Thirteen genuinely discovered exception/recovery branches and 32 model-free
+matrix replays cover all declared cases across both tenants. Unknown faults stop; authentication
+expiry has no learned re-login path. Ordinary target failures do not automatically request a human.
+See [fault coverage](docs/requirements.md#runtime-fault-coverage).
 
 ## 4. Heterogeneity & multi-tenant
 
-`SurfaceSession` separates perception/input from program semantics. Playwright supplies browser
-transport; primary targeting uses local OCR, current-frame label/control relationships, and
-content-addressed visual signatures. DOM locators remain optional. Recorded coordinates and
-relative regions were rejected because window resizing and responsive reflow invalidate them.
+`SurfaceSession` owns perception/input; replay owns program semantics. Desktop could reuse PNG
+grounding but needs OS input, window/focus identity, ownership, and policy. Unsupported desktop
+contracts are rejected today.
 
-One artifact runs across Harbor and Summit, which vary typography, branding, row order, and layout.
-The current replay matrix changes the member, task inputs, and viewport on both tenants. Discovery-suite validation adds tenant
-support only after deterministic execution succeeds.
+One artifact serves differently styled/ordered Harbor and Summit; tests change inputs and viewport.
+Registration supplies entry points, readiness, and authority—not task recipes. New tasks need
+discovery, not task code; new apps also need registration and supported controls.
 
-Before replay, application registration must match the artifact's surface contract; schema 1.4 also
-checks base variant and rendered mode. Registered required/forbidden landmarks catch declared entry-state
-incompatibility. The discovery observation hash remains provenance, not a literal drift gate:
-legitimate values and branding change the pixels. Descriptive discovery landmarks may also contain
-tenant branding; only explicit registration readiness conditions apply across tenants.
-
-A vendor change that preserves semantics may reuse the artifact after validation. Changed workflow
-or output meaning requires a new immutable version. Future narrow overrides would bind the base
-artifact hash, tenant, and vendor version; they must not widen authority. Independent tenant origins,
-automated release detection, and an overlay repository are not implemented.
-
-Desktop can reuse PNG grounding but needs OS capture/input, focus/window identity, and desktop
-policy semantics. Registration rejects unsupported desktop contracts today.
-[Compatibility](docs/heterogeneity-and-compatibility.md) records the admission rules and extension seams.
+Compatibility and landmarks catch declared mismatch. Screenshot hashes are provenance, not drift
+gates: harmless data changes alter pixels. Validate upgrades before reuse; changed semantics need
+a new version. Future overlays would bind base hash, tenant, and vendor version without widening
+policy. Independent tenant origins and fleet rollout remain
+[unimplemented](docs/heterogeneity-and-compatibility.md).
 
 ## 5. Escalation & handoff
 
-Repeated state/actions, low confidence, explicit escalation, and sensitive policy decisions route
-interventions carrying run, task, step, surface, and pause context.
+Discovery detects repeated state/actions, low confidence, explicit escalation, and unresolved
+safety boundaries. Replay pauses for sensitive policy decisions or adapter-recommended intervention;
+other unrecovered errors return failure. Routing carries task, step, surface, and reason.
 
-The operator claims the same retained Chromium context using an exclusive expiring lease.
-Intervention and lease transitions commit atomically under paired compare-and-swap checks.
-Human input carries the current lease version, frame sequence, viewport, and next client sequence.
-Stale input is rejected; accepted input invalidates the frame. Evidence records actions and text
-length, never manual text.
+The operator claims the retained browser using an exclusive expiring lease. Paired compare-and-swap
+updates keep intervention state and ownership atomic. Input binds lease version, current frame,
+viewport, and command sequence; stale input is rejected. Human actions are audited without typed text.
 
-Resume validates fresh location and the interrupted step's effect or a declared business outcome.
-An unchanged state cannot resume. Successful validation restores automation ownership and continues
-the remaining steps. HTTP frame polling provides the required real handoff with modest transport
-complexity. Blocked discovery can also pause and resume its original loop in the same session;
-accepted human input and changed, allowlisted state are required. Used model/step budgets remain
-spent, while human wait is excluded. Outputs are re-extracted after correction.
-The execution console launches either mode, displays actual frames and a sanitized timeline,
-and provides bounded in-memory Back/Next/Live inspection for replay. Historical screens never
-authorize input. Discovery validation and publication remain automatic, without human approval.
+Replay resume checks fresh state and the interrupted effect or declared outcome. Discovery resume
+requires accepted human input and changed allowed state, preserves consumed budgets, and invalidates
+outputs. Human actions are not fabricated automation steps: fresh unattended replay still gates
+publication and can reject a manually dependent draft. No post-discovery approval exists.
 
-Human actions are audit records, not fabricated automation steps. Direct discovery returns a
-draft; only fresh deterministic suite validation can publish it. An essential unrecorded manual
-operation can therefore cause validation to fail, rather than produce an unreplayable capability.
+HTTP polling provides frames and read-only history without video infrastructure. Browser handoff
+tests use explicit blocking/policy fixtures, not model discoveries.
 
 ## 6. Safety
 
-Origin, normalized route, action, field classification, and independently inferred risk constrain
-automation. Policy layers intersect allowlists, union forbidden classes, and take the lowest risk
-ceiling. Irreversible automation is denied; sensitive replay pauses for human operation. Reversible
-discovery requires deterministic suite validation before publication. No human approval state is
-inserted after discovery.
+Policy intersects origin/route/action allowlists, unions forbidden classifications, and takes the
+lowest risk ceiling. Independently inferred risk can raise declarations. Irreversible automation
+is denied; sensitive work pauses. Registration prevents arbitrary caller-selected navigation.
 
-Evidence is redacted before storage. Nested output classifications are preserved; credentials,
-personal values, and financial data are removed or masked. New screenshot evidence masks the full
-viewport; fixture selectors cannot establish that other pixels are public. New image-signature
-capture is disabled by default, with a loopback-only synthetic opt-in. Live operator frames and authorized
-discovery frames are transient. Provider requests use `store=false`; local Langfuse records model-call
-metrics.
+Evidence uses restricted fields, keyed pseudonyms, and classification-based redaction before
+storage. Known-value artifact guards reject captured private literals. Failure screenshots are
+fully masked; new image-signature capture defaults off. This sacrifices visual post-mortem detail:
+the richer attachment proves capture, not what the failed screen displayed.
 
-Hash-linked, closed-set manifests detect changed or incomplete evidence, not signer authenticity.
-This is a local trusted-operator system: caller labels are not authentication, human control is not a
-semantic financial authorization system, and transport/network isolation is not a browser sandbox.
-Production requires authenticated operators, tenant authorization, retention enforcement, and
-deployment controls. [Safety and handoff](docs/safety-and-handoff.md) defines these boundaries.
+Authorized discovery sends transient synthetic screenshots to OpenAI with `store=false`; that is
+not Zero Data Retention. Langfuse stores local call metrics, not prompts or frames.
+[Data boundaries](docs/safety-and-handoff.md#data-exposure-boundaries) distinguish provider, caller,
+viewer, and durable evidence. Privacy guards are not universal PII detection. Local operator labels
+are not authentication, and browser routing policy is not network isolation.
 
 ## 7. Cuts
 
-Depth is concentrated in the artifact, replay/error semantics, and actual control transfer, as the
-assignment requests. Genuine primary and scenario bundles preserve the current UI's provenance. Tests exercise model-free
-reuse and real same-session handoff; policy-injection fixtures are explicitly separate from discovery.
-All 13 declared exception/recovery branches have genuine discovery and complete two-tenant replay
-proof. This does not claim exhaustive coverage of every possible application failure: unrecognized
-states still fail closed or pause, and engine fixtures remain distinct from discovery evidence.
-See the [proof matrix](docs/verification.md#scenario-matrix).
+Files preserve capabilities/evidence; live coordination remains in memory. PostgreSQL, S3,
+distributed workers, production authentication, desktop, durable video, and model replay fallback
+are cut to focus on the local execution contract. Restart loses active work, not saved programs.
 
-| Deliberate cut | Reason / next condition |
-|---|---|
-| PostgreSQL and distributed workers | Saved capabilities need durable files; multi-process coordination would justify a transactional repository |
-| S3 | Local durable evidence satisfies this single-node submission |
-| Durable screen recordings and continuous video | Step-wise live viewing and temporary replay inspection avoid a persistent raw-screen archive |
-| Native desktop adapter | Typed surface seam exists; OS transport requires separate implementation |
-| Human approval after discovery | Successful publication is gated by fresh replay, not an additional reviewer |
-| Tenant overlay engine | Shared-artifact validation proves reuse; specialization design is documented |
-| LLM replay fallback | Finite deterministic recovery preserves the production model boundary |
+The two stretch goals are typed invocation and cross-tenant reuse. Next priorities are broader
+fault handoff and privacy-safe diagnostics. Real-data deployment also needs authentication,
+tenant authorization, provider data controls, and retention enforcement.
 
-`bash scripts/verify.sh` checks documentation, formatting, typing, evidence integrity, sequential frontend builds,
-and unit/Chromium tests with a 90% configured domain-coverage gate. Setup, genuine discovery, and
-invocation commands are in [README](README.md); the full traceability matrix is in
-[Requirements](docs/requirements.md).
+[README](README.md) gives exact commands; [verification](docs/verification.md#verified-snapshot)
+records measured proof. [Requirements](docs/requirements.md) maps the PDF to delivery and remaining concerns.

@@ -9,7 +9,8 @@ flowchart LR
     D --> A[(Versioned YAML capability)]
     A --> R[Deterministic replay]
     R --> X([Typed result + redacted evidence])
-    R -. sensitive or stuck .-> H([Same-session human handoff])
+    R -. intervention boundary .-> H([Same-session human handoff])
+    D -. blocked .-> H
 ```
 
 There is one demo application: a [dated servicing workstation](docs/demo-bank.md) with member
@@ -27,9 +28,9 @@ discovery and two-tenant replay proof in the [verification matrix](docs/verifica
 
 | Path | Model? | Surface | Result |
 |---|---:|---|---|
-| Discovery | Yes | Screenshot + local OCR tokens; compact DOM facts when available | Publishes an immutable artifact |
+| Discovery | Yes | Screenshot + local OCR tokens; compact DOM facts when available | Verified draft; suite replay validation gates publication |
 | Replay | **No** | Rendered pixels first; optional semantic DOM candidates second | Success, business outcome, failure, or intervention |
-| Handoff | No | The same retained Chromium context | Operator input followed by deterministic replay continuation |
+| Handoff | No during manual control | The same retained Chromium context | Verified resume of replay or the blocked discovery loop |
 
 The canonical flow never queries a DOM control: the target exposes one canvas, and all typing, clicking, extraction, and verification are grounded from rendered pixels. Playwright supplies the browser, CSS-pixel screenshot, mouse, and keyboard—not element targeting. See [Architecture](docs/architecture.md#surface-reality).
 
@@ -147,7 +148,22 @@ reports the actual published versions. Supply that `version` in the invocation b
 to pin a run, or omit it to resolve the latest publication. The committed discoveries can also be
 replayed with these commands without configuring model credentials or starting Langfuse.
 
-The reviewed [model policy](config/model-policy.yaml) fixes provider, model, reasoning effort, token/call limits, timeout, frame size, and cost ceiling. Requests cannot override it. Provider calls use strict structured output, no tools, and `store=false`.
+The reviewed [model policy](config/model-policy.yaml) fixes provider, model, reasoning effort,
+token/call limits, timeout, frame size, and an output-token cost ceiling—not a total billing cap.
+Requests cannot override it. Provider calls use strict structured output, no tools, and `store=false`.
+
+## Inspect without live services
+
+After dependency setup, these checks need no API key, Langfuse, target server, or operator console:
+
+```bash
+uv run python scripts/verify_evidence_bundles.py evidence --require-submission
+uv run pytest backend/tests/unit -q
+```
+
+This verifies saved proof and isolated contracts; it does not simulate a genuine discovery.
+Actual replay still needs Chromium and the running target. Read the compact
+[design report](REPORT.md), then the [PDF requirement and submission checklist](docs/requirements.md).
 
 ## Verify everything
 

@@ -64,7 +64,9 @@ sequenceDiagram
         E->>S: observe result
         E->>E: record normalized step
     else unresolved risk or uncertainty
-        E->>E: stop with typed blocker and close session
+        E->>E: suspend loop and route intervention
+        Note over E,S: Retain the same browser for leased human correction
+        E->>S: reobserve after validated resume
     else denied
         E->>E: fail closed
     end
@@ -168,7 +170,8 @@ unrelated part identifiers at three scales, and the unchanged failed-run screens
 Named relative targets are resolved across all matching anchors and must identify exactly one
 target. A repeated identity in a search field and a result row need not be ambiguous when only
 the row has a related action. Multiple distinct related actions still fail closed; no nearest,
-first-row, or pixel-offset fallback is used. Region-offset locators still require one anchor.
+first-row, or pixel-offset fallback is used. Transient region locators, when used for opted-in
+signature capture, still require one anchor; they cannot enter a published schema 1.4 artifact.
 When repeated related text includes one visibly bounded control and plain status text, current-frame
 segmentation may select that unique control. Multiple matching controls remain ambiguous; an
 enclosing row alone does not establish which label is actionable.
@@ -196,8 +199,10 @@ Unknown invocation data defaults to personal/redacted regardless of field name. 
 ### Execution limits
 
 The request and engine share domain-defined step and wall-time bounds. Repeated observations,
-equivalent proposals, and low confidence stop discovery without human involvement. The
-[model policy](../config/model-policy.yaml) caps calls, tokens, time, frame bytes, and cost;
+equivalent proposals, and low confidence pause a managed discovery for same-session human correction.
+Without an intervention router, a blocked engine returns failure. Exhausted budgets stop rather
+than reset through handoff. The [model policy](../config/model-policy.yaml) caps calls, output
+tokens, time, frame bytes, and output-token cost;
 requests cannot change the model or enlarge provider budgets. Contract planning consumes one call,
 and the first exhausted request or provider budget stops discovery. Exact values and override
 rules are in [Constraints and policy](constraints-and-policy.md#execution-bounds).
@@ -229,7 +234,7 @@ suite finalization applies the risk publication gate
 
 `TraceArtifactCompiler` is task-independent. It validates symbolic inputs, declared outputs, stable targets, observed routes, risk ceilings, and verified checkpoints without knowing a page name, output name, or action count. An output can be recaptured after a state change; the latest extraction supplies the returned value, while both observations and their checks remain in the trace. This supports identity checks before and after a mutation. `output_equals` compares an extracted state exactly; `identity_matches` compares an output with an invocation input. Neither model prose nor a visible label substitutes for these executed checks.
 
-New traces emit schema `1.4`, whose non-empty route policy is matched to the registered application. Rendered-only registrations enforce geometry-free targets. Scenario traces are held by a discovery suite and can contribute observed business outcomes or application failures before publication.
+New traces emit schema `1.4`, whose non-empty route policy is matched to the registered application. Rendered-only registrations enforce geometry-free targets. Scenario traces are held by a discovery suite and can contribute observed business outcomes, application failures, or bounded recoveries before publication.
 
 ## Discovery suites
 
@@ -341,6 +346,10 @@ guarantee semantic correctness ([OpenAI guidance](https://developers.openai.com/
 | Provider-neutral port + one OpenAI adapter | **Chosen** | Real discovery evidence with replaceable domain boundaries |
 | Remote observability service | Rejected | Would send operational telemetry outside the local environment |
 | Local Langfuse | **Chosen** | Authenticated call metrics remain local; provider credentials never enter it |
+
+Requiring local metrics readiness makes model-call accounting part of discovery admission, rather
+than silently dropping it when observability is unavailable. The accepted cost is another local
+stack and a discovery dependency; replay remains independent of both provider and metrics services.
 
 The selected model and reasoning profile are pinned in the [model policy](../config/model-policy.yaml),
 not chosen by each request. This keeps discovery cost and behavior attributable to a versioned

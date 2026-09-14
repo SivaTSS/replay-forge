@@ -50,11 +50,49 @@ editing learned artifacts, adding coordinates, or relaxing confidence/policy gat
 failed run is not counted as a pass. These are point-in-time results, not exhaustive correctness
 or universal secret-detection guarantees.
 
+Passing this snapshot does not close every PDF concern. The final documentation audit identifies
+[routing and diagnostic limitations](requirements.md#remaining-concerns) separately from test
+results. They require implementation work, not stronger wording in this report.
+
+## Documentation audit
+
+The 2026-09-14 final pass read all ten assignment pages and checked the docs against source,
+configuration, current artifacts, and evidence. Application code, dependencies, schemas, and
+historical run bundles were not changed. The full Chromium/build snapshot above remains tied to
+its original code revision; it is not presented as a new end-to-end run.
+
+Backend unit/API tests were rerun: **862 passed, 90.95% branch-aware domain coverage**. All
+**51 evidence bundles** and **14 tooling tests** passed again. The configured-secret/history scan
+reported no known-value or recognized credential-pattern matches; it is not a universal guarantee.
+The focused Chromium rerun passed **14 tests** covering discovery/replay handoff, failure-image
+retention, the generic DOM/frame adapter, current entry routes, and retired-route rejection. No
+model calls were made, and those tests do not create new genuine discovery evidence.
+
+The report keeps the exact seven headings required by PDF §6 and is approximately **970 words**
+including Markdown/table notation. Chromium printing produced **3 pages on both A4 and US Letter**
+with 20 mm margins, 11-point Arial body text, 1.4 line spacing, and 10-point tables. Markdown has
+no intrinsic page size; other print styles may paginate differently. Temporary PDFs are audit
+outputs, not additional submission files.
+
+All **23 Mermaid diagrams rendered in both light and dark themes** (46 checks), with no text
+extending outside the SVG viewport. The 17-document structural/link gate passed; the evidence
+README's 14 local links were checked separately. These checks do not guarantee identical behavior
+in every Markdown host.
+
+Retained older capability versions are referenced by evidence, restoration commands, and regression
+tests. The savings-named contract under `backend/tests/fixtures` is an active isolated test fixture,
+not a deployed capability. No verified-unused source was identified for removal; deleting these
+objects merely because their names look old would break provenance or tests.
+
+Repository visibility was checked separately: GitHub reports **private**, so public submission
+access remains outstanding. The [submission checklist](requirements.md#submission-checklist)
+also records the unsent email and remaining implementation concerns.
+
 ## What is proved where
 
 | Claim | Executable check | Boundary |
 |---|---|---|
-| Real model discovery | Three bundles below | Screenshots and synthetic data; no scripted discovery |
+| Real model discovery | Primary and scenario bundles below | Three tasks, not three lifetime runs; screenshots and synthetic data, no scripted discovery |
 | Task-independent compilation | [Generic compiler tests](../backend/tests/unit/discovery/test_generic_compiler.py) | New task means goal and input contract, not a task adapter |
 | Model-free reuse | [Replay matrix](../backend/tests/integration/test_visual_portability.py) | Both tenants, changed member/inputs, 1440×900; provider credentials unset |
 | Single deployed UI | [Route tests](../backend/tests/integration/test_demo_routes.py) | Old paths return 404 |

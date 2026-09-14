@@ -68,8 +68,9 @@ them again with application policy.
 
 ## Worked example: temporary card lock
 
-The [current card-lock discovery](../evidence/discovery-servicing-card-lock/manifest.json)
-uses the same servicing UI as the other two capabilities.
+The [current card-lock artifact](../capabilities/member.temporary_card_lock/1.0.2.yaml)
+extends the [original discovery](../evidence/discovery-servicing-card-lock/manifest.json)
+on the same servicing UI as the other two capabilities.
 
 | Stage | Recorded responsibility | Why it matters |
 |---|---|---|
@@ -82,9 +83,11 @@ uses the same servicing UI as the other two capabilities.
 
 “Review” is the target application's confirmation screen, not a human approval stage in discovery.
 The UI exposes an inverse, but discovery does not execute an unlock-and-restore cycle or establish
-transactional rollback. The three current capabilities do not contain application-specific recovery,
-failure, or negative-outcome branches. Those interpreter mechanisms are tested independently;
-they are not falsely attributed to these discoveries.
+transactional rollback. The current card artifact adds three business outcomes, two application
+failures, and a notice recovery. Payoff adds five cases and transaction investigation adds two:
+all 13 have genuine scenario discovery and model-free replay proof on both tenants. The
+[scenario matrix](verification.md#scenario-matrix) links each detector and recovery to its evidence;
+engine-only fault and handoff fixtures remain a separate claim.
 
 ## Targeting
 

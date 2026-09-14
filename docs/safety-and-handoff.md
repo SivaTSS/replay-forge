@@ -85,11 +85,12 @@ An active human lease cannot be stolen. If its heartbeat expires, the claim tran
 
 ## Same-session handoff
 
-The default operator path needs no ID copied from a terminal. The console polls the active replay
+The default operator path needs no ID copied from a terminal. The console polls the active intervention
 inbox and shows safe routing context before control is claimed: capability and version, application
 and tenant, interrupted step, normalized route, trigger, and explanation. Invocation inputs and
-extracted values are absent. The unmasked live viewport is restricted to the current lease holder;
-operator labels are not authentication.
+extracted values are absent. The intervention control viewport is restricted to the current lease
+holder; separately, a viewer-token holder can observe but cannot control the execution. Operator
+labels are not authentication.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -136,6 +137,14 @@ audit evidence, never invented recorded automation. Replay additionally verifies
 step's postcondition or a declared business outcome. Earlier replay screenshots remain read-only;
 return Live before claiming or sending input. Validation replays themselves never request a human.
 
+Routing is narrower than “every failed replay becomes a human session.” The engine supports
+`SurfaceError.intervention_recommended`, but the current browser adapter does not set it on
+ordinary `target_absent`, `target_ambiguous`, or action timeout errors. Those exhaust any permitted
+declared handling and return failure. Sensitive policy boundaries do route to real control transfer.
+A terminal failure has no retained browser to claim; restarting is not same-session resume.
+This [remaining coverage concern](requirements.md#remaining-concerns) is distinct from the working
+discovery and sensitive-replay handoff mechanisms.
+
 ## Stale-input protection
 
 A human input command must match all of:
@@ -175,8 +184,9 @@ different paths, with different recipients and lifetimes.
 | Published capability | Local registry | Symbolic bindings and semantic targets; not the original customer inputs or model transcript |
 | New image signatures | Capability asset store | Runtime capture disabled by default; explicit synthetic-only opt-in requires loopback target origins. Existing curated assets remain readable |
 
-Provider calls set `store=false`; this is a request setting, not a claim that no data crosses the
-provider boundary or a substitute for deployment data policy; see the official
+Provider calls set `store=false`; this is not Zero Data Retention and does not independently
+disable provider abuse-monitoring retention. It is not a claim that no data crosses the provider
+boundary or a substitute for deployment data policy; see the official
 [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
 The implemented demo uses synthetic
 data. Operator labels and API callers are trusted locally; institution-level authentication and
@@ -236,8 +246,8 @@ boundary. Do not point this deployment at real customer records on the strength 
 
 The operator viewport is live and therefore unmasked for the authorized lease holder. Failure and handoff screenshots are masked in memory before persistence.
 
-The current image policy intentionally loses visual diagnostics. Historical committed bundles
-retain their original narrower masks and are not rewritten. Fresh evidence proves frame capture
+The current image policy intentionally loses visual diagnostics. The committed failure bundle
+contains a fully masked screenshot; immutable historical evidence is not rewritten. Fresh evidence proves frame capture
 and event chronology, not what the screen looked like; use the authorized live viewport for that.
 New template/signature capture also defaults off: edge detection can preserve readable text,
 faces, or identifying marks. For explicitly synthetic targets only,
@@ -256,7 +266,7 @@ disabled. Do not enable the flag for real customer records.
 | Screenshot retention | Fixture selectors, OCR masks, full-frame suppression | Full frame | No general proof that unmasked pixels are public; visual diagnostics are sacrificed explicitly |
 | Image signatures | Treat edges as anonymous, permit all crops, restricted capture | Off by default | Edge maps can preserve sensitive content; synthetic opt-in keeps the demo option explicit |
 | Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, form state, and the assignment's required seam |
-| Operator routing | Require an ID from logs, active inbox | Replay inbox + optional direct ID | Makes a paused session discoverable without adding a general run-management UI |
+| Operator routing | Require an ID from logs, active inbox | Discovery/replay inbox + optional direct ID | Makes a paused session discoverable without adding a general run-management UI |
 | Ownership | UI convention, mutex only, versioned lease | Versioned lease + CAS | Makes stale and concurrent commands explicit conflicts |
 | Identity | Pretend login, external identity provider, local label | Local operator label | Keeps the trust boundary honest; real authentication belongs with deployment authorization |
 | Transport | WebSocket/CDP stream, headed browser, HTTP polling | HTTP polling | Minimal real control path; sequence checks compensate for stale frames |

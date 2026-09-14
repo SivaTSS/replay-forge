@@ -8,7 +8,7 @@
 http://127.0.0.1:3000  run launcher and live viewer; /interventions for operator inbox
 http://127.0.0.1:3001  synthetic bank
 http://127.0.0.1:8000  runtime API and /api/docs
-http://127.0.0.1:3100  optional local Langfuse for discovery
+http://127.0.0.1:3100  local Langfuse; required for discovery, unnecessary for replay
 ```
 
 Use Python 3.12, Node.js 22+, `uv`, and pnpm 10.15.1. Exact setup and demo commands are in the root [README](../README.md).
@@ -55,7 +55,7 @@ for launch semantics, replay history, limits, and privacy. Evidence remains insp
 ```json
 {
   "tenant": "harbor",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "inputs": {"member_id": "12345", "payoff_date": "2026-09-20"}
 }
 ```
@@ -68,7 +68,8 @@ business_outcome
   run_id + stable code + redacted details + evidence manifest
 
 failure
-  run_id + stable code + safe message + recoverable + optional step/expected/observed
+  run_id + stable code + safe message + recoverable + evidence manifest
+  + optional step/expected/observed
 
 intervention_required
   run_id + intervention/session context + reason + paused owner

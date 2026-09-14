@@ -19,6 +19,11 @@ where those operations are authorized. Opening the page itself never starts a mo
 Validation replays are unattended: an intervention boundary fails validation without
 creating an operator session or publishing the draft.
 
+Human controls appear only for a live intervention, not for every failed run. Ordinary replay
+locator/time-out failures currently terminate after their permitted handling; the viewer can show
+their last retained frame, but cannot reopen the closed browser. See the
+[routing limit](requirements.md#remaining-concerns).
+
 ## Watching is not controlling
 
 ```mermaid

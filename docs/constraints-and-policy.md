@@ -85,10 +85,16 @@ analysis pixels and 2,000 components, and grounding at ten seconds. The threshol
 `config/vision-policy.yaml` are a reviewed deterministic profile validated by the viewport/DPR
 matrix; they are not claimed as universal computer-vision constants.
 
-OpenCV and ONNX each use one native computation thread. Shared OCR initialization/inference is
-serialized; browser sessions retain their individual owner threads. This prevents host-wide native
-thread pools from multiplying per-run work and consuming the grounding time budget. Frontend builds
+OpenCV uses one native computation thread. ONNX uses the reviewed OCR inference setting
+(`ocr.inference_threads`, currently 2, bounded to 1–4) and one inter-operation thread. Shared OCR
+initialization/inference is serialized; browser sessions retain their individual owner threads.
+This bounds native thread pools instead of multiplying machine-wide pools per run. Frontend builds
 run one application at a time for the same resource-predictability reason.
+
+The model policy bounds **output-token cost**, not total invoiced cost: calls × output-token cap ×
+the checked-in output rate must not exceed three cents. Input/image tokens also incur cost and are
+reported in metrics; no total-dollar admission counter is implemented. Pricing is a dated
+configuration assumption, not a live billing guarantee.
 
 ## Decisions
 
