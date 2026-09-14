@@ -49,6 +49,9 @@ workflows:
       Return exactly card_id, lock_status, and confirmation_reference from the completed result.
       Verify the returned card identity against the supplied card_id and the exact final locked
       status. This is a reversible temporary lock, not card cancellation or replacement.
+      Re-extract card_id from the completed result after the state change; do not return the
+      identity captured before the change. Retain replayable identity comparisons both before
+      the change and after this second extraction, plus an equality check on the final status.
     application_family: northstar_member_service
     tenant: harbor
     validation_tenants: [summit]
