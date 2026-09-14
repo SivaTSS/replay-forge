@@ -540,6 +540,15 @@ def _merge_scenarios(
     for scenario in scenarios:
         if not isinstance(scenario.result, DiscoverySuccess):
             raise ValueError(f"scenario {scenario.code} did not produce verified evidence")
+        source = scenario.result.artifact
+        if (
+            source.capability.id != artifact.capability.id
+            or source.capability.application_family != artifact.capability.application_family
+            or source.compatibility.entry_point != artifact.compatibility.entry_point
+            or source.inputs != artifact.inputs
+            or source.outputs.properties != artifact.outputs.properties
+        ):
+            raise ValueError("scenario evidence does not match the primary task contract")
         observed = scenario.result.branch
         if observed is None:
             raise ValueError("scenario trace lacks an explicit verified branch marker")

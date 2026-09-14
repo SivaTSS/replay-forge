@@ -1,5 +1,6 @@
 """Verify restoration boundaries; loading evidence does not run or simulate discovery."""
 
+from dataclasses import replace
 from pathlib import Path
 from shutil import copytree
 
@@ -9,6 +10,7 @@ from replayforge.capabilities.serialization import load_artifact_yaml
 from replayforge.discovery.models import DiscoverySuccess
 from replayforge.evidence.discovery_capture import ScenarioCaptureRequest
 from replayforge.evidence.scenario_restore import restore_scenario
+from replayforge.runs.discovery_suite import _merge_scenarios
 from tests.unit.runs.test_discovery_suite import service_for
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -69,3 +71,22 @@ def test_restored_suite_still_requires_publication_validation() -> None:
         service.restore_scenarios(suite.suite_id, (scenario,))
     with pytest.raises(ValueError, match="declared disposition"):
         service.finalize(suite.suite_id)
+
+
+def test_matching_lookups_cannot_import_another_tasks_exception() -> None:
+    primary = load_artifact_yaml(
+        (ROOT / "capabilities/member.servicing_loan_payoff_quote/1.0.1.yaml").read_text()
+    )
+    scenario = restore_scenario(ROOT / "evidence/discovery-payoff-member-not-found", request())
+    assert isinstance(scenario.result, DiscoverySuccess)
+    foreign = scenario.result.artifact.model_copy(
+        update={
+            "capability": scenario.result.artifact.capability.model_copy(
+                update={"id": "another.task"}
+            ),
+        }
+    )
+    with pytest.raises(ValueError, match="primary task contract"):
+        _merge_scenarios(
+            primary, (replace(scenario, result=replace(scenario.result, artifact=foreign)),)
+        )
