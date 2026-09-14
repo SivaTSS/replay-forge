@@ -17,6 +17,7 @@ from replayforge.capabilities.models import (
     ClickAction,
     InputValue,
     LocatorBundle,
+    OcrRelativeCandidate,
     RenderedFieldValueCandidate,
     RenderedLabeledControlCandidate,
     RenderedTextCandidate,
@@ -299,6 +300,23 @@ def test_production_search_types_into_the_labeled_field(
         terminal = Terminal(page, workstation_ocr)
         terminal.see("Alex Morgan")
         terminal.see("12345")
+        session.observe()
+        navigation = session.resolve(
+            LocatorBundle(
+                description="Loan navigation",
+                visual_candidates=(
+                    OcrRelativeCandidate(
+                        strategy="ocr_relative",
+                        anchor="APPLICATION MENU",
+                        target_text="Loan servicing",
+                        relation="below",
+                    ),
+                ),
+            ),
+            10_000,
+        )
+        session.execute(ClickAction(kind="click"), navigation, {})
+        terminal.see("Payoff date (YYYY-MM-DD)")
         browser.close()
 
 

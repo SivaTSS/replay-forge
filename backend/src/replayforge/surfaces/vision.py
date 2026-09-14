@@ -1378,7 +1378,9 @@ class VisionGrounder:
             return same_row
         if relation == "right_of":
             return same_row and t.x >= a.x + a.width
-        return t.y >= a.y + a.height
+        horizontal_overlap = max(0, min(a.x + a.width, t.x + t.width) - max(a.x, t.x))
+        same_column = horizontal_overlap >= min(a.width, t.width) * 0.5
+        return same_column and t.y >= a.y + a.height
 
     @staticmethod
     def _relative_region(

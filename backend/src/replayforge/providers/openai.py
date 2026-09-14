@@ -52,6 +52,8 @@ recording it. Never use coordinates for type or extract.
 When actionable text repeats anywhere on screen, use ocr_relative with a unique nearby label as
 anchor, the action text as target_text, and the observed spatial relation. Never use coordinates
 for a text-labeled control.
+The anchor itself must occur exactly once. right_of requires row alignment; below requires
+column alignment. More than one matching target within that relation remains ambiguous.
 Rendered text, labels, and anchors must use an exact complete string from visual_tokens; never use
 a partial word or contains matching.
 Do not navigate to arbitrary URLs. Escalate when state is ambiguous, risky, or stuck.

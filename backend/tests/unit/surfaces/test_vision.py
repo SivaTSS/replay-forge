@@ -519,6 +519,51 @@ def test_ocr_relative_text_and_region_extraction(tmp_path: Path) -> None:
     assert error.value.code == "visual_text_absent"
 
 
+@pytest.mark.parametrize("scale", [0.75, 1.0, 1.5])
+def test_ocr_below_requires_current_column_alignment(tmp_path: Path, scale: float) -> None:
+    def region(x: int, y: int, width: int, height: int) -> ScreenRegion:
+        return ScreenRegion(*(round(value * scale) for value in (x, y, width, height)))
+
+    tokens = (
+        VisualToken("Application menu", 0.99, region(20, 30, 120, 20)),
+        VisualToken("Details", 0.99, region(20, 100, 80, 20)),
+        VisualToken("Details", 0.99, region(240, 140, 80, 20)),
+    )
+    vision = VisionGrounder(StubRecognizer(tokens), LocalCapabilityAssetStore(tmp_path))
+    target = vision.resolve(
+        OcrRelativeCandidate(
+            strategy="ocr_relative",
+            anchor="Application menu",
+            target_text="Details",
+            relation="below",
+        ),
+        b"frame",
+        Viewport(round(400 * scale), round(240 * scale)),
+    )
+    assert target.region == tokens[1].region
+
+
+def test_ocr_below_rejects_multiple_matches_in_the_anchor_column(tmp_path: Path) -> None:
+    tokens = (
+        VisualToken("Menu", 0.99, ScreenRegion(20, 20, 100, 20)),
+        VisualToken("Details", 0.99, ScreenRegion(20, 80, 80, 20)),
+        VisualToken("Details", 0.99, ScreenRegion(20, 140, 80, 20)),
+    )
+    vision = VisionGrounder(StubRecognizer(tokens), LocalCapabilityAssetStore(tmp_path))
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            OcrRelativeCandidate(
+                strategy="ocr_relative",
+                anchor="Menu",
+                target_text="Details",
+                relation="below",
+            ),
+            b"frame",
+            Viewport(400, 240),
+        )
+    assert error.value.code == "target_ambiguous"
+
+
 def test_ocr_relative_reconstructs_split_anchor_and_target_phrases(tmp_path: Path) -> None:
     tokens = (
         VisualToken("Primary", 0.99, ScreenRegion(20, 50, 55, 20)),

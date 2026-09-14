@@ -170,6 +170,12 @@ text. Intervening visible text blocks association across another field or sectio
 must not become a click into a distant table cell. These are frame-derived rules, not application
 coordinates or tenant-specific thresholds.
 
+OCR-relative `right_of` requires overlap in the current text row; `below` requires overlap in
+the current text column. Neither selects the nearest of several matching actions: multiple
+aligned matches remain ambiguous. Requiring alignment avoids a sidebar anchor accidentally
+matching an identically named control in the main workspace. Alignment is measured from fresh
+OCR boxes and scales with them; no page positions are stored.
+
 Field-value association filters right-hand tokens before building text lines, so navigation on
 the same baseline cannot hide a value. It examines enclosing containers because segmentation
 can detect a label-only table column separately from its value cells. A plausible stacked value
