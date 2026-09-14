@@ -126,7 +126,7 @@ sequenceDiagram
     end
 ```
 
-Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence. Before persistence, DOM-backed frames mask controls and customer values; the canvas-only surface masks the entire canvas because its sensitive pixels have no element boundary.
+Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence. Before persistence, every screenshot is fully masked in memory: neither DOM selectors nor OCR can establish that all remaining pixels are public.
 
 Discovery can pause and expose the same session, but deterministic continuation after manual work is currently implemented only for replay. Discovery resume reopens safely because no continuation is available.
 
@@ -164,11 +164,14 @@ different paths, with different recipients and lifetimes.
 | Model-call metrics | Local Langfuse | Model identity, token/cost usage, latency, and bounded outcomes; no prompt, response, or screenshot payload |
 | Live manual control | Current human lease holder | Unmasked viewport; transient and non-cacheable, not a retained evidence image |
 | Successful invocation | API caller | Typed task outputs; evidence redaction does not redact the caller's result |
-| Durable evidence | Confined local files | Sanitized events/results and masked frames; canvas evidence masks the whole canvas |
+| Durable evidence | Confined local files | Restricted events/results; fully masked viewport images preserve dimensions, not visual content |
 | Published capability | Local registry | Symbolic bindings and semantic targets; not the original customer inputs or model transcript |
+| New image signatures | Capability asset store | Runtime capture disabled by default; explicit synthetic-only opt-in requires loopback target origins. Existing curated assets remain readable |
 
 Provider calls set `store=false`; this is a request setting, not a claim that no data crosses the
-provider boundary or a substitute for deployment data policy. The implemented demo uses synthetic
+provider boundary or a substitute for deployment data policy; see the official
+[OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+The implemented demo uses synthetic
 data. Operator labels and API callers are trusted locally; institution-level authentication and
 authorization are not implemented.
 
@@ -187,7 +190,7 @@ domain event / terminal result
         → new manifest snapshot
 
 browser failure/handoff frame
-        → mask DOM values or the entire canvas
+        → replace every pixel in memory, retaining frame dimensions
         → PNG signature and size validation
         → atomic local write + manifest
 ```
@@ -220,7 +223,17 @@ These guards deliberately fail closed on known matches. They do not identify eve
 short input, encoded value, or personal image; synthetic-only discovery is the supported demo
 boundary. Do not point this deployment at real customer records on the strength of these checks.
 
-The operator viewport is live and therefore unmasked for the authorized lease holder. Persisted failure and handoff screenshots are masked before capture.
+The operator viewport is live and therefore unmasked for the authorized lease holder. Failure and handoff screenshots are masked in memory before persistence.
+
+The current image policy intentionally loses visual diagnostics. Historical committed bundles
+retain their original narrower masks and are not rewritten. Fresh evidence proves frame capture
+and event chronology, not what the screen looked like; use the authorized live viewport for that.
+New template/signature capture also defaults off: edge detection can preserve readable text,
+faces, or identifying marks. For explicitly synthetic targets only,
+`REPLAYFORGE_ALLOW_SYNTHETIC_ASSET_CAPTURE=true` enables capture; both the demo origin and every
+registered application origin must be loopback. This flag is an operator assertion, not a PII
+detector. Curated content-addressed assets remain available for deterministic replay with capture
+disabled. Do not enable the flag for real customer records.
 
 ## Decisions
 
@@ -228,7 +241,9 @@ The operator viewport is live and therefore unmasked for the authorized lease ho
 |---|---|---|---|
 | Policy | Single boolean guard, adapter-specific checks, layered policy | Layer intersection | Every authority can only narrow permission; decisions stay auditable |
 | Risky replay action | Allow with logging, deny all, human intervention | Sensitive → human; irreversible → deny | Demonstrates safe progress without pretending irreversible recovery is solved |
-| Evidence redaction | Redact at display, redact after storage, redact before write | Before write | Sensitive bytes never enter durable evidence |
+| Evidence redaction | Redact at display, redact after storage, redact before write | Before write | Known sensitive fields and unknown diagnostics are excluded at the retention boundary |
+| Screenshot retention | Fixture selectors, OCR masks, full-frame suppression | Full frame | No general proof that unmasked pixels are public; visual diagnostics are sacrificed explicitly |
+| Image signatures | Treat edges as anonymous, permit all crops, restricted capture | Off by default | Edge maps can preserve sensitive content; synthetic opt-in keeps the demo option explicit |
 | Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, form state, and the assignment's required seam |
 | Operator routing | Require an ID from logs, active inbox | Replay inbox + optional direct ID | Makes a paused session discoverable without adding a general run-management UI |
 | Ownership | UI convention, mutex only, versioned lease | Versioned lease + CAS | Makes stale and concurrent commands explicit conflicts |

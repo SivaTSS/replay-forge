@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 
+from replayforge.capabilities.models import LocatorStrategy
 from replayforge.policy.types import DataClassification
 
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,127}")
@@ -75,15 +76,9 @@ _ENUM_FIELDS = {
 }
 _STRATEGIES = frozenset(
     {
-        "role_name",
-        "label",
-        "test_id",
-        "text",
-        "css",
-        "relative_text",
-        "coordinates",
+        *(strategy.value for strategy in LocatorStrategy),
+        "ocr_text",
         "ocr_relative",
-        "template",
         "rendered_text",
         "rendered_labeled_control",
         "rendered_field_value",

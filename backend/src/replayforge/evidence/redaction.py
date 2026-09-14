@@ -32,7 +32,7 @@ _TOKEN_PATTERNS = (
 
 @dataclass(frozen=True, slots=True)
 class StructuredRedactor:
-    configured_secrets: tuple[str, ...] = ()
+    configured_secrets: tuple[str, ...] = field(default=(), repr=False)
     strict: bool = True
     _minimum_secret_length: int = field(default=8, init=False, repr=False)
     _pseudonym_key: bytes = field(

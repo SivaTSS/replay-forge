@@ -9,6 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Protocol
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import urlopen
 
 from replayforge.api.services import ApiServices
@@ -594,7 +595,15 @@ def build_runtime(settings: object) -> LocalRuntime:
     clock = SystemClock()
     registry = load_registry(settings.artifact_directory)
     application_registry = load_application_registry(settings.application_registry_file)
-    capability_assets = LocalCapabilityAssetStore(settings.capability_asset_directory)
+    if settings.allow_synthetic_asset_capture and any(
+        urlsplit(application.origin).hostname not in {"localhost", "127.0.0.1", "::1"}
+        for application in application_registry.all()
+    ):
+        raise ValueError("synthetic image capture requires loopback application origins")
+    capability_assets = LocalCapabilityAssetStore(
+        settings.capability_asset_directory,
+        capture_enabled=settings.allow_synthetic_asset_capture,
+    )
     text_recognizer = RapidOcrTextRecognizer()
     evidence_store = LocalEvidenceStore(settings.evidence_directory, clock)
     configured_secrets = tuple(

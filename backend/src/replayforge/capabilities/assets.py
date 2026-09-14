@@ -24,11 +24,14 @@ class CapabilityAssetStore(Protocol):
 class LocalCapabilityAssetStore:
     root: Path
     maximum_bytes: int = 512_000
+    capture_enabled: bool = True
 
     def __post_init__(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def write(self, content: bytes) -> tuple[str, str]:
+        if not self.capture_enabled:
+            raise CapabilityAssetError("capturing unclassified screen pixels as assets is disabled")
         self._validate_content(content)
         digest = hashlib.sha256(content).hexdigest()
         destination = self.root / f"{digest}.png"

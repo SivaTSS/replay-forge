@@ -248,7 +248,7 @@ def test_visual_workbench_reports_declared_and_fail_closed_states(
             ]
             assert failure_frames
             assert all(
-                "mask:rendered-canvas" in frame["redaction_directives"] for frame in failure_frames
+                "mask:full-viewport" in frame["redaction_directives"] for frame in failure_frames
             )
         if member_id == "33333":
             events = runtime.journals[result.run_id].events()

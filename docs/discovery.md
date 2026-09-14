@@ -149,9 +149,16 @@ is retained as sanitized drift metadata and never changes `supported_variants`.
 On the canvas route, application controls and values do not exist as DOM nodes. The model receives
 the screenshot and OCR tokens, then proposes semantic candidates. Named repeated actions use a
 unique OCR anchor plus target text; label/control and label/value relationships use a frame-local
-layout graph. A transient icon region is permitted only to create a content-addressed signature.
+layout graph. A transient icon region can create a content-addressed signature only when synthetic
+asset capture is explicitly enabled; [runtime defaults prohibit new pixel retention](safety-and-handoff.md#data-exposure-boundaries).
 Published schema `1.4` targets retain semantic identity, not coordinates or relative regions.
 Replay re-resolves every action from a fresh frame and never calls the model.
+
+The richer workstation's [capture specification](../config/servicing-discovery.yaml) describes a
+loan-payoff discovery and model-free Summit validation. It is an executable capture recipe, not
+a discovered capability or proof of success. Its live run has not occurred: the environment
+requires explicit approval for sending that scenario's synthetic screenshots/member/loan values
+to the OpenAI Responses API. No new evidence bundle is claimed.
 
 ## Provider decision
 

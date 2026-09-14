@@ -23,7 +23,7 @@ the [challenge table](#how-to-challenge-the-claims) links directly to their proo
 | Hard failure | Evidenced | Permission-denied detector with expected/observed state | Masked screenshot bundle |
 | Explicit allowlist | Implemented | Origin/route/action/risk policy intersections | Policy decision tests |
 | Conservative risk | Evidenced | Sensitive pauses; irreversible denies | `human-handoff` |
-| No sensitive persistence | Implemented | Structured redaction, secret scan, masked frames | Evidence/store tests and manifests |
+| No sensitive persistence | Hardened for synthetic demo; bounded | Restricted journal/terminal fields, keyed pseudonyms, artifact leak guard, full-frame masks, image capture disabled by default | Tested boundaries, not a universal PII detector; see [data policy](safety-and-handoff.md#data-exposure-boundaries) |
 | Structured evidence | Evidenced | Ordered events, result, hashes, manifest | Ten verified bundles |
 | Detect and route intervention | Evidenced | Stuck, low confidence, model escalation, surface recommendation, sensitive policy | Handoff bundle |
 | Same-session control | Evidenced | Retained context and worker; bounded human input | Handoff before/after frames |

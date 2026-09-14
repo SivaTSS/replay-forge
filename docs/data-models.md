@@ -252,6 +252,13 @@ opaque key, media type, bounded size, SHA-256 hash, retention class, directives,
 The authoritative `RunEvidenceManifest` requires unique evidence identities, unique run-owned keys,
 and separate JSON events, binary attachments, and optional terminal result.
 
+The persisted terminal result is deliberately narrower than the caller's typed result: failure
+messages and unclassified outputs are omitted. A discovery terminal record contains the
+capability identity and canonical artifact hash rather than duplicating the full capability.
+Public run IDs are separation context, not pseudonym secrets; ephemeral keyed HMACs protect
+retained customer/operator identifiers from simple enumeration. See the
+[retention schema and boundaries](safety-and-handoff.md#persistence-pipeline).
+
 ## Decisions
 
 | Decision | Alternatives considered | Chosen and why |

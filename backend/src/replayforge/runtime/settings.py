@@ -23,6 +23,7 @@ class RuntimeSettings(BaseSettings):
     artifact_directory: Path = Path("capabilities")
     application_registry_file: Path = Path("config/applications.yaml")
     capability_asset_directory: Path = Path("capabilities/_assets")
+    allow_synthetic_asset_capture: bool = False
     evidence_directory: Path = Path("evidence/runtime")
     demo_base_url: str = "http://127.0.0.1:3001"
     browser_headless: bool = True
@@ -55,6 +56,12 @@ class RuntimeSettings(BaseSettings):
         if not 1.0 <= self.browser_device_scale_factor <= 3.0:
             raise ValueError("browser device scale factor must be between 1 and 3")
         parsed = urlsplit(self.demo_base_url)
+        if self.allow_synthetic_asset_capture and parsed.hostname not in {
+            "localhost",
+            "127.0.0.1",
+            "::1",
+        }:
+            raise ValueError("synthetic image capture requires a loopback demo origin")
         if (
             parsed.scheme not in {"http", "https"}
             or not parsed.hostname

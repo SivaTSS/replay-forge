@@ -288,7 +288,6 @@ class LegacySavingsBalanceCompiler:
                     pattern=r"^[0-9]{5,10}$",
                     min_length=5,
                     max_length=10,
-                    example="12345",
                 )
             },
         )

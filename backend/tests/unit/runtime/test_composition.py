@@ -2,6 +2,7 @@ from dataclasses import replace
 from email.message import Message
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
@@ -41,6 +42,24 @@ def test_settings_validate_origin_and_artifact_directory() -> None:
             artifact_directory=artifact_directory(),
             model_policy_file=Path("missing-model-policy.yaml"),
         )
+
+
+def test_runtime_disables_unclassified_asset_capture_by_default() -> None:
+    assert RuntimeSettings().allow_synthetic_asset_capture is False
+    with pytest.raises(ValidationError, match="loopback"):
+        RuntimeSettings(
+            allow_synthetic_asset_capture=True, demo_base_url="https://bank.example.invalid"
+        )
+    assert RuntimeSettings(allow_synthetic_asset_capture=True).allow_synthetic_asset_capture is True
+
+
+def test_synthetic_capture_rejects_remote_registered_origin() -> None:
+    with patch("replayforge.runtime.composition.load_application_registry") as registry:
+        registry.return_value.all.return_value = (
+            SimpleNamespace(origin="https://bank.example.invalid"),
+        )
+        with pytest.raises(ValueError, match="loopback application"):
+            build_runtime(RuntimeSettings(allow_synthetic_asset_capture=True))
 
 
 @pytest.mark.parametrize(

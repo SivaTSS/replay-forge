@@ -137,8 +137,10 @@ discovery requires deterministic suite validation before publication. No human a
 inserted after discovery.
 
 Evidence is redacted before storage. Nested output classifications are preserved; credentials,
-personal values, and financial data are removed or masked. Canvas evidence masks the whole canvas
-because sensitive pixels have no reliable element boundaries. Live operator frames and authorized
+personal values, and financial data are removed or masked. New screenshot evidence masks the full
+viewport; fixture selectors cannot establish that other pixels are public. New image-signature
+capture is disabled by default, with a loopback-only synthetic opt-in. Historical evidence is
+unchanged. Live operator frames and authorized
 discovery frames are transient. Provider requests use `store=false`; local Langfuse records model-call
 metrics.
 

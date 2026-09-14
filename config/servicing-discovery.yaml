@@ -1,0 +1,20 @@
+schema_version: "1.0"
+workflows:
+  servicing_loan_payoff_quote:
+    goal: >-
+      In the synthetic servicing workstation, find the member identified by member_id,
+      calculate an auto-loan payoff quote for payoff_date without making a payment,
+      and return exactly payoff_amount, good_through_date, and confirmation_reference.
+      Verify that the completed quote's good-through date matches the supplied payoff_date.
+      Complete only after the quote has actually been calculated, not on a review screen.
+    application_family: northstar_member_service
+    tenant: harbor
+    validation_tenants: [summit]
+    entry_point: legacy_servicing
+    inputs:
+      member_id: "12345"
+      payoff_date: "2026-09-20"
+    expected_capability_id: member.servicing_loan_payoff_quote
+    expected_risk: read_only
+    expected_inputs: [member_id, payoff_date]
+    expected_outputs: [payoff_amount, good_through_date, confirmation_reference]

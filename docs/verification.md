@@ -148,6 +148,23 @@ then uses real input events. It does not read React state or the private hit map
 screenshot/OCR suite remains separate; neither suite substitutes for genuine model discovery.
 The audit covers the supported desktop Chromium target, not every possible browser or input method.
 
+### Privacy hardening checkpoint
+
+Verified on 2026-09-14 after the servicing workflow audit:
+
+| Check | Result | Boundary |
+|---|---|---|
+| Backend unit suite | 623 passed | Includes journal/terminal redaction, artifact leak rejection, keyed pseudonyms, and image capture policy |
+| Targeted Chromium privacy/failure tests | 5 passed | Includes closed-shadow-root synthetic personal text, fully masked screenshots, and retained failure evidence |
+| Additional Chromium regression tests | 6 passed | Scripted discovery, replay, business outcome, recovery, live control, and same-session resume; no model calls |
+| Static checks | Ruff and strict mypy passed | No claim of a newly rerun full browser matrix |
+| Historical evidence | Ten bundles verified unchanged | New policies do not retroactively rewrite old evidence |
+| Rich-workstation model discovery | Not run | Environment denied the loan-payoff egress request before execution; explicit scenario authorization is pending |
+
+Reproduce the new browser checks with `test_playwright_surface.py` and the selection
+`real_iframe_search_and_account_extraction or visual_evidence_masks or evidence_masks_unclassified or registered_artifact_classifies_permission_denial or real_output_failure_retains`.
+The proposed capture in `config/servicing-discovery.yaml` is not an artifact or an evidence bundle.
+
 ## Evidence bundle anatomy
 
 For a concrete review, open the [card-lock discovery manifest](../evidence/discovery-temporary-card-lock/manifest.json)
@@ -232,7 +249,9 @@ coordinates, and relative regions. Every case runs without a model call.
 | `changed_icon` | `failure/target_absent` |
 | `duplicate_field` | `failure/target_ambiguous` at `account.extract_available_balance` |
 
-No Playwright trace archive is committed. This is an explicit optional evidence cut; screenshots are the richer failure/handoff signal.
+No Playwright trace archive is committed. This is an explicit optional evidence cut. Historical
+screenshots retain limited visual context; new screenshot evidence is fully masked, so current
+failure diagnosis uses operational event codes and the authorized live viewport.
 
 ## Testing decisions
 

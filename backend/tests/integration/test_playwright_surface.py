@@ -6,6 +6,8 @@ from pathlib import Path
 from threading import Lock
 from typing import cast
 
+import cv2
+import numpy as np
 import pytest
 
 from replayforge.applications.registry import load_application_registry
@@ -224,11 +226,7 @@ def test_real_iframe_search_and_account_extraction(demo_bank: str, tmp_path: Pat
         assert session.capture_provider_frame().startswith(b"\x89PNG\r\n\x1a\n")
         sanitized_frame = session.capture_sanitized_evidence_frame()
         assert sanitized_frame.content.startswith(b"\x89PNG\r\n\x1a\n")
-        assert sanitized_frame.redaction_directives == (
-            "mask:form-controls",
-            "mask:customer-details",
-            "mask:account-table-cells",
-        )
+        assert sanitized_frame.redaction_directives == ("mask:full-viewport",)
         frame = driver.capture_active_frame()
         assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
         assert frame.viewport == Viewport(1280, 800)
@@ -330,7 +328,29 @@ def test_visual_evidence_masks_the_rendered_canvas(demo_bank: str) -> None:
         frame = session.capture_sanitized_evidence_frame()
 
         assert frame.content.startswith(b"\x89PNG\r\n\x1a\n")
-        assert frame.redaction_directives[-1] == "mask:rendered-canvas"
+        assert frame.redaction_directives == ("mask:full-viewport",)
+    finally:
+        session.close()
+        driver.close()
+
+
+def test_evidence_masks_unclassified_text_outside_fixture_selectors(demo_bank: str) -> None:
+    driver = playwright_driver(demo_bank)
+    session = driver.open("northstar_member_service", "harbor", "member_search")
+    try:
+        session.page.evaluate("""() => {
+            const banner = document.createElement('aside');
+            banner.style.cssText = 'position:fixed;top:0;left:0;z-index:999999;background:white';
+            banner.attachShadow({mode:'closed'}).textContent =
+                'Synthetic Person synthetic@example.invalid';
+            document.body.append(banner);
+        }""")
+        live = session.capture_provider_frame()
+        retained = session.capture_sanitized_evidence_frame()
+        pixels = cv2.imdecode(np.frombuffer(retained.content, dtype=np.uint8), cv2.IMREAD_COLOR)
+        assert pixels is not None and np.all(pixels == (39, 24, 17))
+        assert retained.content != live
+        assert retained.redaction_directives == ("mask:full-viewport",)
     finally:
         session.close()
         driver.close()
@@ -642,11 +662,7 @@ def test_registered_artifact_classifies_permission_denial_with_masked_evidence(
         manifest = json.loads(manifest_path.read_text())
         attachment = manifest["attachments"][0]
         assert attachment["retention_class"] == "failure"
-        assert attachment["redaction_directives"] == [
-            "mask:form-controls",
-            "mask:customer-details",
-            "mask:account-table-cells",
-        ]
+        assert attachment["redaction_directives"] == ["mask:full-viewport"]
         assert runtime.live_sessions == {}
     finally:
         runtime.close()
@@ -705,11 +721,7 @@ def test_real_output_failure_retains_masked_state_before_teardown(
         manifest = json.loads(manifest_path.read_text())
         attachment = manifest["attachments"][0]
         assert attachment["retention_class"] == "failure"
-        assert attachment["redaction_directives"] == [
-            "mask:form-controls",
-            "mask:customer-details",
-            "mask:account-table-cells",
-        ]
+        assert attachment["redaction_directives"] == ["mask:full-viewport"]
         screenshot = (
             tmp_path / "evidence" / attachment["key"].removeprefix("evidence://")
         ).read_bytes()
@@ -914,12 +926,7 @@ def test_replay_resumes_after_validated_same_session_handoff(
             "human_audit",
         ]
         assert all(
-            entry["redaction_directives"]
-            == [
-                "mask:form-controls",
-                "mask:customer-details",
-                "mask:account-table-cells",
-            ]
+            entry["redaction_directives"] == ["mask:full-viewport"]
             for entry in manifest["attachments"]
         )
     finally:
