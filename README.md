@@ -12,7 +12,13 @@ flowchart LR
     R -. sensitive or stuck .-> H([Same-session human handoff])
 ```
 
-The canvas-only member workbench supports three non-trivial servicing tasks: investigate an exact
+The demo's front door is a [dated servicing workstation](docs/demo-bank.md) with member and account
+inquiry, transaction research, internal transfers, card maintenance, holds, payoff quotes, service
+cases, and a journal. Open `http://127.0.0.1:3001/harbor/servicing` after starting the target. This
+expanded application has its own business-rule and UI tests; new model discovery against it is
+still pending. Existing evidence and capability versions remain tied to the earlier fixture routes.
+
+The earlier canvas-only member workbench supports three non-trivial servicing tasks: investigate an exact
 transaction, calculate a dated loan payoff quote, and temporarily lock a selected card. Discovery
 creates a separate typed capability for each goal; the runtime and compiler contain no task names,
 route constants, output names, or required action order. These artifacts store semantic target identity,

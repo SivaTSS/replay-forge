@@ -42,6 +42,7 @@ the repository—not approving a discovery publication.
 | How are unsafe actions, data, and handoff handled? | [Safety and handoff](safety-and-handoff.md) |
 | Which limits apply, and who may change them? | [Constraints and policy](constraints-and-policy.md) |
 | How do I run it, and what HTTP surface exists? | [Operations](operations.md) |
+| What can the synthetic bank do, and how does it challenge automation? | [Demo bank](demo-bank.md) |
 | What do the tests and committed evidence prove? | [Verification](verification.md) |
 | How does the implementation map to the assignment? | [Requirements](requirements.md) |
 

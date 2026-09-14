@@ -103,6 +103,10 @@ Settings reject credentials in URLs, non-local Langfuse endpoints, missing artif
 
 ## Discovery publication and capture
 
+The expanded [demo workstation](demo-bank.md) is registered separately as `legacy_servicing`.
+The workflow capture commands below still exercise the earlier `visual_member_workbench` fixture;
+they do not discover the new workstation. Restart the runtime to load a changed registration catalog.
+
 The `visual_member_workbench` entry point is one canvas-only application with three substantial
 tasks: transaction investigation, loan payoff calculation, and temporary card locking. The first
 two are read-only; card locking is classified as reversible and the target exposes `Unlock card`.

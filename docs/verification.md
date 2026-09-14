@@ -43,7 +43,7 @@ uv run python -m unittest discover -s scripts -p 'test_check_docs.py'
 These check local links and heading anchors, index coverage, the required report sections, fenced
 blocks, and shared Mermaid styling. They do not fetch external links or prove rendered layout.
 
-The documentation consistency pass also rendered all 20 diagrams with Mermaid `11.12.0` in
+The documentation consistency pass also rendered all 21 diagrams with Mermaid `11.12.0` in
 Chromium, using both default and dark themes. No text extended beyond its SVG viewport; key
 architecture, replay, and handoff diagrams were visually inspected. Renderer versions and host
 themes can differ, so this is a recorded layout check, not a cross-viewer guarantee.
@@ -65,6 +65,11 @@ themes can differ, so this is a recorded layout check, not a cross-viewer guaran
 | Visual portability | One artifact across two tenants, six CSS viewports, DPR `1–2` | Portability matrix plus six discovered-task/tenant combinations |
 | Artifact immutability and integrity | Registry/serialization tests | Artifact hash in every applicable bundle |
 | Redaction before retention | Redactor/journal/store tests | Manifest directives and sanitized payloads |
+
+The expanded [demo-bank workstation](demo-bank.md) has separate domain/controller tests and
+screenshot-driven Chromium tests. These exercise the target application's business behavior, not
+a new discovered capability. Historical discovery and replay bundles remain tied to the earlier
+fixture routes; richer-screen discovery and runtime compatibility validation are still pending.
 
 ## Audit regression coverage
 
@@ -104,6 +109,23 @@ browser cases passed, including one added response-ordering case: 656 distinct p
 total. That new case first reproduced the stale-selection bug against the previous console build.
 It mocks response timing; the separate handoff case drives the real retained browser session.
 Starlette emits one upstream AnyIO deprecation warning; no test is skipped to suppress it.
+
+### Demo workstation checkpoint
+
+| Gate | Result |
+|---|---|
+| Target domain and controller | 20 passing Node tests: money, ownership, permissions, atomic operations, review lifecycle, and case history |
+| Expanded target in Chromium | Six passing cases across focused runs: card lock/unlock, transfers, permission/payoff flow, case resolution, and two tenant/viewport combinations |
+| Preserved automation | The existing discovered temporary-card-lock capability replayed successfully on Harbor's unchanged workbench |
+| Application and capability contracts | 157 passing Python unit tests |
+| Static checks and build | Strict mypy, Ruff, demo TypeScript, and demo production build passed |
+| Documentation | 14 documents checked; seven checker tests passed; 21 diagrams rendered in light and dark themes |
+| Historical evidence | All ten bundles verified unchanged; no new discovery execution claimed |
+
+This is the scoped demo-expansion checkpoint, not a rerun of the full backend coverage matrix
+recorded above. Browser tests inspect screenshots and send real input; they do not read the target's
+React state. OCR limitations and the remaining fresh-discovery requirement are documented in the
+[demo-bank guide](demo-bank.md#verification-and-evidence-status).
 
 ## Evidence bundle anatomy
 

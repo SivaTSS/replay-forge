@@ -6,6 +6,10 @@
 
 ReplayForge is a modular monolith with two separate Next.js applications: one is the synthetic target, the other is the operator console.
 
+The target's [servicing workstation](demo-bank.md) now provides a connected synthetic ledger and
+multiple staff workflows. Historical replay artifacts continue to use the preserved fixture routes;
+the new UI is not retroactively credited with their discovery evidence.
+
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart LR

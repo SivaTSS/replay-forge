@@ -7,6 +7,10 @@ capability, and executes later invocations without model decisions. The real tar
 banking workbench with transaction investigation, dated loan payoff quoting, and temporary card
 locking. Its controls and values are painted on a canvas.
 
+The expanded [staff workstation](docs/demo-bank.md) adds connected balances, transfers, holds,
+card maintenance, and service cases. Its application tests are separate from the historical
+discovery/replay evidence; automation coverage on that richer UI is not yet claimed.
+
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
 flowchart TB
