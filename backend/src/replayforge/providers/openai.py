@@ -65,6 +65,11 @@ uniqueness, ownership, or a completed action; the runtime still verifies those s
 When visual_tokens is non-empty, prefer rendered semantic candidates. For a visual
 typing or selection target, require a rendered labeled control; an OCR label is not itself an
 editable control. Use rendered_field_value for visual extraction, never text-click targeting.
+On rendered surfaces, actionable_controls and extractable_fields are DOM hints and may be empty.
+Their absence does not mean the screenshot has no editable fields. Propose a
+rendered_labeled_control when the screenshot shows a bounded input associated with an OCR label;
+the runtime independently resolves the label/control relationship before typing. Do not require
+a DOM textbox role, test ID, or an OCR token inside an empty input.
 select is only supported for native DOM select elements. For a rendered/custom dropdown,
 open its visible control and choose the observed option using click or supported keyboard actions.
 Use input_text for an invocation-bound option; do not embed the caller's value in a locator.
