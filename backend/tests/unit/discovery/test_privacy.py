@@ -197,6 +197,23 @@ def test_symbol_name_in_free_text_is_not_exempt(
         )
 
 
+def test_output_redaction_keys_follow_the_declared_symbol_privacy_rules(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    data = _with_status_contract(valid_artifact_data).model_dump(mode="json")
+    data["policy"]["output_redaction"]["posted_date"] = "last4"
+    artifact = CapabilityArtifact.model_validate(data)
+    validate_artifact_privacy(artifact, {}, outputs={"posting_status": "Posted"})
+    # Whole-symbol copies and all invocation collisions still fail; only incidental
+    # captured substrings in a schema-validated output reference are permitted.
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(artifact, {}, outputs={"posting_status": "posted_date"})
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(artifact, {"query": "Posted"})
+    with pytest.raises(ArtifactPrivacyError):
+        validate_artifact_privacy(artifact, {}, outputs={"posting_status": "last4"})
+
+
 def test_known_string_cannot_be_embedded_as_numeric_example(
     valid_artifact_data: dict[str, Any],
 ) -> None:

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from replayforge.capabilities.models import (
     CapabilityArtifact,
+    CapabilityPolicy,
     ExtractAction,
     IdentityMatchesCondition,
     InputValue,
@@ -46,6 +47,7 @@ class ArtifactPrivacyError(EvidenceRejectedError):
 
 
 _REFERENCE_FIELDS: dict[type[BaseModel], frozenset[str]] = {
+    CapabilityPolicy: frozenset({"output_redaction"}),
     InputValue: frozenset({"path"}),
     ExtractAction: frozenset({"output"}),
     OutputValidCondition: frozenset({"output"}),
@@ -88,7 +90,7 @@ def _match_location(
             encoded_key = json.dumps(str(key), ensure_ascii=False)[1:-1].casefold()
             if _matches_literal(encoded_key, serialized, source, reference):
                 return f"{path}.*:key"
-            # Only contract property keys are symbols. Their schemas remain fully scanned.
+            # Declared output-redaction keys are symbols too. Dictionary values remain scanned.
             found = _match_location(item, serialized, f"{path}.*", source=source)
             if found is not None:
                 return found
