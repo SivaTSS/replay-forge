@@ -77,7 +77,12 @@ def _route_matches(route: str, pattern: str) -> bool:
 
 def _infer_risk(context: ActionContext) -> Risk:
     description = context.target_description.casefold()
-    if any(word in description for word in _IRREVERSIBLE_TARGET_WORDS):
+    if context.action_type == "scroll":
+        # Viewport movement does not activate a control. Descriptions such as
+        # "reveal the next section" are not requests to reveal a protected field.
+        # Explicit registered and declared risk floors remain authoritative.
+        inferred = context.registered_target_risk or Risk.READ_ONLY
+    elif any(word in description for word in _IRREVERSIBLE_TARGET_WORDS):
         inferred = Risk.IRREVERSIBLE
     elif any(word in description for word in _SENSITIVE_TARGET_WORDS):
         inferred = Risk.SENSITIVE

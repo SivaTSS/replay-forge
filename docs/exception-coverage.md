@@ -90,6 +90,7 @@ be claimed; they are not fabricated by changing replay results.
 | Retain composite identity guards and new assertions | Replace all postconditions for scenario convenience | Exception discovery must not weaken record selection checks |
 | Current-frame bounded-control disambiguation | Fixed offsets or first matching label | Distinguish an action from repeated status text while retaining ambiguity when multiple controls match |
 | Bounded OCR inference pool | Raise grounding deadlines or reduce screenshot fidelity | Default two intra-operation threads, one inter-operation thread; serialized inference retains current recognition and timing bounds |
+| Classify viewport scrolling by its operation | Treat prose such as “reveal the lower section” as a protected reveal button | Scrolling activates no control; explicit registered/declared risk floors, location checks, and action allowlists still apply |
 
 ## Reproduce
 

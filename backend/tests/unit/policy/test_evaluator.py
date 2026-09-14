@@ -44,6 +44,35 @@ def test_allow_returns_auditable_decision(
     assert result.required_evidence == ("action_intent", "action_result")
 
 
+@pytest.mark.parametrize("description", ["Reveal the lower section", "Scroll past Submit transfer"])
+def test_viewport_scroll_does_not_activate_controls_described_in_its_prose(
+    evaluator: PolicyEvaluator,
+    policy: EffectivePolicy,
+    context: ActionContext,
+    description: str,
+) -> None:
+    policy = replace(policy, allowed_action_types=policy.allowed_action_types | {"scroll"})
+    scrolling = replace(
+        context, action_type="scroll", target_description=description, registered_target_risk=None
+    )
+    result = evaluator.evaluate(policy, scrolling)
+    assert result.decision is Decision.ALLOW
+    assert result.effective_risk is Risk.READ_ONLY
+    for risk in (Risk.SENSITIVE, Risk.IRREVERSIBLE):
+        assert (
+            evaluator.evaluate(policy, replace(scrolling, declared_risk=risk)).decision
+            is not Decision.ALLOW
+        )
+        assert (
+            evaluator.evaluate(policy, replace(scrolling, registered_target_risk=risk)).decision
+            is not Decision.ALLOW
+        )
+    assert (
+        evaluator.evaluate(replace(policy, allowed_action_types=frozenset()), scrolling).decision
+        is Decision.DENY
+    )
+
+
 def test_ipv6_origin_keeps_authority_brackets(
     evaluator: PolicyEvaluator, policy: EffectivePolicy, context: ActionContext
 ) -> None:
