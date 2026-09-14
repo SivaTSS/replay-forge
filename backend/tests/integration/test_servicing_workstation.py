@@ -13,8 +13,17 @@ import pytest
 from playwright.sync_api import Page, sync_playwright
 
 from replayforge.capabilities.assets import LocalCapabilityAssetStore
-from replayforge.capabilities.models import RenderedFieldValueCandidate
+from replayforge.capabilities.models import (
+    ClickAction,
+    InputValue,
+    LocatorBundle,
+    RenderedFieldValueCandidate,
+    RenderedLabeledControlCandidate,
+    RenderedTextCandidate,
+    TypeAction,
+)
 from replayforge.surfaces.models import Viewport, VisualToken
+from replayforge.surfaces.playwright import PlaywrightSurfaceSession
 from replayforge.surfaces.vision import RapidOcrTextRecognizer, VisionGrounder
 from replayforge.surfaces.vision_policy import load_vision_policy
 
@@ -214,6 +223,83 @@ def test_production_extraction_reads_payoff_values_not_neighboring_labels(
             Viewport(width, height),
         )
         assert vision.extract(frame, target.region) == value
+
+
+@pytest.mark.parametrize("tenant", ["harbor", "summit"])
+@pytest.mark.parametrize("width,height", [(1280, 800), (1440, 900)])
+def test_production_search_types_into_the_labeled_field(
+    demo_bank: str,
+    workstation_ocr: RapidOcrTextRecognizer,
+    tmp_path: Path,
+    tenant: str,
+    width: int,
+    height: int,
+) -> None:
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        context = browser.new_context(viewport={"width": width, "height": height})
+        page = context.new_page()
+        page.goto(f"{demo_bank}/{tenant}/servicing")
+        page.locator("canvas").wait_for()
+        page.wait_for_timeout(250)
+        session = PlaywrightSurfaceSession(
+            context=context,
+            page=page,
+            application_family="northstar_member_service",
+            tenant=tenant,
+            entry_points={},
+            rendered_surface=True,
+            viewport=Viewport(width, height),
+            vision=VisionGrounder(
+                workstation_ocr,
+                LocalCapabilityAssetStore(tmp_path),
+                load_vision_policy(Path("config/vision-policy.yaml")),
+            ),
+        )
+        # Replay observes the current screen before resolving a step. Exercise
+        # that lifecycle too, including OCR initialization outside target timing.
+        session.observe()
+        field = session.resolve(
+            LocatorBundle(
+                description="Member query",
+                visual_candidates=(
+                    RenderedLabeledControlCandidate(
+                        strategy="rendered_labeled_control",
+                        label="Member ID / name / city",
+                        control_kind="text_input",
+                    ),
+                ),
+            ),
+            10_000,
+        )
+        session.execute(
+            TypeAction(kind="type", value=InputValue(source="input", path="member_id")),
+            field,
+            {"member_id": "12345"},
+        )
+        search = session.resolve(
+            LocatorBundle(
+                description="Search",
+                visual_candidates=(
+                    RenderedTextCandidate(strategy="rendered_text", value="Search"),
+                ),
+            ),
+            10_000,
+        )
+        session.execute(ClickAction(kind="click"), search, {})
+        # A wrong input association leaves six rows, hence six ambiguous Open controls.
+        member = session.resolve(
+            LocatorBundle(
+                description="Open member",
+                visual_candidates=(RenderedTextCandidate(strategy="rendered_text", value="Open"),),
+            ),
+            10_000,
+        )
+        session.execute(ClickAction(kind="click"), member, {})
+        terminal = Terminal(page, workstation_ocr)
+        terminal.see("Alex Morgan")
+        terminal.see("12345")
+        browser.close()
 
 
 def test_service_case_resolution(terminal: Terminal) -> None:

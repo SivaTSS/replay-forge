@@ -452,10 +452,11 @@ class VisionGrounder:
             *graph.of_kind("control"),
             *(
                 node
-                for node in graph.of_kind("container")
-                if node.region.height
-                >= policy.segmentation.minimum_control_height_in_text_heights
-                * graph.median_text_height
+                for node in (*graph.of_kind("container"), *graph.of_kind("image"))
+                # A detected input need only fit the observed local text line.
+                # Page-wide control heuristics include padding and can classify
+                # compact empty inputs as images on mixed-typography screens.
+                if node.region.height >= label.region.height
                 and node.region.height
                 <= policy.association.maximum_following_gap_in_text_heights
                 * graph.median_text_height
@@ -464,12 +465,37 @@ class VisionGrounder:
             ),
         )
         best = self._select_structural_row(label.region, controls, graph.median_text_height)
+        best = tuple(
+            node
+            for node in best
+            if not self._intervening_control_text(label.region, node.region, self.tokens(png))
+        )
         if len(best) != 1:
             raise self._cardinality_error(len(best), "rendered labeled control")
         self._check_deadline(started)
         return VisualTargetData(
             best[0].region, "rendered_labeled_control", label.confidence, frame_hash
         )
+
+    @staticmethod
+    def _intervening_control_text(
+        label: ScreenRegion, control: ScreenRegion, tokens: tuple[VisualToken, ...]
+    ) -> bool:
+        """Do not associate a label across another field or section's visible text."""
+        for token in tokens:
+            x, y = token.region.center
+            if control.x >= label.x + label.width:
+                if label.x + label.width < x < control.x and max(label.y, control.y) <= y <= min(
+                    label.y + label.height, control.y + control.height
+                ):
+                    return True
+            elif (
+                label.y + label.height < y < control.y
+                and token.region.x < min(label.x + label.width, control.x + control.width)
+                and token.region.x + token.region.width > max(label.x, control.x)
+            ):
+                return True
+        return False
 
     def _resolve_field_value(
         self,

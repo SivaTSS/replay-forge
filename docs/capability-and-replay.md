@@ -164,6 +164,12 @@ Discovery may observe a transient icon region to create a signature, but the com
 only rendered candidates. Schema `1.4` rejects persisted geometry; rendered-only registrations
 also reject legacy DOM targets recursively.
 
+Labeled input association uses the label's local text height when considering an input-shaped
+component. A page-wide median alone can reject a normal input when a dense table uses larger
+text. Intervening visible text blocks association across another field or section: a missed input
+must not become a click into a distant table cell. These are frame-derived rules, not application
+coordinates or tenant-specific thresholds.
+
 Field-value association filters right-hand tokens before building text lines, so navigation on
 the same baseline cannot hide a value. It examines enclosing containers because segmentation
 can detect a label-only table column separately from its value cells. A plausible stacked value

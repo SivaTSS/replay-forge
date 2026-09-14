@@ -149,6 +149,56 @@ def test_rendered_labeled_control_uses_detected_control_rectangle(tmp_path: Path
     assert resolved.region.y <= 80 <= resolved.region.y + resolved.region.height
 
 
+@pytest.mark.parametrize("label_height", [20, 26])
+def test_labeled_control_uses_local_label_scale_on_mixed_typography(
+    tmp_path: Path, label_height: int
+) -> None:
+    image = np.full((300, 500, 3), 245, dtype=np.uint8)
+    cv2.rectangle(image, (20, 70), (300, 106), (20, 80, 140), 2)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Query", 0.99, ScreenRegion(20, 43, 90, label_height)),
+            VisualToken("Larger heading", 0.99, ScreenRegion(20, 160, 210, 32)),
+            VisualToken("Larger row", 0.99, ScreenRegion(20, 210, 210, 32)),
+        ),
+    )
+    resolved = vision.resolve(
+        RenderedLabeledControlCandidate(
+            strategy="rendered_labeled_control", label="Query", control_kind="text_input"
+        ),
+        encoded.tobytes(),
+        Viewport(500, 300),
+    )
+    assert 65 <= resolved.region.y <= 75
+    assert resolved.region.y + resolved.region.height < 115
+
+
+def test_labeled_control_cannot_skip_intervening_section_text(tmp_path: Path) -> None:
+    image = np.full((300, 500, 3), 245, dtype=np.uint8)
+    cv2.rectangle(image, (20, 180), (300, 230), (20, 80, 140), 2)
+    ok, encoded = cv2.imencode(".png", image)
+    assert ok
+    vision = semantic_vision(
+        tmp_path,
+        (
+            VisualToken("Query", 0.99, ScreenRegion(20, 45, 90, 20)),
+            VisualToken("Results", 0.99, ScreenRegion(20, 125, 90, 20)),
+        ),
+    )
+    with pytest.raises(SurfaceError) as error:
+        vision.resolve(
+            RenderedLabeledControlCandidate(
+                strategy="rendered_labeled_control", label="Query", control_kind="text_input"
+            ),
+            encoded.tobytes(),
+            Viewport(500, 300),
+        )
+    assert error.value.code == "target_absent"
+
+
 def test_rendered_text_prefers_unique_match_inside_a_control(tmp_path: Path) -> None:
     image = np.full((240, 400, 3), 245, dtype=np.uint8)
     cv2.rectangle(image, (130, 150), (300, 205), (20, 80, 140), 3)
