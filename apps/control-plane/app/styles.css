@@ -14,8 +14,187 @@ body {
 }
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+}
+
+/* Execution viewing uses the same console palette and control vocabulary. */
+.execution-intro {
+  padding: 28px 0 8px;
+}
+.execution-intro h2 {
+  font-size: 28px;
+}
+.execution-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.launch-panel,
+.execution-panel,
+.execution-empty {
+  border: 1px solid #ffffff20;
+  background: #0e1c2e;
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 0;
+}
+.launch-panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.launch-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0;
+}
+.launch-panel small,
+.muted,
+.frame-age {
+  color: #a9bad0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.launch-panel input,
+.launch-panel select,
+.launch-panel textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: #e8eef7;
+  background: #07111f;
+  border: 1px solid #526580;
+  border-radius: 5px;
+}
+.launch-panel textarea {
+  resize: vertical;
+}
+.mode-switch,
+.history-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.mode-switch button {
+  flex: 1;
+}
+button[aria-pressed="true"] {
+  border-color: #68e0b8;
+  background: #163e39;
+  color: #c7fff0;
+}
+.start-button {
+  width: 100%;
+  margin-top: 12px;
+}
+.execution-id {
+  overflow-wrap: anywhere;
+}
+.watch-screen {
+  min-height: 260px;
+  display: grid;
+  place-items: center;
+  background: #050b13;
+  border: 1px solid #ffffff22;
+  margin: 12px 0;
+}
+.watch-screen img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+[hidden] {
+  display: none !important;
+}
+.watch-screen p {
+  padding: 24px;
+}
+.frame-age {
+  margin: 12px 0 0;
+}
+.step-timeline {
+  margin-top: 24px;
+}
+.step-timeline > summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+.step-timeline > ol {
+  max-height: 360px;
+  overflow: auto;
+  padding: 0;
+  list-style: none;
+}
+.step-timeline li {
+  display: flex;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid #ffffff15;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.step-timeline small {
+  display: block;
+  color: #a9bad0;
+  margin-top: 4px;
+}
+.step-timeline details {
+  margin-top: 6px;
+}
+.event-sequence {
+  color: #68e0b8;
+  min-width: 24px;
+}
+.final-result {
+  margin-top: 20px;
+  padding: 16px;
+  background: #122b2a;
+  border: 1px solid #68e0b850;
+  border-radius: 6px;
+}
+.execution-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.validation-options label {
+  flex-direction: row;
+  align-items: center;
+}
+.validation-options input {
+  width: auto;
+}
+.embedded > header,
+.embedded .inbox {
+  display: none;
+}
+.embedded .console-grid {
+  display: block;
+}
+.embedded .session-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.embedded .operator-bar {
+  padding: 16px 0;
+}
+.back-link {
+  display: inline-block;
+  padding-top: 18px;
+  color: #8cf1ce;
+}
+.dismiss-view {
+  margin-top: 12px;
+}
+@media (max-width: 1000px) {
+  .execution-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 main {
   width: min(1600px, 100%);

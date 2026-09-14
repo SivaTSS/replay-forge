@@ -163,7 +163,7 @@ def test_delayed_lookup_cannot_replace_new_operator_selection(
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
         page.route("**/runtime/api/v1/interventions**", respond)
-        page.goto(operator_stack.ui_url)
+        page.goto(f"{operator_stack.ui_url}/interventions")
         with page.expect_request(f"**/{first_id}"):
             page.get_by_role("button", name="First task", exact=False).click()
         page.get_by_role("button", name="Second task", exact=False).click()
@@ -197,7 +197,7 @@ def test_operator_finds_controls_and_resumes_real_session(operator_stack: Operat
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
         page.route("**/runtime/**", lambda route: operator_stack.forward(route))
-        page.goto(operator_stack.ui_url)
+        page.goto(f"{operator_stack.ui_url}/interventions")
 
         queue_item = page.get_by_role("button", name="payoff", exact=False).first
         expect(queue_item).to_be_visible()
@@ -241,3 +241,73 @@ def test_operator_finds_controls_and_resumes_real_session(operator_stack: Operat
     )
     assert "human_input_applied" in events
     assert "automation_resumed" in events
+
+
+@pytest.mark.integration
+def test_watch_replay_history_reconnect_and_same_session_handoff(
+    operator_stack: OperatorStack,
+) -> None:
+    """Real managed replay; only its sensitive policy boundary is an injected fixture."""
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1600, "height": 1100})
+        page.route("**/runtime/**", lambda route: operator_stack.forward(route))
+        page.goto(operator_stack.ui_url)
+        page.get_by_role("button", name="Use demo defaults").click()
+        page.get_by_label("member id", exact=False).fill("12346")
+        page.get_by_label("payoff date", exact=False).fill("2026-09-21")
+        page.get_by_role("button", name="Run and watch", exact=True).click()
+        expect(page.locator(".execution-id")).to_contain_text("exe_")
+        execution_id = page.locator(".execution-id").inner_text()
+        expect(page.get_by_role("button", name="Back", exact=True)).to_be_enabled(timeout=90_000)
+        page.get_by_role("button", name="Back", exact=True).click()
+        expect(page.get_by_alt_text("Earlier replay screen, read-only")).to_be_visible()
+        expect(page.get_by_role("button", name="Claim control")).not_to_be_visible()
+        page.get_by_role("button", name="Live", exact=True).click()
+        expect(page.get_by_role("button", name="Claim control")).to_be_visible(timeout=90_000)
+
+        page.reload()
+        expect(page.locator(".execution-id")).to_have_text(execution_id)
+        page.get_by_role("button", name="Claim control").click()
+        viewport = page.get_by_alt_text(
+            "Current retained browser viewport; click to send a left-click"
+        )
+        expect(viewport).to_be_visible()
+        frame = bytes(
+            viewport.evaluate(
+                "async image => Array.from(new Uint8Array("
+                "await (await fetch(image.src)).arrayBuffer()))"
+            )
+        )
+        matches = [
+            token
+            for token in RapidOcrTextRecognizer().recognize(frame)
+            if token.text.strip() == "Open"
+        ]
+        assert len(matches) == 1
+        region = matches[0].region
+        dimensions = viewport.evaluate("image => [image.naturalWidth, image.naturalHeight]")
+        displayed = viewport.bounding_box()
+        assert displayed is not None
+        viewport.click(
+            position={
+                "x": (region.x + region.width / 2) * displayed["width"] / dimensions[0],
+                "y": (region.y + region.height / 2) * displayed["height"] / dimensions[1],
+            }
+        )
+        expect(page.get_by_text("Input applied to the retained session.")).to_be_visible()
+        page.get_by_role("button", name="Resume automation").click()
+        page.get_by_role("button", name="Back", exact=True).click()
+        expect(page.get_by_alt_text("Earlier replay screen, read-only")).to_be_visible()
+        previous = page.get_by_alt_text("Earlier replay screen, read-only").get_attribute("src")
+        result = page.get_by_role("region", name="Final result")
+        expect(result).to_contain_text('"status": "success"', timeout=180_000)
+        expect(result).to_contain_text("$9,035.70")
+        expect(result).to_contain_text("2026-09-21")
+        expect(page.get_by_alt_text("Earlier replay screen, read-only")).to_have_attribute(
+            "src", previous or ""
+        )
+        page.get_by_role("button", name="Live", exact=True).click()
+        expect(page.get_by_alt_text("Actual execution browser screen, read-only")).to_be_visible()
+        expect(page.get_by_text("automation resumed", exact=True)).to_be_visible()
+        browser.close()
