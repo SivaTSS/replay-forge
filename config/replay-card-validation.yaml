@@ -1,0 +1,133 @@
+# Synthetic matrix inputs and expected outcomes; no navigation instructions.
+cases:
+  replay-raw-card-harbor-primary:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id001
+        member_id: '12345'
+        card_id: 12345-D1
+        reason: Member requested a temporary precautionary lock
+    expected_status: success
+  replay-raw-card-harbor-member-not-found:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id002
+        member_id: '00000'
+        card_id: 00000-D1
+        reason: Synthetic precautionary lock
+    expected_status: business_outcome
+    expected_code: member_not_found
+  replay-raw-card-harbor-card-already-locked:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id003
+        member_id: '12345'
+        card_id: 12345-D2
+        reason: Synthetic precautionary lock
+    expected_status: business_outcome
+    expected_code: card_already_locked
+  replay-raw-card-harbor-card-expired:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id004
+        member_id: '12345'
+        card_id: 12345-D3
+        reason: Synthetic precautionary lock
+    expected_status: business_outcome
+    expected_code: card_expired
+  replay-raw-card-harbor-invalid-maintenance-reason:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id005
+        member_id: '12345'
+        card_id: 12345-D1
+        reason: short
+    expected_status: failure
+    expected_code: invalid_maintenance_reason
+  replay-raw-card-harbor-member-restricted:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id006
+        member_id: '34567'
+        card_id: 34567-D1
+        reason: Synthetic precautionary lock
+    expected_status: failure
+    expected_code: member_restricted
+  replay-raw-card-harbor-acknowledge-member-notice:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id007
+        member_id: '23456'
+        card_id: 23456-D1
+        reason: Synthetic precautionary lock
+    expected_status: success
+    expected_recovery: acknowledge_member_notice
+  replay-raw-card-summit-primary:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id001
+    expected_status: success
+  replay-raw-card-summit-member-not-found:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id002
+    expected_status: business_outcome
+    expected_code: member_not_found
+  replay-raw-card-summit-card-already-locked:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id003
+    expected_status: business_outcome
+    expected_code: card_already_locked
+  replay-raw-card-summit-card-expired:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id004
+    expected_status: business_outcome
+    expected_code: card_expired
+  replay-raw-card-summit-invalid-maintenance-reason:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id005
+    expected_status: failure
+    expected_code: invalid_maintenance_reason
+  replay-raw-card-summit-member-restricted:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id006
+    expected_status: failure
+    expected_code: member_restricted
+  replay-raw-card-summit-acknowledge-member-notice:
+    capability_id: member.temporary_card_lock
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id007
+    expected_status: success
+    expected_recovery: acknowledge_member_notice

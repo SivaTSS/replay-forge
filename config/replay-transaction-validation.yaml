@@ -1,0 +1,57 @@
+# Synthetic matrix inputs and expected outcomes; no navigation instructions.
+cases:
+  replay-raw-transaction-harbor-primary:
+    capability_id: member.transaction_investigation
+    invocation:
+      version: 1.0.3
+      tenant: harbor
+      inputs: &id001
+        member_id: '12345'
+        account_id: 12345-01
+        transaction_reference: POS-80419
+    expected_status: success
+  replay-raw-transaction-harbor-member-not-found:
+    capability_id: member.transaction_investigation
+    invocation:
+      version: 1.0.3
+      tenant: harbor
+      inputs: &id002
+        member_id: '00000'
+        account_id: 00000-01
+        transaction_reference: POS-80419
+    expected_status: business_outcome
+    expected_code: member_not_found
+  replay-raw-transaction-harbor-transaction-not-found:
+    capability_id: member.transaction_investigation
+    invocation:
+      version: 1.0.3
+      tenant: harbor
+      inputs: &id003
+        member_id: '12345'
+        account_id: 12345-02
+        transaction_reference: POS-80419
+    expected_status: business_outcome
+    expected_code: transaction_not_found
+  replay-raw-transaction-summit-primary:
+    capability_id: member.transaction_investigation
+    invocation:
+      version: 1.0.3
+      tenant: summit
+      inputs: *id001
+    expected_status: success
+  replay-raw-transaction-summit-member-not-found:
+    capability_id: member.transaction_investigation
+    invocation:
+      version: 1.0.3
+      tenant: summit
+      inputs: *id002
+    expected_status: business_outcome
+    expected_code: member_not_found
+  replay-raw-transaction-summit-transaction-not-found:
+    capability_id: member.transaction_investigation
+    invocation:
+      version: 1.0.3
+      tenant: summit
+      inputs: *id003
+    expected_status: business_outcome
+    expected_code: transaction_not_found

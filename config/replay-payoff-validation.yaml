@@ -1,0 +1,108 @@
+# Synthetic matrix inputs and expected outcomes; no navigation instructions.
+cases:
+  replay-raw-payoff-harbor-primary:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id001
+        member_id: '12345'
+        payoff_date: '2026-09-20'
+    expected_status: success
+  replay-raw-payoff-harbor-member-not-found:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id002
+        member_id: '00000'
+        payoff_date: '2026-09-20'
+    expected_status: business_outcome
+    expected_code: member_not_found
+  replay-raw-payoff-harbor-quote-date-unavailable:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id003
+        member_id: '12345'
+        payoff_date: '2027-01-01'
+    expected_status: business_outcome
+    expected_code: quote_date_unavailable
+  replay-raw-payoff-harbor-invalid-payoff-date:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id004
+        member_id: '12345'
+        payoff_date: '2026-02-30'
+    expected_status: failure
+    expected_code: invalid_payoff_date
+  replay-raw-payoff-harbor-member-restricted:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id005
+        member_id: '34567'
+        payoff_date: '2026-09-20'
+    expected_status: failure
+    expected_code: member_restricted
+  replay-raw-payoff-harbor-acknowledge-member-notice:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: harbor
+      inputs: &id006
+        member_id: '23456'
+        payoff_date: '2026-09-20'
+    expected_status: success
+    expected_recovery: acknowledge_member_notice
+  replay-raw-payoff-summit-primary:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id001
+    expected_status: success
+  replay-raw-payoff-summit-member-not-found:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id002
+    expected_status: business_outcome
+    expected_code: member_not_found
+  replay-raw-payoff-summit-quote-date-unavailable:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id003
+    expected_status: business_outcome
+    expected_code: quote_date_unavailable
+  replay-raw-payoff-summit-invalid-payoff-date:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id004
+    expected_status: failure
+    expected_code: invalid_payoff_date
+  replay-raw-payoff-summit-member-restricted:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id005
+    expected_status: failure
+    expected_code: member_restricted
+  replay-raw-payoff-summit-acknowledge-member-notice:
+    capability_id: member.servicing_loan_payoff_quote
+    invocation:
+      version: 1.0.2
+      tenant: summit
+      inputs: *id006
+    expected_status: success
+    expected_recovery: acknowledge_member_notice

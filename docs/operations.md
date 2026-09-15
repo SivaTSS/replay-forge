@@ -143,13 +143,15 @@ fixtures. `--output-directory` changes the private export root.
 ### Grounding deadlines
 
 Visual grounding is bounded by `budgets.maximum_grounding_milliseconds` in
-`config/vision-policy.yaml` (10 seconds by default). `visual_grounding_budget_exceeded` means
+`config/vision-policy.yaml` (20 seconds by default). `visual_grounding_budget_exceeded` means
 that perception exceeded this limit; it does not authorize a click or a guessed target.
 
-During the latest local viewer capture, two payoff `1.0.2` launches stopped at readiness before
-task actions. A separate OCR check measured 8.84 and 9.18 seconds on a 1440 × 900 synthetic frame,
-indicating a tight margin on that machine. The exact replay bottleneck remains to be isolated;
-neither the policy nor the artifact was changed for the capture.
+The former 10-second limit stopped local replays at readiness before task actions. On the actual
+1280 × 800 captured frame, two-thread OCR alone took 9.04 seconds cold and 8.10 / 7.81 seconds warm;
+one thread took 11.78 seconds cold. We retained the bounded two-thread pool and set a 20-second
+perception budget to leave room for initialization, layout analysis, and local scheduling variance.
+This is a configurable resource limit, not a targeting fallback: confidence, uniqueness, policy,
+artifact checkpoints, action retry counts, and application-specific success conditions are unchanged.
 
 Before a live demonstration, provision OCR weights, check available CPU/memory, avoid concurrent
 heavy workloads, and verify a complete replay. Readiness health checks confirm service availability;
