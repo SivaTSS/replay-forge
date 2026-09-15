@@ -61,7 +61,8 @@ business data.
 A missing member returns `business_outcome`, not a crash. A recognized notice triggers a declared
 correction and rejoins a fixed step. Application rejection or an unrecoverable error returns
 `failure`; verified completion returns `success`. A live pause returns `intervention_required`.
-Failure evidence identifies the step and expected/observed condition without raw private values.
+Structured failure evidence identifies the step and expected/observed condition without raw
+private values; screenshot attachments follow the explicit policy described below.
 
 Waits and retries are bounded. Retrying an action requires evidence that its effect did not occur;
 an uncertain mutation is never repeated blindly. The [scenario matrix](docs/verification.md#scenario-matrix)
@@ -102,8 +103,9 @@ contract, resume is refused. Discovery requires manual input and a changed allow
 Both modes discard stale outputs and preserve spent budgets.
 
 Human corrections do not become recorded steps. Fresh unattended replay must still validate the
-capability; no post-discovery approval is required. Browser tests prove control transfer using
-injected blockages, separately from genuine discovery evidence.
+capability; no post-discovery approval is required. Browser tests prove replay control transfer
+using injected blockages, separately from genuine discovery evidence. Discovery continuation has
+unit coverage; its [console regression](docs/verification.md#control-transfer-evidence) needs follow-up.
 
 ## 6. Safety
 
@@ -125,7 +127,8 @@ define recipients and retention for this local, synthetic-data deployment.
 
 ## 7. Cuts
 
-Capabilities and sanitized evidence survive on disk; active runs, suites, and leases do not survive
+Capabilities, redacted structured evidence, and explicitly unredacted diagnostic PNGs survive on
+disk; active runs, suites, and leases do not survive
 restart. Database/queue infrastructure is deferred because this slice needs saved programs, not
 durable live coordination. Langfuse's database stack does not persist ReplayForge sessions.
 
