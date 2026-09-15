@@ -11,7 +11,7 @@ flowchart TD
     A --> V[Fresh unattended replay validation]
     V -->|passes| P[(Immutable published capability)]
     P --> R[Model-free replay]
-    R --> X([Typed result + sanitized evidence])
+    R --> X([Typed result + run evidence])
     D -. blocked .-> H[Same-session human handoff]
     R -. eligible blockage .-> H
     H -. verified resume .-> D
@@ -33,6 +33,10 @@ negative/recovery cases have genuine discovery and two-tenant replay proof in th
 
 Start with the [design report](REPORT.md), [architecture decisions](docs/architecture.md#critical-decision-index),
 and [recorded evidence](evidence/README.md).
+
+The [latest 32-case replay matrix](evidence/README.md#current-replay-matrix) passes all three
+capabilities on both tenants, including declared business outcomes, failures, and learned recovery.
+Failure bundles contain actual unmasked screenshots of the synthetic application.
 
 ## What is real
 
@@ -289,7 +293,7 @@ shared terminology. Start with [Architecture](docs/architecture.md),
 
 | Data / service | Lifetime and boundary |
 |---|---|
-| Published capabilities, visual assets, sanitized evidence | Durable local files; immutable versions and content hashes |
+| Published capabilities, visual assets, run evidence | Durable local files; immutable versions and content hashes; raw screenshots are explicitly labeled |
 | Journal events | Sanitized events are written to evidence; live journal indexes remain in memory |
 | Suite progress, browser sessions, leases, viewer buffers | In memory; restart loses active execution and control state |
 | Viewer screens | Temporary, potentially sensitive frames; no persisted screen-history files |

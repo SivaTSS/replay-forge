@@ -1,0 +1,1 @@
+{"code":"invalid_payoff_date","diagnostic_trace":"captured","evidence_manifest":"evidence://run_f7ce635c18a34005a9df489d5e368334/manifest-evd_f447e7376a3147a78c982bf45e10319a.bin","recoverable":false,"run_id":"run_f7ce635c18a34005a9df489d5e368334","status":"failure","step_id":"step_06_click_calculate_payoff_button"}

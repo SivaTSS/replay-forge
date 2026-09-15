@@ -6,6 +6,15 @@ ReplayForge's verification combines genuine model-driven discovery, deterministi
 and focused contract tests. The evidence connects each published workflow to its recorded execution;
 regression tests exercise the safety and control-transfer rules shared by all workflows.
 
+## Current replay verification
+
+The [fresh 32-case matrix](../evidence/README.md#current-replay-matrix) on `6c5a304` passed for
+the three unchanged published capabilities on both tenants: 10 successes (including four notice
+recoveries), 14 business outcomes, and 8 expected application failures. Each failure has an
+unmasked, integrity-verified screenshot. No model calls or artifact republishing were required.
+This rerun uses the [measured 20-second perception budget](operations.md#grounding-deadlines);
+the earlier readiness-timeout capture is historical, not the current replay result.
+
 ## One command
 
 ```bash

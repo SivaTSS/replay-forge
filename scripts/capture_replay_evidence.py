@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run declared model-free replay cases and export verified, sanitized evidence."""
+"""Run declared model-free cases and export verified evidence with explicit privacy metadata."""
 
 from __future__ import annotations
 
