@@ -68,7 +68,7 @@ if an override's base hash has changed. Fleet rollout and vendor-version detecti
 | Shared artifact plus measured tenant validation | Chosen | Smallest model that proves actual reuse |
 | Compare screenshot hashes at startup | Rejected | Rejects harmless changes in layout, values, or branding |
 | Contract and semantic landmark checks | Chosen | Stable checks with explicit failure reasons |
-| Build fleet infrastructure now | Deferred | The PDF asks for credible design; this slice needs executable reuse proof |
+| Build fleet infrastructure now | Deferred | Validate shared execution contracts and tenant reuse before adding distributed coordination |
 
 ## Surface extension
 

@@ -131,6 +131,24 @@ fixtures. `--output-directory` changes the private export root.
 
 ## Failure behavior
 
+### Grounding deadlines
+
+Visual grounding is bounded by `budgets.maximum_grounding_milliseconds` in
+`config/vision-policy.yaml` (10 seconds by default). `visual_grounding_budget_exceeded` means
+that perception exceeded this limit; it does not authorize a click or a guessed target.
+
+During the latest local viewer capture, two payoff `1.0.2` launches stopped at readiness before
+task actions. A separate OCR check measured 8.84 and 9.18 seconds on a 1440 × 900 synthetic frame,
+indicating a tight margin on that machine. The exact replay bottleneck remains to be isolated;
+neither the policy nor the artifact was changed for the capture.
+
+Before a live demonstration, provision OCR weights, check available CPU/memory, avoid concurrent
+heavy workloads, and verify a complete replay. Readiness health checks confirm service availability;
+a successful task replay confirms the execution path. Diagnose timing before changing budgets,
+then validate any configuration change against the same task and safety checks.
+
+### HTTP and execution results
+
 | Condition | HTTP/result behavior |
 |---|---|
 | Invalid request shape | `422 request_validation_failed` |

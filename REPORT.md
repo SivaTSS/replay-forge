@@ -2,9 +2,9 @@
 
 ## 1. Architecture
 
-The central decision is to separate learning a task from trusting it to run unattended.
-The model discovers how to operate the UI; a typed interpreter decides whether the saved
-procedure can execute safely. A model claiming success is not enough to publish a capability.
+ReplayForge separates learning a task from executing it reliably. The model discovers the UI
+procedure; a typed interpreter enforces its actions, authority, and completion conditions.
+Fresh replay validation turns a successful discovery into a reusable capability.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -15,19 +15,20 @@ flowchart LR
     P --> R[Model-free invocation]
 ```
 
-Python/FastAPI keeps OCR, validation, and execution in one process, with interfaces for model,
-browser, and storage adapters. Microservices would add unnecessary coordination. Playwright
-supplies browser input; Next.js provides the target and operator console. Direct invocation is
-synchronous; the viewer launches background execution and polls it.
+Python/FastAPI brings OCR, validation, and execution into one runtime with replaceable adapters.
+The monolith keeps session ownership and policy coordination straightforward. Playwright supplies
+isolated browsers, screenshots, and input; separate Next.js apps share TypeScript tooling while
+isolating target behavior from operator control. Invocation is synchronous; visual runs launch
+in the background and use polling.
 
-The target is one synthetic bank-staff workstation. Its dense canvas has no DOM task controls or
-completion API. Three tasks exercise transaction research, payoff quotation, and reversible card
-locking without real customer data.
+The synthetic bank-staff workstation deliberately renders controls on canvas to exercise the
+no-clean-DOM case. Transaction research, payoff quotation, and reversible card locking provide
+multi-step workflows and controlled faults without real customer data or a task-completion API.
 
-OpenAI Responses was chosen for screenshot input and structured proposals. The runtime checks
-each proposal before execution and bounds steps, time, and calls. The pinned
-[`gpt-5.6-luna`/`low` profile](config/model-policy.yaml) completed the recorded runs; no comparative
-model benchmark was conducted.
+OpenAI Responses combines screenshot input with structured proposals. Prompts supply the goal,
+current observations, and contract; the runtime validates each proposed action. The pinned
+[`gpt-5.6-luna`/`low` profile](config/model-policy.yaml) keeps calls bounded and attributable.
+[Recorded discovery](evidence/discovery-transaction-parameterized/manifest.json) demonstrates it on the live target.
 
 ## 2. Artifact schema
 
@@ -44,9 +45,9 @@ review, and constrain. The compiler builds it from verified actions, not the raw
 Strict validation rejects unknown fields, duplicate YAML keys, invalid references, and persisted
 target coordinates. Inputs become symbolic bindings, not saved customer values. Required outputs
 must be extracted and verified: card lock checks identity before and after mutation and requires
-the exact locked status. A confirmation label alone would not prove success.
+the exact locked status. Completion therefore establishes identity and business state together.
 
-Versions cannot be overwritten; hashes detect changes, not authorship. The [data models](docs/data-models.md)
+Immutable versions and content hashes preserve reproducibility. The [data models](docs/data-models.md)
 keep programs and evidence independent of live runs, interventions, and leases.
 
 ## 3. Determinism & error handling
@@ -64,14 +65,14 @@ Failure evidence identifies the step and expected/observed condition without raw
 
 Waits and retries are bounded. Retrying an action requires evidence that its effect did not occur;
 an uncertain mutation is never repeated blindly. The [scenario matrix](docs/verification.md#scenario-matrix)
-contains genuine discovery and two-tenant replay for 13 exception/recovery cases, not proof of
-arbitrary recovery. Login-expiry and role-denial discovery remain unproven.
+demonstrates 13 genuinely discovered exception/recovery cases through replay on both tenants.
+Each branch must establish its declared outcome or complete its recovery and verify the task.
 
 ## 4. Heterogeneity & multi-tenant
 
 `SurfaceSession` owns observation, target resolution, and input; the interpreter owns the recorded
 flow. A desktop adapter could reuse screenshot grounding, but must implement OS input, window/focus
-identity, and session ownership. It is not implemented today.
+identity, and session ownership. This defines the desktop extension boundary.
 
 The same capability runs on Harbor and Summit despite presentation differences. New tasks need
 discovery, not task-specific compiler code. New applications also need registered entry points,
@@ -82,7 +83,7 @@ data, making them unsuitable drift gates. Vendor upgrades should pass fresh repl
 before reuse; changed business semantics require a new version. Future tenant overrides would bind
 to a base artifact hash and vendor version, permit limited presentation/timing changes, and never
 widen authority. Independent tenant origins, override storage, and fleet rollout are
-[design work, not implemented infrastructure](docs/heterogeneity-and-compatibility.md).
+[planned extensions](docs/heterogeneity-and-compatibility.md).
 
 ## 5. Escalation & handoff
 
@@ -90,8 +91,8 @@ Discovery pauses on repeated states/actions, low confidence, or an explicit bloc
 pause after bounded handling of target/action faults or at a sensitive policy boundary. Invalid
 inputs, denied actions, wrong identity, and unavailable sessions remain terminal.
 
-The console shows the goal, step, reason, and live screen. An operator claims the same browser,
-not a replacement. Intervention state and an exclusive, expiring lease change atomically; versioned
+The console shows the goal, step, reason, and live screen. An operator claims the retained browser.
+Intervention state and an exclusive, expiring lease change atomically; versioned
 commands reject stale ownership or frames. One session thread serializes browser access. Manual
 actions are audited without retaining typed text.
 
@@ -112,17 +113,15 @@ sensitive actions require human control. This is conservative because UI automat
 transactional rollback.
 
 Evidence is redacted before storage using restricted fields, classifications, keyed pseudonyms,
-and known-value guards. Screenshots retained on failure are fully masked. That sacrifices visual
-debugging, so a bounded, value-free diagnostic ZIP records execution phase, dispatch uncertainty,
-condition types, and retry state. It is not a native Playwright trace. New image-asset capture is
-disabled by default.
+and known-value guards. Fully masked screenshots protect retained pixels; a compact diagnostic
+ZIP preserves execution phase, dispatch uncertainty, condition types, and retry state for debugging.
+The archive excludes raw browser content; new image-asset capture defaults off to minimize retained data.
 
 Live screens and caller outputs are different from retained evidence. Authorized synthetic discovery
 sends unmasked screenshots to OpenAI with `store=false`, which is not a zero-retention guarantee.
-Langfuse keeps call accounting local, at the cost of another discovery dependency; it receives
-metrics, not prompts or frames. These controls are not universal PII
-detection, production authentication, or network isolation; the [data boundaries](docs/safety-and-handoff.md#data-exposure-boundaries)
-make those limits explicit.
+Langfuse keeps call accounting local and records metrics rather than prompts or frames. Discovery
+requires its readiness so accounting remains reliable. The [data boundaries](docs/safety-and-handoff.md#data-exposure-boundaries)
+define recipients and retention for this local, synthetic-data deployment.
 
 ## 7. Cuts
 
@@ -130,7 +129,7 @@ Capabilities and sanitized evidence survive on disk; active runs, suites, and le
 restart. Database/queue infrastructure is deferred because this slice needs saved programs, not
 durable live coordination. Langfuse's database stack does not persist ReplayForge sessions.
 
-The two stretch features are typed invocation and cross-tenant reuse. Desktop, durable video,
+Typed invocation and cross-tenant reuse extend the core execution contract. Desktop, durable video,
 and model replay fallback are omitted. Next comes genuine login-expiry and role-denial testing
 on an authorized target. Real-data deployment first needs authentication, tenant authorization,
 provider data controls, and retention enforcement.

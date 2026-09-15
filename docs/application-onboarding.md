@@ -81,15 +81,16 @@ Observed labels and relative layout relationships belong in the generated artifa
 discovered application knowledge, not hardcoded runtime knowledge. Changed layouts can invalidate
 that artifact and require rediscovery; the engine must not guess or silently rewrite it.
 
-## Honest limits
+## Supported integration boundary
 
-Registration cannot make an unsupported control work. The concrete adapter supports Chromium web
-surfaces, a bounded action vocabulary, local OCR and image signatures. Native desktop, Citrix/RDP
+The concrete adapter supports Chromium web surfaces, a bounded action vocabulary, local OCR,
+and image signatures. Registration binds these capabilities to an approved application.
+Native desktop, Citrix/RDP
 transport, inaccessible authentication and controls outside that vocabulary need additional adapter
 work or operator intervention. Visual dropdown selection is not a native `select` operation;
 discovery must use supported interactions exposed by the actual control.
 
-Model calls, time, frame size and retries stay bounded. Literal leak guards cover known data, not
-universal semantic PII recognition. New deployments need their own data-sharing authorization and
-policy. The current tests demonstrate reusable mechanisms; they do not prove every application
-will discover successfully. See [discovery](discovery.md) and [privacy boundaries](safety-and-handoff.md).
+Model calls, time, frame size, and retries stay bounded. Literal leak guards reject known sensitive
+values; deployment data policy governs broader PII handling. Onboarding includes data-sharing
+authorization and validation against the new application. See [discovery](discovery.md) and
+[privacy boundaries](safety-and-handoff.md) for those checks.

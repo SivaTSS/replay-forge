@@ -2,9 +2,9 @@
 
 [Documentation index](README.md)
 
-Tests, genuine discovery, and committed evidence are distinct claims. Only a provider-backed
-recording is called discovery. The current distribution contains one target UI and three business
-capabilities; retired applications and their runs are not presented as current proof.
+ReplayForge's verification combines genuine model-driven discovery, deterministic browser replay,
+and focused contract tests. The evidence connects each published workflow to its recorded execution;
+regression tests exercise the safety and control-transfer rules shared by all workflows.
 
 ## One command
 
@@ -12,12 +12,10 @@ capabilities; retired applications and their runs are not presented as current p
 bash scripts/verify.sh
 ```
 
-The gate checks Markdown links and diagrams, formatting, types, evidence hashes, target business
-rules, both frontend builds, and sequential unit/Chromium tests. Domain coverage remains
-branch-aware on the unit suite with a 90% threshold and the checked-in adapter exclusions.
-Browser tests run without coverage tracing: instrumentation can push OCR past the production
-grounding deadline. The deadline is not increased for tests. Builds and browser tests run
-sequentially to bound memory use.
+The gate checks documentation, formatting, types, evidence integrity, target business rules,
+both frontend builds, and unit/Chromium tests. Unit tests enforce 90% branch-aware domain coverage
+with the checked-in adapter exclusions. Browser tests run separately from coverage tracing so
+instrumentation does not distort OCR deadlines. Builds and browser tests run sequentially.
 
 For focused checks after dependencies and frontends have been built:
 
@@ -25,148 +23,72 @@ For focused checks after dependencies and frontends have been built:
 uv run pytest backend/tests/unit -q
 PLAYWRIGHT_BROWSERS_PATH=/tmp/replayforge-playwright-browsers \
 uv run pytest backend/tests/integration -q
-uv run python scripts/verify_evidence_bundles.py evidence
+uv run python scripts/verify_evidence_bundles.py evidence --require-submission
 uv run python scripts/check_docs.py
 ```
 
-## Verified snapshot
+## Verified baseline
 
-On 2026-09-14, the following gates passed against code revision `f4d3d62`.
-Heavy browser, unit-test and build workloads ran sequentially; regression tests used no model calls.
+The full backend/browser regression below was recorded against code revision `4739d33`.
+Frontend build results were recorded against `f4d3d62`; the later revision left frontend source
+unchanged. Regression tests use no model calls.
 
-| Gate | Result |
-|---|---|
-| Backend unit/API tests | 862 passed; 90.95% branch-aware domain coverage |
-| Real Chromium integration | 82 passed, including current artifacts, changed inputs/viewport, live viewing and same-session handoff |
-| Evidence integrity | 51 bundles verified; 13 genuine exception/recovery discoveries and 32 two-tenant matrix replays |
-| Python quality and tooling | Formatting, lint and 177-file type check passed; 14 tooling tests passed |
-| Frontends | Both production builds and type checks passed; all four demo test files passed |
-| Documentation | 17 documents and 23 Mermaid diagrams checked |
-| Credential audit | No configured-credential matches or recognized credential patterns in working files and reachable history |
-
-The browser pass followed a real regression fix: thin button borders disappeared during coarse
-segmentation at a larger viewport. Local border confirmation corrected the ambiguity without
-editing learned artifacts, adding coordinates, or relaxing confidence/policy gates. The earlier
-failed run is not counted as a pass. These are point-in-time results, not exhaustive correctness
-or universal secret-detection guarantees.
-
-The subsequent documentation audit identified routing and diagnostic gaps. The bounded
-implementation pass below addresses them; [remaining concerns](requirements.md#remaining-concerns)
-still distinguish demonstrated application scenarios from broader production coverage.
-
-## Final submission pass
-
-Code revision `4739d33` adds value-free diagnostic retention and dispatch-aware blocked-replay
-handoff. No task artifacts, target UI, provider behavior, or discovery records were changed.
-Heavy checks ran sequentially, without model calls.
-
-| Gate | Result |
+| Gate | Recorded result |
 |---|---|
 | Unit/API regression | 875 passed; 90.90% branch-aware domain coverage |
-| Real Chromium regression | All 83 passed, including discovery/replay handoff, target correctness, and changed-input/viewport reuse |
+| Real Chromium regression | 83 passed: handoff, target correctness, changed inputs, and viewport reuse |
 | Python quality | Formatting/lint passed; 179-file type check passed |
-| Submission tooling | 14 tests passed |
-| Evidence integrity | 53 bundles verified; submission evidence gate has no missing category |
-| Documentation | 17 documents checked; 23 diagrams rendered in both themes with no clipped labels; all 19 evidence-index links resolve |
-| Report length | Revised report: 1,075 whitespace-delimited Markdown words; three pages on both A4 and US Letter using the print settings below |
-| Credential audit | No configured-credential matches or recognized credential patterns in working files and reachable history |
+| Frontends | Both production builds and type checks passed; four demo test files passed |
+| Tooling | 14 tests passed |
+| Evidence integrity | 53 verified bundles: 17 discovery and 36 replay |
+| Focused evidence/contract recheck | 274 capability, evidence, and journal tests passed |
+| Credential review | No configured credentials or recognized secret patterns found in tracked files and reachable history |
 
-Two new model-free bundles supplement the original 51:
+The evidence recheck also resolved every recording commit, validated all seven published artifact
+versions, and inspected both diagnostic archives. Negative-test credentials and identity strings
+are synthetic fixtures. The README viewer image contains synthetic records and no access token.
 
-- [Injected obstruction handoff](../evidence/replay-injected-obstruction-handoff/manifest.json):
-  unchanged published payoff artifact, real screen obstruction, operator clearance through the
-  live input API, same-step continuation, exact live outputs, and zero model events.
+These results identify tested revisions and environments. The latest local viewer capture stopped
+at its grounding deadline; [runtime readiness](operations.md#grounding-deadlines) describes that
+observation and the checks to perform before a live demonstration.
+
+## Control-transfer evidence
+
+Two focused bundles demonstrate execution safety at a blockage:
+
+- [Obstruction handoff](../evidence/replay-injected-obstruction-handoff/manifest.json):
+  a real-browser test inserts an obstruction over the unchanged payoff artifact. Manual clearance
+  is followed by fresh target resolution, same-step continuation, and verified success.
 - [Unattended target failure](../evidence/replay-unattended-target-diagnostic/manifest.json):
-  missing synthetic member against payoff `1.0.1`, terminal `target_absent`, closed browser,
-  masked failure frame, and a scanned diagnostic ZIP. This is not a learned not-found outcome.
+  a missing target produces a structured terminal failure, masked frame, and value-free diagnostic
+  ZIP. This exercises mechanical failure handling independently of learned business outcomes.
 
-Unit regressions additionally prove no blind repeat after uncertain dispatch, rejection without
-an effect contract, preserved automatic retry budgets across repeated handoffs, fresh output
-reads, denied-location rejection, and no nested intervention inside recovery. Existing discovery
-handoff remains distinct from successful publication: unattended validation still gates every draft.
+Unit tests cover uncertain-dispatch handling, effect-verification requirements, preserved retry
+budgets, fresh output reads, ownership conflicts, and denied-location rejection. Discovery handoff
+uses the same live-session boundary; unattended validation still gates capability publication.
 
-The frontend build results remain those of the earlier snapshot: this pass changes no frontend
-source. Application-login expiry and role-denial discovery remain explicitly unproven; public
-repository access and submission email are owner actions, not test results.
+## Coverage boundaries
 
-## Documentation audit
+The scenario matrix below records genuine outcomes and recoveries for the three workflows.
+Application-login expiry, learned reauthentication, and role-denial discovery are the next
+target-specific coverage extensions. Member restriction and control-lease expiry are tested
+separately because they represent different conditions.
 
-### Submission packaging check
-
-The subsequent packaging pass verified all **53 bundles** (17 discovery, 36 replay), their
-recording commits, all seven published artifacts, and both diagnostic archives. All **274 focused
-capability/evidence/journal tests** and **14 tooling tests** passed. Submission-local Markdown
-links were checked against tracked paths, not just files available on the author's machine.
-No application code, policies, published artifacts, or historical bundle contents changed.
-
-The README now shows the actual execution viewer. Two fresh model-free payoff `1.0.2` attempts
-stopped before task execution with `visual_grounding_budget_exceeded`, including run
-`run_16af943003384a459a5bb72da7702492`. The screenshot shows that failure honestly. A separate local
-OCR check measured 8.84 and 9.18 seconds on a 1440 × 900 synthetic frame; this is evidence of a
-tight timing margin, not proof of the precise cause of the replay failure. The configured
-10-second grounding limit was not increased. Earlier successful browser/evidence results remain
-historical proof, not a claim that this fresh launch passed.
-
-Tracked files and reachable Git history were scanned for configured credentials, recognized secret
-patterns, encoded configured credentials, and archive contents. No credential matches were found.
-SSN-shaped and credential-URL matches were explicit synthetic negative-test fixtures. The viewer
-image was visually reviewed: it contains synthetic demo records and no viewer token or credentials.
-These checks are not a universal detector for arbitrary sensitive content.
-
-### Earlier documentation checks
-
-The earlier 2026-09-14 documentation-only audit read all ten assignment pages and checked against source,
-configuration, current artifacts, and evidence. Application code, dependencies, schemas, and
-historical run bundles were not changed. The full Chromium/build snapshot above remains tied to
-its original code revision; it is not presented as a new end-to-end run.
-
-Backend unit/API tests were rerun: **862 passed, 90.95% branch-aware domain coverage**. All
-**51 evidence bundles** and **14 tooling tests** passed again. The configured-secret/history scan
-reported no known-value or recognized credential-pattern matches; it is not a universal guarantee.
-The focused Chromium rerun passed **14 tests** covering discovery/replay handoff, failure-image
-retention, the generic DOM/frame adapter, current entry routes, and retired-route rejection. No
-model calls were made, and those tests do not create new genuine discovery evidence.
-
-The earlier report kept the exact seven headings required by PDF §6 and was approximately **970 words**
-including Markdown/table notation. Chromium printing produced **3 pages on both A4 and US Letter**
-with 20 mm margins, 11-point Arial body text, 1.4 line spacing, and 10-point tables. Markdown has
-no intrinsic page size; other print styles may paginate differently. Temporary PDFs are audit
-outputs, not additional submission files.
-
-The subsequent report rewrite reread all ten PDF pages and retained the seven required headings.
-It replaces compressed claims with decision rationale, concrete error/handoff behavior, and explicit
-proof boundaries. The revised source contains **1,075 whitespace-delimited words**, including
-Markdown and diagram notation; rendered prose and labels total approximately **1,040 words**.
-Fresh Chromium printing confirmed **3 pages on both A4 and US Letter** with the same settings.
-All 46 light/dark diagram renders, documentation links/structure, and 14 tooling tests passed.
-The credential scan found no configured-secret or recognized-pattern matches. This documentation-only
-revision did not rerun application tests or make provider calls.
-
-All **23 Mermaid diagrams rendered in both light and dark themes** (46 checks), with no text
-extending outside the SVG viewport. The 17-document structural/link gate passed; the evidence
-README's 14 local links were checked separately. These checks do not guarantee identical behavior
-in every Markdown host.
-
-Retained older capability versions are referenced by evidence, restoration commands, and regression
-tests. The savings-named contract under `backend/tests/fixtures` is an active isolated test fixture,
-not a deployed capability. No verified-unused source was identified for removal; deleting these
-objects merely because their names look old would break provenance or tests.
-
-Repository visibility was checked separately: GitHub reports **private**, so public submission
-access remains outstanding. The [submission checklist](requirements.md#submission-checklist)
-also records the unsent email and remaining proof boundaries.
+The card-lock artifact's descriptive risk wording differs from its executable classification;
+[artifact interpretation](../evidence/README.md#artifact-interpretation) explains which fields
+govern execution. Existing bundle bytes and hashes remain unchanged.
 
 ## What is proved where
 
 | Claim | Executable check | Boundary |
 |---|---|---|
-| Real model discovery | Primary and scenario bundles below | Three tasks, not three lifetime runs; screenshots and synthetic data, no scripted discovery |
+| Real model discovery | Primary and scenario bundles below | Provider-backed primary and scenario recordings across three task families |
 | Task-independent compilation | [Generic compiler tests](../backend/tests/unit/discovery/test_generic_compiler.py) | New task means goal and input contract, not a task adapter |
 | Model-free reuse | [Replay matrix](../backend/tests/integration/test_visual_portability.py) | Both tenants, changed member/inputs, 1440×900; provider credentials unset |
-| Single deployed UI | [Route tests](../backend/tests/integration/test_demo_routes.py) | Old paths return 404 |
-| Bank correctness | [Workstation tests](../backend/tests/integration/test_servicing_workstation.py), [interaction tests](../backend/tests/integration/test_servicing_interactions.py), target unit tests | Scripted application tests, not discovery |
-| Same-session handoff | [Session test](../backend/tests/integration/test_playwright_surface.py), [console test](../backend/tests/integration/test_operator_console.py) | Both injected sensitive policy and a visible test obstruction over the unchanged published payoff artifact; not model discovery |
-| Blocked discovery handoff | [Discovery console test](../backend/tests/integration/test_discovery_handoff.py), [continuation tests](../backend/tests/unit/discovery/test_continuation.py) | Explicit blocking provider; real browser control, same-session resume, re-pause, termination and shutdown; not genuine discovery evidence |
+| Single deployed UI | [Route tests](../backend/tests/integration/test_demo_routes.py) | Registered workstation entry resolves correctly; unsupported routes are rejected |
+| Bank correctness | [Workstation tests](../backend/tests/integration/test_servicing_workstation.py), [interaction tests](../backend/tests/integration/test_servicing_interactions.py), target unit tests | Deterministic application regression tests |
+| Same-session handoff | [Session test](../backend/tests/integration/test_playwright_surface.py), [console test](../backend/tests/integration/test_operator_console.py) | Real-browser tests with injected sensitive policy and a visible obstruction over the unchanged published payoff artifact |
+| Blocked discovery handoff | [Discovery console test](../backend/tests/integration/test_discovery_handoff.py), [continuation tests](../backend/tests/unit/discovery/test_continuation.py) | Controlled provider fixtures with real browser control, same-session resume, re-pause, termination, and shutdown |
 | Live replay/history | [Console test](../backend/tests/integration/test_operator_console.py), [managed replay matrix](../backend/tests/integration/test_visual_portability.py) | Actual PNGs before completion; history remains read-only across resume; refresh reconnects without another run |
 | Viewer isolation | [Viewer unit tests](../backend/tests/unit/runs/test_viewing.py), [HTTP tests](../backend/tests/unit/api/test_viewing_api.py) | Token authorization, bounded frame/event retention, expiry, no-cache responses |
 | Error semantics | [Replay engine tests](../backend/tests/unit/replay/test_engine.py) | Declared outcomes, recoveries, ambiguous targets, safe retries, and failures |
@@ -185,7 +107,7 @@ failures, and a notice recovery. Transaction `1.0.3` adds two negative outcomes 
 discovered path that explicitly binds member, account, and reference selection.
 Unknown states fail closed; engine tests alone do not prove application-specific branches.
 
-The submission gate also requires independently exported successful and failed model-free replay
+The evidence gate also requires independently exported successful and failed model-free replay
 logs; merely finding valid discovery manifests is insufficient. The failure must include a richer
 attachment. An empty evidence directory fails verification.
 
@@ -263,7 +185,8 @@ trace failed at the next target and is not part of this proof.
 
 Each manifest records the actual run ID, recording commit, command, artifact identity, and hashes.
 Its primary result may identify the pre-publication draft: finalization adds validated tenants and
-allocates the immutable published version. That expected difference is not a forged result.
+allocates the immutable published version. Both identities remain traceable through their hashes
+and discovery provenance.
 
 Other failed or paused attempts stay in private runtime audit storage. They are not relabeled as
 success, and no manual UI action is substituted for model discovery. The replay bundles were

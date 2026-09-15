@@ -114,8 +114,8 @@ resource use bounded. Capture stops on an unsuccessful discovery or validation. 
 scenario artifact and its finalized run-manifest reference are saved immediately with owner-only
 permissions, even if a later case fails. The reference is separate because the artifact's
 provenance manifest can precede the terminal result.
-The primary artifact is saved only after publication. Private capture files are not submission
-evidence: export and verify sanitized bundles using the
+The primary artifact is saved only after publication. Export private captures as verified,
+sanitized bundles using the
 [evidence workflow](verification.md), including actual run IDs and the recording commit.
 
 To extend a committed example without rediscovering its successful path, add

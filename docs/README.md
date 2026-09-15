@@ -22,7 +22,7 @@ Human intervention belongs to blocked live execution, during replay or discovery
 
 | Audience | Read in order | What to inspect |
 |---|---|---|
-| Assignment evaluator | [Design report](../REPORT.md) → [PDF traceability](requirements.md#pdf-traceability) → [evidence](verification.md#scenario-matrix) | Delivered behavior, proof, [remaining concerns](requirements.md#remaining-concerns), and submission status |
+| Technical reviewer | [Design report](../REPORT.md) → [decision index](architecture.md#critical-decision-index) → [evidence](verification.md#scenario-matrix) | Design rationale, executable contracts, and demonstrated outcomes |
 | Engineer reviewing the design | [Architecture](architecture.md) → [decision index](architecture.md#critical-decision-index) → [real capability walkthrough](capability-and-replay.md#worked-example-temporary-card-lock) | Boundaries, trade-offs, and the actual executable contract |
 | Engineer running the system | [Quickstart](../README.md#run-the-core-replay) → [HTTP contract](operations.md) → [handoff](safety-and-handoff.md#same-session-handoff) | Reproduce replay, interpret results, and operate a paused session |
 
@@ -30,9 +30,8 @@ No API key is needed to inspect committed evidence or run deterministic replay. 
 discovery is a separate, credentialed operation. Throughout these docs, “review” means evaluating
 the repository—not approving a discovery publication.
 
-The report is the short submission narrative; reference pages carry implementation detail.
-The [submission checklist](requirements.md#submission-checklist) distinguishes repository files
-from public access and email delivery. Passing local checks is not the same as submitting.
+The report explains the core design and trade-offs. Reference pages provide implementation
+detail, operating guidance, and reproducible verification commands.
 
 ## Read by question
 
@@ -51,10 +50,9 @@ from public access and email delivery. Passing local checks is not the same as s
 | What can the synthetic bank do, and how does it challenge automation? | [Demo bank](demo-bank.md) |
 | What do the tests and committed evidence prove? | [Verification](verification.md) |
 | Which negative outcomes and recovery paths must be proved? | [Exception coverage](exception-coverage.md) |
-| How does the implementation map to the assignment? | [Requirements](requirements.md) |
 
 Start with the root [quickstart](../README.md), then read Architecture → Data models →
-Capability and replay. [REPORT.md](../REPORT.md) is the required seven-part design summary.
+Capability and replay. [REPORT.md](../REPORT.md) is the seven-part design summary.
 
 ## Shared terminology
 
@@ -78,10 +76,10 @@ Every page uses these labels consistently:
 | Label | Meaning |
 |---|---|
 | **Implemented** | Executable code is present in this repository. |
-| **Tested** | Automated checks exercise it; this alone does not claim a genuine model run. |
+| **Tested** | Automated checks exercise the behavior and its invariants. |
 | **Evidenced** | A committed, hash-verified run bundle demonstrates it. |
 | **Designed** | A typed seam exists or the extension is explained, but the behavior is not built. |
-| **Cut** | Intentionally outside this submission. |
+| **Cut** | Intentionally outside the current implementation scope. |
 
 ## Scope in one table
 

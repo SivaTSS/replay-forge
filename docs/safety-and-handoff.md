@@ -50,7 +50,7 @@ The model and artifact therefore cannot lower an independently detected risk.
 | Read-only or reversible within policy | Allow |
 | Sensitive replay step within policy | Pause the live session for human intervention |
 | Above policy ceiling | Deny |
-| Irreversible | Always deny in this submission |
+| Irreversible | Always deny in the current policy |
 
 ## Control ownership
 
@@ -283,7 +283,7 @@ disabled. Do not enable the flag for real customer records.
 | Failure diagnostics | Raw browser trace, masked image alone, value-free snapshot | Scanned snapshot + ordered events | Explains where and why execution stopped without retaining UI values; one final ZIP preserves the exporter contract |
 | Blocked replay continuation | Restart, repeat blindly, dispatch-aware continuation | Restore/retry before dispatch; verify/advance otherwise | Preserves the same session without duplicating uncertain mutations or resetting automatic budgets |
 | Image signatures | Treat edges as anonymous, permit all crops, restricted capture | Off by default | Edge maps can preserve sensitive content; synthetic opt-in keeps the demo option explicit |
-| Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, form state, and the assignment's required seam |
+| Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, and form state across control transfer |
 | Operator routing | Require an ID from logs, active inbox | Discovery/replay inbox + optional direct ID | Makes a paused session discoverable without adding a general run-management UI |
 | Ownership | UI convention, mutex only, versioned lease | Versioned lease + CAS | Makes stale and concurrent commands explicit conflicts |
 | Identity | Pretend login, external identity provider, local label | Local operator label | Keeps the trust boundary honest; real authentication belongs with deployment authorization |

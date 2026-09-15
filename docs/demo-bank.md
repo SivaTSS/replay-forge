@@ -216,8 +216,8 @@ amount/reason boundaries, and stale-review rejection.
 | The scrollbar looked interactive but did not accept dragging | Actual track/drag interaction, alongside wheel and keyboard scrolling |
 | A valid request key could collide with an inherited object property | Own-property lookup, verified across repeated confirmations |
 
-The supported verification surface is desktop Chromium. Passing these checks is bounded evidence,
-not a claim of zero defects across every browser, input method, or future dataset.
+Desktop Chromium is the supported verification surface. The checks cover the workstation's
+business transitions and input behavior; new browsers or input methods require their own validation.
 
 The workstation entry point is `legacy_servicing`, with route `/servicing`. Root and tenant links
 reach this sole UI; the old member-search, account-detail, visual-terminal, and visual-workbench

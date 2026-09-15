@@ -6,9 +6,9 @@
 
 ReplayForge is a modular monolith with two separate Next.js applications: one is the synthetic target, the other is the operator console.
 
-The target's [servicing workstation](demo-bank.md) now provides a connected synthetic ledger and
-multiple staff workflows. It is the sole deployed target UI; obsolete fixture routes return 404.
-Historical discovery evidence is not retroactively credited to this workstation.
+The target's [servicing workstation](demo-bank.md) provides a connected synthetic ledger and
+multiple staff workflows in one canvas-based UI. The operator console runs separately so
+execution visibility and human control remain independent of target application behavior.
 
 ```mermaid
 %%{init: {"htmlLabels":false,"themeVariables":{"lineColor":"#6E7781","signalColor":"#6E7781"},"flowchart":{"curve":"linear"},"sequence":{"wrap":true}}}%%
@@ -158,7 +158,7 @@ The production path is rendered-surface first. Playwright is still the browser t
 | Raw CSS/XPath recording | Rejected as primary | Couples artifacts to markup shape and generated identifiers |
 | Semantic DOM/accessibility locators | Optional fallback | Useful when a trustworthy semantic surface exists; unavailable on the canvas contract |
 | Semantic OCR + frame-local layout graph + visual signature | **Chosen primary** | Uses rendered identity, derives current geometry, and survives reflow, tenant styling, and DPR |
-| OS accessibility/desktop driver | Designed, not built | Fits the surface port, but the assignment requires only one concrete surface |
+| OS accessibility/desktop driver | Designed, not built | Extends the surface port with OS input and window ownership while preserving replay semantics |
 
 `VisionGrounder` runs RapidOCR locally and resolves four geometry-free strategies: rendered text, a rendered label-to-control relation, a rendered label-to-value relation, and a rendered group label plus content-addressed visual signature. OCR phrases are rebuilt from the current frame; edge components are segmented from that same frame; relations use measured text height rather than saved offsets. Each result must be unique and satisfy the centrally loaded OCR, segmentation, similarity, pixel, and time budgets. Failure returns `target_absent` or `target_ambiguous`; replay never guesses.
 
@@ -197,8 +197,8 @@ accepted with each choice, not an unimplemented feature presented as delivered.
 | Unit fakes, real browsers, historical live evidence | [Testing decisions](verification.md#testing-decisions) | Historical model runs prove their recorded execution, not every later commit |
 | Read-only replay history and separate control authority | [Viewer decisions](live-viewing.md#decisions) | Screens expire; viewing a historical frame never authorizes input |
 
-Decisions explain intent; the [remaining-concern register](requirements.md#remaining-concerns)
-records remaining proof boundaries and the closure of the final routing/diagnostic gaps.
+The [verification guide](verification.md) connects these decisions to executable checks and
+recorded outcomes; [operations](operations.md) covers deployment readiness.
 
 ### Architecture decisions
 
@@ -227,7 +227,7 @@ Capability semantics stay stable
                          └── desktop.v1: accessibility/window IDs [designed]
 ```
 
-A new transport must define observation normalization, input dispatch, screenshots, and condition evaluation. The visual grounding layer is transport-independent over PNG frames and viewport dimensions; a native desktop adapter can reuse it, but no native transport is claimed here.
+A new transport must define observation normalization, input dispatch, screenshots, and condition evaluation. Visual grounding operates on PNG frames and viewport dimensions, so a future native desktop adapter can reuse it while supplying OS-specific session and input handling.
 
 Application compatibility and the vendor-version extension are described in
 [Heterogeneity and compatibility](heterogeneity-and-compatibility.md).

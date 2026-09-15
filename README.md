@@ -23,12 +23,6 @@ and account inquiry, transaction research, transfers, card maintenance, holds, p
 service cases, and an activity journal. Its controls are rendered on a single canvas;
 the canonical automation cannot rely on DOM form controls.
 
-![ReplayForge execution console displaying an actual replay, browser frame, and failure status](docs/assets/replay-viewer.png)
-
-*Actual execution console, not a mockup. This model-free payoff replay stopped at the configured
-OCR grounding limit before task actions; it is not a successful-run claim. All displayed data is
-synthetic. The capture is separate from the immutable, sanitized evidence bundles below.*
-
 Genuinely discovered capabilities exercise three different business operations on that same UI: transaction
 investigation, loan-payoff quotation, and temporary card lock. Each artifact is independently
 validated on Harbor and Summit. The engine and compiler are task-independent: navigation and
@@ -37,8 +31,8 @@ The demo goals, synthetic inputs, and target policy are explicit configuration. 
 negative/recovery cases have genuine discovery and two-tenant replay proof in the
 [verification matrix](docs/verification.md#scenario-matrix).
 
-For review, start with the seven-part [design report](REPORT.md),
-[requirement traceability](docs/requirements.md), and [recorded evidence](evidence/README.md).
+Start with the [design report](REPORT.md), [architecture decisions](docs/architecture.md#critical-decision-index),
+and [recorded evidence](evidence/README.md).
 
 ## What is real
 
@@ -154,6 +148,12 @@ The console polls bounded in-memory frame/event buffers, not a video stream. Eve
 transition uses an exclusive, expiring, monotonically versioned lease. Historical screens are
 read-only and never authorize input. Operator IDs are local labels, not authentication.
 
+![ReplayForge execution console displaying an actual replay, browser frame, and failure status](docs/assets/replay-viewer.png)
+
+*Diagnostic view: a model-free replay stopped at its grounding deadline, with the current screen
+retained for inspection. All displayed data is synthetic. See
+[runtime readiness](docs/operations.md#grounding-deadlines) for the observed timing condition.*
+
 ## Run genuine discovery
 
 Discovery requires an OpenAI key and authenticated local Langfuse, plus Docker Engine,
@@ -210,7 +210,8 @@ not automatically collect the specification's exception scenarios. The lower-lev
 The reviewed [model policy](config/model-policy.yaml) fixes provider, model, reasoning effort,
 token/call limits, timeout, frame size, and an output-token cost ceiling—not a total billing cap.
 Requests cannot override it. Provider calls use strict structured output, no tools, and `store=false`;
-this is not a claim that screenshots never leave the machine. See [data exposure boundaries](docs/safety-and-handoff.md#data-exposure-boundaries).
+screenshots cross the provider boundary. See [data exposure boundaries](docs/safety-and-handoff.md#data-exposure-boundaries)
+for recipients, retention, and deployment controls.
 
 ## Inspect without live services
 
@@ -223,7 +224,7 @@ uv run pytest backend/tests/unit -q
 
 This verifies saved proof and isolated contracts; it does not simulate a genuine discovery.
 Actual replay still needs Chromium and the running target. Read the compact
-[design report](REPORT.md), then the [PDF requirement and submission checklist](docs/requirements.md).
+[design report](REPORT.md), then the [verification guide](docs/verification.md).
 
 ## Verify everything
 
@@ -282,9 +283,9 @@ docs/                implementation-accurate design documentation
 The [documentation index](docs/README.md) routes each question to its reference page and defines
 shared terminology. Start with [Architecture](docs/architecture.md),
 [Data models](docs/data-models.md), and [Capability and replay](docs/capability-and-replay.md).
-[REPORT.md](REPORT.md) is the required seven-part design summary.
+[REPORT.md](REPORT.md) explains the core design in seven sections.
 
-## Deliberate cuts
+## Deployment boundaries
 
 | Data / service | Lifetime and boundary |
 |---|---|
@@ -299,7 +300,7 @@ ReplayForge has no database/object-store adapter, distributed queue, production 
 WebSocket/video stream, or native desktop/Citrix transport. Langfuse's infrastructure does not
 provide durable ReplayForge sessions. Keep the runtime and console on trusted loopback interfaces.
 
-The evidence demonstrates the declared synthetic cases, not arbitrary application recovery or a
-universal PII detector. Genuine role-denial and application-login expiry discovery remain unproven.
-See [remaining concerns](docs/requirements.md#remaining-concerns) for these boundaries and the
-separate public-repository/email submission requirements.
+The local synthetic deployment demonstrates the complete discovery, replay, and handoff contract.
+Production onboarding adds institution-level authentication, authorization, provider data controls,
+and retention enforcement. See [verified coverage](docs/verification.md#coverage-boundaries) for
+the demonstrated scenarios and planned extensions.

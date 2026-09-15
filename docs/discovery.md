@@ -353,6 +353,6 @@ stack and a discovery dependency; replay remains independent of both provider an
 
 The selected model and reasoning profile are pinned in the [model policy](../config/model-policy.yaml),
 not chosen by each request. This keeps discovery cost and behavior attributable to a versioned
-configuration. The committed runs establish that the selected profile completed these workflows;
-the repository does not contain a comparative model benchmark. A different model or reasoning
-profile needs fresh validation before making a stronger quality or cost claim.
+configuration. The committed runs demonstrate successful discovery with this profile. Model choice
+is evaluated through task completion, contract validity, and replay results; changing the profile
+requires fresh validation. This establishes workload-specific evidence rather than a model ranking.

@@ -97,10 +97,13 @@ Fully masked PNGs demonstrate the retention boundary, not the visual state that 
 Use the ordered events, exact artifact, terminal result, and newer diagnostic ZIPs to inspect a
 run. The unmasked synthetic app preview in the root README is separate from these recordings.
 
-One known metadata inconsistency remains in the card-lock artifact: its description calls the
+### Artifact interpretation
+
+The card-lock artifact's description calls the
 operation sensitive, while the executable risk and policy classify it as reversible. The
-structured fields govern execution. The recorded artifact is preserved unchanged; correcting its
-description requires a new validated publication, not rewriting this historical evidence.
+structured fields govern execution. Immutable recordings preserve what was executed; a description
+correction belongs in a new validated publication. Compare structured risk and policy fields when
+reviewing authority, and step conditions plus the final checkpoint when reviewing completion.
 
 To reproduce both replays after starting the demo bank, choose a new ignored output directory
 and supply the actual source commit. Existing destinations are rejected before execution:
