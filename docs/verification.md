@@ -13,7 +13,7 @@ the three unchanged published capabilities on both tenants: 10 successes (includ
 recoveries), 14 business outcomes, and 8 expected application failures. Each failure has an
 unmasked, integrity-verified screenshot. No model calls or artifact republishing were required.
 This rerun uses the [measured 20-second perception budget](operations.md#grounding-deadlines);
-the earlier readiness-timeout capture is historical, not the current replay result.
+the older readiness-timeout bundle has been removed, not relabeled as a successful run.
 
 ## One command
 
@@ -49,28 +49,27 @@ unchanged. Regression tests use no model calls.
 | Python quality | Formatting/lint passed; 179-file type check passed |
 | Frontends | Both production builds and type checks passed; four demo test files passed |
 | Tooling | 14 tests passed |
-| Evidence integrity | 53 verified bundles: 17 discovery and 36 replay |
+| Evidence integrity | 49 verified bundles: 17 discovery and 32 current replay |
 | Focused evidence/contract recheck | 274 capability, evidence, and journal tests passed |
 | Credential review | No configured credentials or recognized secret patterns found in tracked files and reachable history |
 
 The evidence recheck also resolved every recording commit, validated all seven published artifact
-versions, and inspected both diagnostic archives. Negative-test credentials and identity strings
+versions, and inspected the retained diagnostic archives. Negative-test credentials and identity strings
 are synthetic fixtures. The README viewer image contains synthetic records and no access token.
 
-These results identify tested revisions and environments. The latest local viewer capture stopped
-at its grounding deadline; [runtime readiness](operations.md#grounding-deadlines) describes that
-observation and the checks to perform before a live demonstration.
+These results identify tested revisions and environments. The current 32-case rerun passes with
+the [measured perception budget](operations.md#grounding-deadlines).
 
 ## Control-transfer evidence
 
-Two focused bundles demonstrate execution safety at a blockage:
+The [real-browser obstruction test](../backend/tests/integration/test_playwright_surface.py)
+checks manual clearance, fresh target resolution, same-step continuation, and verified success
+using the unchanged published payoff artifact. Its latest run passed. Superseded replay bundles
+have been removed; current application-failure screenshots are in the matrix below.
 
-- [Obstruction handoff](../evidence/replay-injected-obstruction-handoff/manifest.json):
-  a real-browser test inserts an obstruction over the unchanged payoff artifact. Manual clearance
-  is followed by fresh target resolution, same-step continuation, and verified success.
-- [Unattended target failure](../evidence/replay-unattended-target-diagnostic/manifest.json):
-  a missing target produces a structured terminal failure, masked frame, and value-free diagnostic
-  ZIP. This exercises mechanical failure handling independently of learned business outcomes.
+The additional discovery-console regression did not complete: resume was rejected because manual
+input had not been applied. That console check needs follow-up; it is separate from the 32 passing
+automated replay cases. No unverified console changes are included.
 
 Unit tests cover uncertain-dispatch handling, effect-verification requirements, preserved retry
 budgets, fresh output reads, ownership conflicts, and denied-location rejection. Discovery handoff
@@ -136,9 +135,9 @@ proof of these stronger selection semantics.
 
 | Transaction case | Discovery | Exact result | Harbor replay | Summit replay |
 |---|---|---|---|---|
-| Normal task | [Trace](../evidence/discovery-transaction-parameterized/manifest.json) | `success` | [Evidence](../evidence/replay-transaction-harbor-primary/manifest.json) | [Evidence](../evidence/replay-transaction-summit-primary/manifest.json) |
-| Missing member | [Trace](../evidence/discovery-transaction-member-not-found/manifest.json) | `business_outcome:member_not_found` | [Evidence](../evidence/replay-transaction-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-transaction-summit-member-not-found/manifest.json) |
-| Reference belongs to another account | [Trace](../evidence/discovery-transaction-not-found/manifest.json) | `business_outcome:transaction_not_found` | [Evidence](../evidence/replay-transaction-harbor-transaction-not-found/manifest.json) | [Evidence](../evidence/replay-transaction-summit-transaction-not-found/manifest.json) |
+| Normal task | [Trace](../evidence/discovery-transaction-parameterized/manifest.json) | `success` | [Evidence](../evidence/replay-raw-transaction-harbor-primary/manifest.json) | [Evidence](../evidence/replay-raw-transaction-summit-primary/manifest.json) |
+| Missing member | [Trace](../evidence/discovery-transaction-member-not-found/manifest.json) | `business_outcome:member_not_found` | [Evidence](../evidence/replay-raw-transaction-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-raw-transaction-summit-member-not-found/manifest.json) |
+| Reference belongs to another account | [Trace](../evidence/discovery-transaction-not-found/manifest.json) | `business_outcome:transaction_not_found` | [Evidence](../evidence/replay-raw-transaction-harbor-transaction-not-found/manifest.json) | [Evidence](../evidence/replay-raw-transaction-summit-transaction-not-found/manifest.json) |
 
 The final case deliberately uses a reference that exists in the default account but not the
 requested account. It proves that the lookup does not silently accept the default. No recovery
@@ -162,47 +161,35 @@ only after this complete matrix passed with model credentials disabled:
 
 | Case | Exact result | Harbor replay | Summit replay |
 |---|---|---|---|
-| Normal task | `success` | [Evidence](../evidence/replay-payoff-harbor-primary/manifest.json) | [Evidence](../evidence/replay-payoff-summit-primary/manifest.json) |
-| Missing member | `business_outcome:member_not_found` | [Evidence](../evidence/replay-payoff-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-payoff-summit-member-not-found/manifest.json) |
-| Unavailable date | `business_outcome:quote_date_unavailable` | [Evidence](../evidence/replay-payoff-harbor-quote-date-unavailable/manifest.json) | [Evidence](../evidence/replay-payoff-summit-quote-date-unavailable/manifest.json) |
-| Invalid calendar date | `failure:invalid_payoff_date` | [Evidence](../evidence/replay-payoff-harbor-invalid-payoff-date/manifest.json) | [Evidence](../evidence/replay-payoff-summit-invalid-payoff-date/manifest.json) |
-| Restricted member | `failure:member_restricted` | [Evidence](../evidence/replay-payoff-harbor-member-restricted/manifest.json) | [Evidence](../evidence/replay-payoff-summit-member-restricted/manifest.json) |
-| Member notice | `success` + named `recovery_completed` | [Evidence](../evidence/replay-payoff-harbor-acknowledge-member-notice/manifest.json) | [Evidence](../evidence/replay-payoff-summit-acknowledge-member-notice/manifest.json) |
+| Normal task | `success` | [Evidence](../evidence/replay-raw-payoff-harbor-primary/manifest.json) | [Evidence](../evidence/replay-raw-payoff-summit-primary/manifest.json) |
+| Missing member | `business_outcome:member_not_found` | [Evidence](../evidence/replay-raw-payoff-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-raw-payoff-summit-member-not-found/manifest.json) |
+| Unavailable date | `business_outcome:quote_date_unavailable` | [Evidence](../evidence/replay-raw-payoff-harbor-quote-date-unavailable/manifest.json) | [Evidence](../evidence/replay-raw-payoff-summit-quote-date-unavailable/manifest.json) |
+| Invalid calendar date | `failure:invalid_payoff_date` | [Evidence](../evidence/replay-raw-payoff-harbor-invalid-payoff-date/manifest.json) | [Evidence](../evidence/replay-raw-payoff-summit-invalid-payoff-date/manifest.json) |
+| Restricted member | `failure:member_restricted` | [Evidence](../evidence/replay-raw-payoff-harbor-member-restricted/manifest.json) | [Evidence](../evidence/replay-raw-payoff-summit-member-restricted/manifest.json) |
+| Member notice | `success` + named `recovery_completed` | [Evidence](../evidence/replay-raw-payoff-harbor-acknowledge-member-notice/manifest.json) | [Evidence](../evidence/replay-raw-payoff-summit-acknowledge-member-notice/manifest.json) |
 
 Card lock [version 1.0.2](../capabilities/member.temporary_card_lock/1.0.2.yaml) passed the following
 matrix with model credentials disabled. Each branch has a separate genuine discovery trace:
 
 | Card case | Discovery | Exact result | Harbor replay | Summit replay |
 |---|---|---|---|---|
-| Normal task | [Original](../evidence/discovery-servicing-card-lock/manifest.json) | `success` | [Evidence](../evidence/replay-card-harbor-primary/manifest.json) | [Evidence](../evidence/replay-card-summit-primary/manifest.json) |
-| Missing member | [Trace](../evidence/discovery-card-member-not-found/manifest.json) | `business_outcome:member_not_found` | [Evidence](../evidence/replay-card-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-card-summit-member-not-found/manifest.json) |
-| Already locked | [Trace](../evidence/discovery-card-card-already-locked/manifest.json) | `business_outcome:card_already_locked` | [Evidence](../evidence/replay-card-harbor-card-already-locked/manifest.json) | [Evidence](../evidence/replay-card-summit-card-already-locked/manifest.json) |
-| Expired card | [Trace](../evidence/discovery-card-card-expired/manifest.json) | `business_outcome:card_expired` | [Evidence](../evidence/replay-card-harbor-card-expired/manifest.json) | [Evidence](../evidence/replay-card-summit-card-expired/manifest.json) |
-| Invalid reason | [Trace](../evidence/discovery-card-invalid-maintenance-reason/manifest.json) | `failure:invalid_maintenance_reason` | [Evidence](../evidence/replay-card-harbor-invalid-maintenance-reason/manifest.json) | [Evidence](../evidence/replay-card-summit-invalid-maintenance-reason/manifest.json) |
-| Restricted member | [Trace](../evidence/discovery-card-member-restricted/manifest.json) | `failure:member_restricted` | [Evidence](../evidence/replay-card-harbor-member-restricted/manifest.json) | [Evidence](../evidence/replay-card-summit-member-restricted/manifest.json) |
-| Member notice | [Trace](../evidence/discovery-card-acknowledge-member-notice/manifest.json) | `success` + named `recovery_completed` | [Evidence](../evidence/replay-card-harbor-acknowledge-member-notice/manifest.json) | [Evidence](../evidence/replay-card-summit-acknowledge-member-notice/manifest.json) |
+| Normal task | [Original](../evidence/discovery-servicing-card-lock/manifest.json) | `success` | [Evidence](../evidence/replay-raw-card-harbor-primary/manifest.json) | [Evidence](../evidence/replay-raw-card-summit-primary/manifest.json) |
+| Missing member | [Trace](../evidence/discovery-card-member-not-found/manifest.json) | `business_outcome:member_not_found` | [Evidence](../evidence/replay-raw-card-harbor-member-not-found/manifest.json) | [Evidence](../evidence/replay-raw-card-summit-member-not-found/manifest.json) |
+| Already locked | [Trace](../evidence/discovery-card-card-already-locked/manifest.json) | `business_outcome:card_already_locked` | [Evidence](../evidence/replay-raw-card-harbor-card-already-locked/manifest.json) | [Evidence](../evidence/replay-raw-card-summit-card-already-locked/manifest.json) |
+| Expired card | [Trace](../evidence/discovery-card-card-expired/manifest.json) | `business_outcome:card_expired` | [Evidence](../evidence/replay-raw-card-harbor-card-expired/manifest.json) | [Evidence](../evidence/replay-raw-card-summit-card-expired/manifest.json) |
+| Invalid reason | [Trace](../evidence/discovery-card-invalid-maintenance-reason/manifest.json) | `failure:invalid_maintenance_reason` | [Evidence](../evidence/replay-raw-card-harbor-invalid-maintenance-reason/manifest.json) | [Evidence](../evidence/replay-raw-card-summit-invalid-maintenance-reason/manifest.json) |
+| Restricted member | [Trace](../evidence/discovery-card-member-restricted/manifest.json) | `failure:member_restricted` | [Evidence](../evidence/replay-raw-card-harbor-member-restricted/manifest.json) | [Evidence](../evidence/replay-raw-card-summit-member-restricted/manifest.json) |
+| Member notice | [Trace](../evidence/discovery-card-acknowledge-member-notice/manifest.json) | `success` + named `recovery_completed` | [Evidence](../evidence/replay-raw-card-harbor-acknowledge-member-notice/manifest.json) | [Evidence](../evidence/replay-raw-card-summit-acknowledge-member-notice/manifest.json) |
 
 Recovery acknowledges the notice, scrolls to restore the learned target, and rejoins the original
 program. Replay then verifies card identity, applies the lock, re-reads identity/status, and checks
 the confirmation. Normal and terminal cases execute no recovery. An earlier acknowledgement-only
 trace failed at the next target and is not part of this proof.
 
-| Model-free replay bundle | Result | Proof boundary |
-|---|---|---|
-| [Payoff success](../evidence/replay-servicing-payoff/manifest.json) | Verified success | Changed member and date; exact outputs checked before redacted export; no provider credentials |
-| [Missing record](../evidence/replay-servicing-missing-record/manifest.json) | `failure`, `target_absent` | Actual failed replay with masked screenshot; not a declared `business_outcome` |
-
-Each manifest records the actual run ID, recording commit, command, artifact identity, and hashes.
-Its primary result may identify the pre-publication draft: finalization adds validated tenants and
-allocates the immutable published version. Both identities remain traceable through their hashes
-and discovery provenance.
-
-Other failed or paused attempts stay in private runtime audit storage. They are not relabeled as
-success, and no manual UI action is substituted for model discovery. The replay bundles were
-captured from `a462cdf` (original pair), `7512f5e` (payoff branch matrix), `9c9d051` (card matrix),
-and `879a18a` (transaction matrix);
-[reproduction instructions](../evidence/README.md) run the actual
-saved capability with synthetic input data, not a scripted navigation substitute.
+Each retained replay manifest records the actual run ID, revision `6c5a304`, reproduction command,
+published artifact identity, and hashes. The 32 current replays replace older replay bundles.
+Discovery records retain their original recording revisions and pre-publication artifact identities.
+See the [reproduction instructions](../evidence/README.md) for the saved-capability invocations.
 
 ## Evidence bundle anatomy
 
@@ -214,7 +201,7 @@ scenario/
 └── manifest.json      Provenance, command, redaction metadata, closed-set hashes
 ```
 
-A run requiring richer evidence may also include unredacted failure/handoff PNGs or sanitized trace attachments. Historical bundles keep their original masked PNGs.
+A run requiring richer evidence may also include unredacted failure/handoff PNGs or sanitized trace attachments. Superseded masked replay bundles have been removed.
 The current discovery bundles contain structured evidence; live screenshots sent to the model are
 not stored as public screenshots. Full-viewport masks prove retention policy, not visual page content.
 

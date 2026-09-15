@@ -143,7 +143,7 @@ Successful viewer discovery proceeds through fresh replay validation and publica
 a human approval stage. The operator inbox is at [Interventions](http://127.0.0.1:3000/interventions).
 See [live viewing](docs/live-viewing.md) and [handoff safety](docs/safety-and-handoff.md) for exact rules.
 
-The [obstruction recovery bundle](evidence/replay-injected-obstruction-handoff) records manual
+The [obstruction recovery test](backend/tests/integration/test_playwright_surface.py) verifies manual
 clearance and same-step continuation using an unchanged published artifact. Separate browser
 tests inject a sensitive policy boundary into a temporary artifact copy; that fixture is not
 presented as a model discovery.
