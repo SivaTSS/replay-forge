@@ -11,6 +11,11 @@ Direct discovery returns an unpublished draft; only suites publish, after determ
 and finalization. This prevents human-assisted traces from bypassing the replay gate. The
 three-flow capture and [visual discovery launcher](live-viewing.md) use suites.
 
+On rendered surfaces, discovery records the visual candidate that actually resolved, retaining
+symbolic input bindings and discarding unverified alternatives. Model instructions distinguish
+observed routes from menu names and output contract keys from UI labels: neither a guessed URL
+nor a missing literal field name is evidence about the application's state.
+
 On a blocker, the engine suspends its loop with the same browser, verified recordings, model
 instance, and remaining step/call budgets. The caller waits outside the browser owner thread,
 leaving that worker free for leased operator input. Resume requires an accepted manual action,

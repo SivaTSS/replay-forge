@@ -272,9 +272,12 @@ def test_planned_input_contract_is_checked_before_any_action(
     assert session.closed
 
 
+@pytest.mark.parametrize("rendered", [False, True])
 def test_discovery_grounds_bound_identity_but_records_only_symbolic_target(
-    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch, rendered: bool
 ) -> None:
+    from replayforge.surfaces.models import ScreenRegion, VisualTargetData
+
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
     symbolic = LocatorBundle(
         description="Requested record action",
@@ -287,15 +290,48 @@ def test_discovery_grounds_bound_identity_but_records_only_symbolic_target(
             ),
         ),
     )
+    expected_symbolic = symbolic
+    if rendered:
+        fallback = LocatorBundle.model_validate(
+            {
+                "description": "Unverified fallback",
+                "visual_candidates": [{"strategy": "rendered_text", "value": "Other action"}],
+                "candidates": [{"strategy": "role_name", "role": "button", "name": "Open"}],
+            }
+        )
+        symbolic = symbolic.model_copy(
+            update={
+                "visual_candidates": (*fallback.visual_candidates, *symbolic.visual_candidates),
+                "candidates": fallback.candidates,
+            }
+        )
+        monkeypatch.setattr(FakeSurfaceSession, "rendered_surface", True, raising=False)
     targets: list[LocatorBundle] = []
     original = FakeSurfaceSession.resolve
 
     def resolve(session: FakeSurfaceSession, target: object, timeout_ms: int) -> ResolvedTarget:
         assert isinstance(target, LocatorBundle)
         targets.append(target)
-        return original(session, target, timeout_ms)
+        resolved = original(session, target, timeout_ms)
+        if rendered and target.description == symbolic.description:
+            return replace(
+                resolved,
+                candidate_index=1,
+                visual=VisualTargetData(ScreenRegion(10, 10, 20, 20), "ocr_relative", 1, "frame"),
+            )
+        return resolved
 
     monkeypatch.setattr(FakeSurfaceSession, "resolve", resolve)
+    original_capture = FakeSurfaceSession.capture_locator
+
+    def capture(session: FakeSurfaceSession, target: ResolvedTarget) -> LocatorBundle:
+        if rendered and target.description == symbolic.description:
+            return targets[-1].model_copy(
+                update={"visual_candidates": (targets[-1].visual_candidates[1],), "candidates": ()}
+            )
+        return original_capture(session, target)
+
+    monkeypatch.setattr(FakeSurfaceSession, "capture_locator", capture)
     provider = QueueModelProvider(
         [
             ActProposal(
@@ -338,7 +374,7 @@ def test_discovery_grounds_bound_identity_but_records_only_symbolic_target(
     engine = replace(engine, contract_planner=lambda context: draft)
     assert isinstance(engine.execute(make_request()), DiscoverySuccess)
     assert '"anchor":"12345"' in targets[0].model_dump_json()
-    assert compiler.calls[0][0].target == symbolic
+    assert compiler.calls[0][0].target == expected_symbolic
     assert len(targets) == 2
     assert len(compiler.calls[0]) == 2
     assert "12345" not in str(provider.calls[-1].action_history)

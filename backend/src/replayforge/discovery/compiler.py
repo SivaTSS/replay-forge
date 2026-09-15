@@ -217,7 +217,7 @@ class TraceArtifactCompiler:
                 discovery_run_id=run_id,
                 provider=provider_name,
                 model=model_name,
-                prompt_policy_version="2.1.1",
+                prompt_policy_version="2.1.2",
                 surface_adapter_version=self.surface_adapter_version,
                 compiler_version=self.compiler_version,
                 created_at=self.clock.now(),

@@ -200,6 +200,19 @@ def context() -> ProviderContext:
     )
 
 
+def test_rendered_discovery_instructions_exclude_guessed_routes_and_dom_fallbacks() -> None:
+    responses = FakeResponses(
+        ProposalEnvelope(proposal=CompleteProposal(kind="complete", rationale="Verified"))
+    )
+    provider = OpenAIModelProvider(FakeClient(responses), model_policy())
+    provider.decide(replace(context(), rendered_surface=True))
+    instructions = responses.request["instructions"]
+    assert "leave target.candidates empty" in instructions
+    assert "Use route conditions only for a route already observed" in instructions
+    assert "Output field names are semantic contract keys, not literal UI labels" in instructions
+    assert responses.request["store"] is False
+
+
 def test_scenario_prefix_schema_excludes_unmergeable_free_form_actions() -> None:
     responses = FakeResponses(
         ProposalEnvelope(

@@ -109,6 +109,15 @@ Conditions use operand as the route pattern, visible text, or output name. Ident
 operand for the extracted output and secondary_operand for the input path.
 When rendered_surface is true, use rendered_text for visible-text conditions, not text (which
 queries DOM text). Native DOM select is unavailable on that surface; use visible interactions.
+On a rendered surface, leave target.candidates empty; use only visual_candidates. Do not add
+speculative DOM fallbacks. A menu or tab name is not a URL: never invent a route from it.
+Use route conditions only for a route already observed. If the next screen's route or exact text
+is not yet known, leave expected_condition null, observe the result, then assert its visible
+state. A successful click alone is not evidence of task completion.
+Output field names are semantic contract keys, not literal UI labels. Map each remaining output
+to the corresponding label actually visible in the current screenshot and visual_tokens.
+After an operation, inspect the completed screen for all remaining fields, scrolling when needed;
+do not declare an output unavailable merely because its contract key is not printed verbatim.
 Use output_equals to verify an extracted state against an observed constant; operand is the output
 name and secondary_operand is the required state. Attach expected_condition to an action when its
 effect can be checked immediately, including an extraction's identity/state check. The runtime

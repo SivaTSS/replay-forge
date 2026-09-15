@@ -969,6 +969,32 @@ class DiscoveryEngine:
             if target
             else None
         )
+        if (
+            stable_target is not None
+            and target is not None
+            and target.visual is not None
+            and getattr(session, "rendered_surface", False)
+            and proposal.target is not None
+            and target_input_paths(proposal.target)
+        ):
+            # Retain the symbolic input, but only for the candidate actually grounded.
+            # capture_locator sees the bound value; retaining the whole proposal instead
+            # would leak unverified DOM/visual alternatives into the compiled artifact.
+            captured = session.capture_locator(target)
+            stable_target = captured
+            if (
+                bound_target is not None
+                and target.candidate_index < len(bound_target.visual_candidates)
+                and captured.visual_candidates
+                == (bound_target.visual_candidates[target.candidate_index],)
+            ):
+                stable_target = captured.model_copy(
+                    update={
+                        "visual_candidates": (
+                            proposal.target.visual_candidates[target.candidate_index],
+                        ),
+                    }
+                )
         decision = self.policy_evaluator.evaluate(
             effective_policy,
             ActionContext(
