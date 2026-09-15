@@ -68,7 +68,7 @@ Heavy checks ran sequentially, without model calls.
 | Submission tooling | 14 tests passed |
 | Evidence integrity | 53 bundles verified; submission evidence gate has no missing category |
 | Documentation | 17 documents checked; 23 diagrams rendered in both themes with no clipped labels; all 19 evidence-index links resolve |
-| Report length | 956 words; three pages on both A4 and US Letter using the print settings below |
+| Report length | Revised report: 1,075 whitespace-delimited Markdown words; three pages on both A4 and US Letter using the print settings below |
 | Credential audit | No configured-credential matches or recognized credential patterns in working files and reachable history |
 
 Two new model-free bundles supplement the original 51:
@@ -103,11 +103,20 @@ The focused Chromium rerun passed **14 tests** covering discovery/replay handoff
 retention, the generic DOM/frame adapter, current entry routes, and retired-route rejection. No
 model calls were made, and those tests do not create new genuine discovery evidence.
 
-The report keeps the exact seven headings required by PDF §6 and is approximately **970 words**
+The earlier report kept the exact seven headings required by PDF §6 and was approximately **970 words**
 including Markdown/table notation. Chromium printing produced **3 pages on both A4 and US Letter**
 with 20 mm margins, 11-point Arial body text, 1.4 line spacing, and 10-point tables. Markdown has
 no intrinsic page size; other print styles may paginate differently. Temporary PDFs are audit
 outputs, not additional submission files.
+
+The subsequent report rewrite reread all ten PDF pages and retained the seven required headings.
+It replaces compressed claims with decision rationale, concrete error/handoff behavior, and explicit
+proof boundaries. The revised source contains **1,075 whitespace-delimited words**, including
+Markdown and diagram notation; rendered prose and labels total approximately **1,040 words**.
+Fresh Chromium printing confirmed **3 pages on both A4 and US Letter** with the same settings.
+All 46 light/dark diagram renders, documentation links/structure, and 14 tooling tests passed.
+The credential scan found no configured-secret or recognized-pattern matches. This documentation-only
+revision did not rerun application tests or make provider calls.
 
 All **23 Mermaid diagrams rendered in both light and dark themes** (46 checks), with no text
 extending outside the SVG viewport. The 17-document structural/link gate passed; the evidence
