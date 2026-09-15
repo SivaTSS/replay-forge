@@ -19,8 +19,8 @@ all ten pages. Section numbers below refer to that PDF, not to these reference d
 | §3.2: deliberate capability schema | Ordered actions, robust targets, typed inputs/outputs, checkpoint, immutable versions | [Schema and invariants](data-models.md#capability-artifact) |
 | §3.3: model-free replay and error taxonomy | Verified success, business outcomes, bounded recovery, hard failures | [Runtime-fault coverage](#runtime-fault-coverage) distinguishes learned cases from generic stops |
 | §3.4: configurable safety and no raw sensitive persistence | Layered allowlists, conservative risk, artifact guards, pre-write redaction | Synthetic-only assurance; not a universal PII detector or production authorization system |
-| §3.5: structured evidence and richer failure signal | Ordered logs, reasons/codes, manifest, masked PNG attachment | Fully masking the PNG removes visual diagnostic detail; see [remaining concerns](#remaining-concerns) |
-| §3.6: stuck detection and real human control transfer | Same browser, exclusive lease, audited manual input, validated resume in both modes | Handoff mechanism works; ordinary replay locator failures currently stop without opening intervention |
+| §3.5: structured evidence and richer failure signal | Ordered logs, masked PNG, and scanned value-free diagnostic ZIP | Explains phase, condition kind, dispatch uncertainty and retry state without retaining screen content |
+| §3.6: stuck detection and real human control transfer | Same browser, exclusive lease, audited manual input, validated resume in both modes | Ordinary replay target/action blockages route after bounded handling; policy/identity violations and unavailable sessions stay terminal |
 | §3.7: heterogeneity and scale design | Browser surface port, desktop extension design, shared artifact across two tenants | Desktop, fleet scheduling and vendor overlays are not built; the PDF permits design-only delivery here |
 | §4: explain technology and target choices | [Architecture decisions](architecture.md#architecture-decisions), [provider decisions](discovery.md#provider-decision), [schema decisions](capability-and-replay.md#schema-and-version-decisions) | No unsupported claim that the chosen model is the best model |
 | §5, §7: depth, integration, appropriate simplicity | Tested core contracts, immutable evidence, bounded resources; explicit cuts | Test counts do not prove every possible state or deployment |
@@ -49,11 +49,11 @@ all ten pages. Section numbers below refer to that PDF, not to these reference d
 | Explicit allowlist | Implemented | Origin/route/action/risk policy intersections | Policy decision tests |
 | Conservative risk | Implemented, Tested | Sensitive pauses; irreversible denies | Policy and real-session browser tests; handoff fixtures are not genuine discovery bundles |
 | No sensitive persistence | Hardened for synthetic demo; bounded | Restricted journal/terminal fields, keyed pseudonyms, artifact leak guard, full-frame masks, image capture disabled by default | Tested boundaries, not a universal PII detector; see [data policy](safety-and-handoff.md#data-exposure-boundaries) |
-| Structured evidence | Evidenced, diagnostic limit | Ordered events, result, hashes, manifest | 17 discovery and 34 replay bundles; masked PNGs preserve dimensions, not failed-screen content |
-| Detect and route intervention | Implemented, bounded routing | Sensitive replay and blocked discovery route to the same operator surface; engine accepts adapter-recommended handoff | Ordinary browser locator failures do not set that recommendation; not every stuck replay reaches the inbox |
+| Structured evidence | Evidenced | Ordered events, result, hashes, masked frames, bounded diagnostic trace | Historical discovery/replay proof plus fresh finalization evidence; raw UI values and screen history are excluded |
+| Detect and route intervention | Implemented, Tested | Blocked discovery, sensitive replay, and exhausted target/action faults use the same operator surface | Real-browser obstruction test uses the unchanged published artifact; no new model-discovery claim |
 | Same-session control | Implemented, Tested | Retained context and worker; bounded human input | Live browser tests with explicit policy fixtures |
 | Explicit ownership | Implemented, Tested | TTL lease, owner, version, CAS | Conflict/race tests |
-| Safe resume | Implemented | Replay checks the interrupted contract; discovery requires manual input and changed allowed state | Human actions are audited, not invented as automation; fresh replay still gates publication |
+| Safe resume | Implemented, Tested | Dispatch-aware retry/advance, fresh output operands, preserved budgets; discovery requires manual input and changed allowed state | Missing effect contract rejects uncertain-dispatch resume; fresh unattended replay still gates publication |
 | Surface abstraction | Implemented | `SurfaceDriver` and `SurfaceSession` protocols | One Playwright adapter |
 | Canvas visual control | Implemented, Tested | One canvas-only workstation exposes three discovered tasks using geometry-free rendered candidates and CSS-pixel re-grounding | Browser transport only |
 | Native desktop extension | Designed | Surface ports and PNG-based grounding seam | No OS transport adapter |
@@ -117,25 +117,25 @@ an automation lease expiry is not an application's login-session expiry.
 | Unexpected dialog/interstitial | Declared notice correction, restored boundary, then original task completion | Genuine payoff/card recovery on both tenants; not arbitrary-dialog recovery |
 | Permission denial | Typed failure detector is supported; target enforces training roles | Engine and application tests; role-denial discovery is not claimed |
 | Session expiry | Out-of-policy routes or missing expected state stop execution | No application-login expiry scenario, credential flow, or learned reauthentication; control-lease tests prove a different boundary |
-| Slow or failed load | Bounded target polling/waits, timeout errors, effect-absent retry rules | Engine/adapter tests; no genuine transient-load recovery recording in the three-task matrix |
-| Ambiguous or missing control | Exact-one resolution, then typed failure if declared recovery cannot resolve it | Vision tests and committed failed replay; no automatic human routing for ordinary locator failure |
-| Uncertain mutation | Do not retry without effect-absence proof | Engine tests; does not provide transactional rollback or crash recovery |
+| Slow or failed load | Bounded polling/waits, effect-absent retries, policy-checked handoff on exhausted target/action faults | Engine/adapter tests; no genuine transient-load recovery recording in the three-task matrix |
+| Ambiguous or missing control | Exact-one resolution, bounded handling, then policy-checked handoff; unattended validation fails | Real-browser obstruction → manual clearance → same-step replay, without editing the published artifact |
+| Uncertain mutation | Pause to inspect/correct; advance only after fresh effect verification, never blind repetition | Engine tests; absent effect contract rejects resume; no transactional rollback or crash recovery |
 
 ## Remaining concerns
 
-These are not concealed by the passing tests. This documentation-only audit does not change their
-runtime behavior.
+The bounded implementation pass closes the two core gaps identified by the earlier documentation
+audit. Wider target-specific fault discovery remains outside this final pass.
 
 | Concern | Present limit | What closes it |
 |---|---|---|
-| Broader stuck-replay handoff (§3.6) | The concrete browser's ordinary target/timeout errors return failures rather than recommending intervention; the generic recommendation path is fixture-tested | A general, policy-safe routing rule plus real-browser tests for an unrecovered runtime fault and same-session resume |
-| Useful retained failure diagnostics (§3.5) | Fully masked screenshots technically provide an attachment but cannot explain the failed visual state; durable expected/observed values are deliberately omitted | A privacy-reviewed, value-free diagnostic trace with expected predicate, observed match counts/state codes, and reason for stopping; never unmask customer screens just to improve evidence |
+| Broader stuck-replay handoff (§3.6) | **Closed within the declared browser scope**: ordinary target/action faults route through policy and dispatch-aware continuation | [Boundary rules and decisions](safety-and-handoff.md#same-session-handoff); real-browser injected-obstruction test and unit safety regressions |
+| Useful retained failure diagnostics (§3.5) | **Closed without unmasking screens**: ordered diagnostic snapshots and one final scanned ZIP | [Retention contract](safety-and-handoff.md#evidence-path); fresh trace export and integrity checks |
 | Wider application fault coverage (§3.3) | Declared cases are proved; application session expiry and role-denial discovery are not | Genuine observed scenarios on a suitable authorized target, with exact model-free outcome/recovery checks |
 
-The first two are evaluation risks against the PDF's intent, not optional production scaling
-features. The existing implementation provides the core mechanisms; this audit cannot honestly
-certify that every possible concern is closed. Production authentication, native desktop, distributed
-storage and a full operator product remain separate, explicit cuts.
+No test suite certifies every possible target state. Production authentication, native desktop,
+distributed storage and a full operator product remain separate, explicit cuts. Application-login
+expiry and role-denial discovery would require a broader authorized discovery campaign; those
+examples are not fabricated or conflated with existing notice/restriction scenarios.
 
 ## Submission checklist
 

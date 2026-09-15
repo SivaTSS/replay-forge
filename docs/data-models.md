@@ -154,6 +154,13 @@ Resume preserves the loop's recordings and consumed budgets; cancellation closes
 state changes only when that primary discovery actually completes. All publication uses the
 same fresh deterministic validation gate, including read-only and human-assisted drafts.
 
+`ReplayContinuation` is also ephemeral: it retains the exact interrupted step index, session,
+inputs, output cache, recovery-use counters, and spent retry attempt. Its `retry_step` boundary
+means the action was not dispatched, rather than merely having a recoverable error code. Otherwise
+resume verifies the effect and advances. Human control invalidates cached outputs; only fresh,
+policy-allowed extraction can restore operands needed by the resume conditions. This state stays
+outside the immutable capability schema because it belongs to one execution, not the saved task.
+
 ## Surface
 
 ```mermaid
@@ -273,6 +280,12 @@ The journal owns monotonic sequences and exactly-once finalization. Redaction pr
 opaque key, media type, bounded size, SHA-256 hash, retention class, directives, and aware time.
 The authoritative `RunEvidenceManifest` requires unique evidence identities, unique run-owned keys,
 and separate JSON events, binary attachments, and optional terminal result.
+
+`ExecutionDiagnostic` is a separate strict, frozen snapshot, not an untyped observation dump.
+It bounds counters and normalizes action/error/condition strings to finite vocabularies. The
+step ordinal and dispatch phase describe execution without retaining target labels or predicate
+values. Each failure/blockage emits an event; finalization optionally adds one ZIP containing
+the latest scanned snapshot. An unavailable archive changes diagnostic status, not task status.
 
 The persisted terminal result is deliberately narrower than the caller's typed result: failure
 messages and unclassified outputs are omitted. A discovery terminal record contains the

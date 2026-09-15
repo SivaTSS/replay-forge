@@ -19,10 +19,11 @@ where those operations are authorized. Opening the page itself never starts a mo
 Validation replays are unattended: an intervention boundary fails validation without
 creating an operator session or publishing the draft.
 
-Human controls appear only for a live intervention, not for every failed run. Ordinary replay
-locator/time-out failures currently terminate after their permitted handling; the viewer can show
-their last retained frame, but cannot reopen the closed browser. See the
-[routing limit](requirements.md#remaining-concerns).
+Human controls appear only for a live intervention, not for every failed run. Eligible target/action
+faults pause after permitted handling, subject to policy. Follow the intervention explanation:
+restore the interface for an unstarted step, or inspect/correct a possibly dispatched action.
+Resume validates [the appropriate boundary](safety-and-handoff.md#same-session-handoff).
+Terminal failures have no browser to reopen; their last retained viewer frame is read-only.
 
 ## Watching is not controlling
 

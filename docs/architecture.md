@@ -190,13 +190,15 @@ accepted with each choice, not an unimplemented feature presented as delivered.
 | Registration plus measured tenant validation | [Compatibility choices](heterogeneity-and-compatibility.md#version-changes-and-specialization) | New apps need registration; unseen vendor releases are not automatically certified |
 | Layered authority and centrally bounded work | [Constraint decisions](constraints-and-policy.md#decisions) | Callers cannot expand budgets or permissions for convenience |
 | Exclusive lease and same-session HTTP handoff | [Handoff decisions](safety-and-handoff.md#decisions) | Polling, narrow input commands, and no crash-resumable sessions |
+| Dispatch-aware continuation | [Resume boundaries](safety-and-handoff.md#same-session-handoff) | Uncertain effects without a declared checkpoint cannot resume; cached outputs are not trusted |
 | Redaction before storage and local metrics | [Data exposure](safety-and-handoff.md#data-exposure-boundaries) | Masked evidence intentionally loses visual detail |
+| Value-free diagnostic ZIP | [Evidence decisions](safety-and-handoff.md#decisions) | Condition kinds and available counts replace raw predicates, values, and screen content |
 | Files for durable objects; memory for live state | [Durability](data-models.md#durability) | Published artifacts survive restart; active work does not |
 | Unit fakes, real browsers, historical live evidence | [Testing decisions](verification.md#testing-decisions) | Historical model runs prove their recorded execution, not every later commit |
 | Read-only replay history and separate control authority | [Viewer decisions](live-viewing.md#decisions) | Screens expire; viewing a historical frame never authorizes input |
 
 Decisions explain intent; the [remaining-concern register](requirements.md#remaining-concerns)
-records where implemented routing or diagnostics still falls short of the broader requirement.
+records remaining proof boundaries and the closure of the final routing/diagnostic gaps.
 
 ### Architecture decisions
 

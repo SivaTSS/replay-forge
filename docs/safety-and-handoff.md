@@ -119,9 +119,9 @@ sequenceDiagram
     O->>R: click/text/key bound to latest frame
     R->>B: execute on same page and context
     O->>R: resume(expected version)
-    R->>B: fresh observation + interrupted postcondition
+    R->>B: fresh readiness or effect verification
     alt valid and changed
-        R->>B: continue remaining artifact steps
+        R->>B: retry unstarted step or advance
     else invalid or unchanged
         R-->>O: reopen intervention
     end
@@ -133,17 +133,26 @@ Discovery can pause on low confidence, repeated state/action, model escalation, 
 safety boundary. Its original loop resumes only after accepted human input changes the allowed
 live state. Used step/model budgets remain spent; human wait time is excluded. Outputs must be
 re-extracted, and publication still requires fresh model-free validation. Human actions remain
-audit evidence, never invented recorded automation. Replay additionally verifies the interrupted
-step's postcondition or a declared business outcome. Earlier replay screenshots remain read-only;
+audit evidence, never invented recorded automation. Replay validates the continuation boundary
+described below. Earlier replay screenshots remain read-only;
 return Live before claiming or sending input. Validation replays themselves never request a human.
 
-Routing is narrower than “every failed replay becomes a human session.” The engine supports
-`SurfaceError.intervention_recommended`, but the current browser adapter does not set it on
-ordinary `target_absent`, `target_ambiguous`, or action timeout errors. Those exhaust any permitted
-declared handling and return failure. Sensitive policy boundaries do route to real control transfer.
-A terminal failure has no retained browser to claim; restarting is not same-session resume.
-This [remaining coverage concern](requirements.md#remaining-concerns) is distinct from the working
-discovery and sensitive-replay handoff mechanisms.
+After permitted automatic retries and declared recovery are exhausted, ordinary absent/ambiguous
+targets, action failures/timeouts, and unverified dispatched effects can open intervention. The
+engine checks policy again before retaining the session; a recoverable error alone grants no authority.
+Invalid inputs, denied policy, wrong identity, declared terminal failures, broken sessions, and
+errors inside recovery stay terminal. Unattended validation never opens intervention.
+
+| Pause boundary | Operator task | Resume gate | Execution resumes at |
+|---|---|---|---|
+| Action not dispatched | Restore the interface; do not perform the interrupted task step | Changed allowed state, fresh preconditions and unique target | Same step, with spent retry/recovery budgets preserved |
+| Action may have dispatched | Inspect and complete/correct its effect | Fresh declared postconditions or permitted outcome; identity guards still apply | Next step; never blindly repeat the action |
+| Sensitive policy boundary | Perform the permitted human task | Same effect-verification gate | Next step |
+
+Human control invalidates cached outputs. Resume re-extracts condition operands through recorded,
+policy-allowed targets; missing or forbidden reads reject resume. Other outputs must be extracted
+again later. A possibly dispatched action without a declared effect checkpoint cannot safely resume:
+the operator may inspect or terminate it. A terminal failure has no retained browser to claim.
 
 ## Stale-input protection
 
@@ -246,9 +255,16 @@ boundary. Do not point this deployment at real customer records on the strength 
 
 The operator viewport is live and therefore unmasked for the authorized lease holder. Failure and handoff screenshots are masked in memory before persistence.
 
-The current image policy intentionally loses visual diagnostics. The committed failure bundle
-contains a fully masked screenshot; immutable historical evidence is not rewritten. Fresh evidence proves frame capture
-and event chronology, not what the screen looked like; use the authorized live viewport for that.
+Full masking intentionally loses visual post-mortem detail; use the authorized live viewport to
+inspect the screen. New failure and blocked-replay events retain value-free diagnostics instead:
+execution phase, action kind, dispatch uncertainty, condition kind, available match counts, and
+retry/recovery state. Labels, predicates' literal values, and adapter prose are excluded.
+
+Finalization packages the latest diagnostic as `diagnostic.json` inside one `trace.zip` (64 KiB
+JSON limit); all earlier snapshots remain ordered events. This is **not a Playwright trace**.
+The snapshot passes the positive retention schema and configured-secret scan before packaging.
+Archive failure records `diagnostic_trace: unavailable` without changing the task's disposition.
+Historical evidence is never rewritten.
 New template/signature capture also defaults off: edge detection can preserve readable text,
 faces, or identifying marks. For explicitly synthetic targets only,
 `REPLAYFORGE_ALLOW_SYNTHETIC_ASSET_CAPTURE=true` enables capture; both the demo origin and every
@@ -264,6 +280,8 @@ disabled. Do not enable the flag for real customer records.
 | Risky replay action | Allow with logging, deny all, human intervention | Sensitive → human; irreversible → deny | Demonstrates safe progress without pretending irreversible recovery is solved |
 | Evidence redaction | Redact at display, redact after storage, redact before write | Before write | Known sensitive fields and unknown diagnostics are excluded at the retention boundary |
 | Screenshot retention | Fixture selectors, OCR masks, full-frame suppression | Full frame | No general proof that unmasked pixels are public; visual diagnostics are sacrificed explicitly |
+| Failure diagnostics | Raw browser trace, masked image alone, value-free snapshot | Scanned snapshot + ordered events | Explains where and why execution stopped without retaining UI values; one final ZIP preserves the exporter contract |
+| Blocked replay continuation | Restart, repeat blindly, dispatch-aware continuation | Restore/retry before dispatch; verify/advance otherwise | Preserves the same session without duplicating uncertain mutations or resetting automatic budgets |
 | Image signatures | Treat edges as anonymous, permit all crops, restricted capture | Off by default | Edge maps can preserve sensitive content; synthetic opt-in keeps the demo option explicit |
 | Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, form state, and the assignment's required seam |
 | Operator routing | Require an ID from logs, active inbox | Discovery/replay inbox + optional direct ID | Makes a paused session discoverable without adding a general run-management UI |

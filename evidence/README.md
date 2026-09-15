@@ -38,8 +38,30 @@ This proves that replay stopped when it could not establish the target. It does 
 that no member exists: that requires a positively observed business-outcome detector, as in the
 newer scenario bundles. `recoverable: true` classifies the error; it does not promise another
 attempt, an open human session, or successful recovery. The masked PNG cannot reconstruct the
-failed page, and retained logs omit raw expected/observed values. These
-[diagnostic limits](../docs/requirements.md#remaining-concerns) remain explicit.
+failed page, and retained logs omit raw expected/observed values. This historical recording predates
+dispatch-aware handoff and diagnostic ZIPs. Current unattended validation retains that terminal
+behavior; attended execution can now pause instead. Historical bundles remain unchanged.
+
+### Final handoff and diagnostic proof
+
+The [obstruction handoff](replay-injected-obstruction-handoff/events.jsonl) uses the unchanged
+published payoff `1.0.2` artifact. A test inserts an opaque screen obstruction; an operator input
+dismisses it, then the same session re-resolves and executes the original step exactly once.
+This is a **real-browser, test-injected replay**, not a new model discovery or a learned recovery.
+Its [manifest](replay-injected-obstruction-handoff/manifest.json) records code revision `4739d33`.
+
+The [diagnostic ZIP](replay-injected-obstruction-handoff/trace.zip) contains one `diagnostic.json`:
+the first typing step expected one target, resolution failed before dispatch, and its retry rule
+did not permit this error. No action was dispatched. The event timeline then records human input,
+verified readiness, automation resume, and final success. The two retained frames remain masked.
+Available counts are retained; unavailable counts and raw target text are not invented.
+
+The [unattended failure](replay-unattended-target-diagnostic/events.jsonl) runs payoff `1.0.1`
+against a missing synthetic member, with intervention disabled. It stops at the unresolved third
+step and closes the browser. Its [trace](replay-unattended-target-diagnostic/trace.zip) and
+[manifest](replay-unattended-target-diagnostic/manifest.json) prove current failure diagnostics
+without changing the old artifact into a business-outcome-aware program. Both new bundles use
+the normal evidence exporter; neither rewrites earlier recordings.
 
 ### Expanded scenario proof
 

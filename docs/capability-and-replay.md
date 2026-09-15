@@ -230,13 +230,17 @@ broken target lookup is not proof that an element is absent.
 | Business outcome | Workflow completed with a legitimate negative answer | No member exists | `business_outcome/member_not_found` |
 | Recoverable condition | A declared finite repair is safe | Known training notice | Recovery events, then continue |
 | Application failure | Target rendered a known terminal error | Permission denied | `failure/permission_denied` |
-| Mechanical failure | Automation could not resolve or act | Two indistinguishable actions | `failure/target_ambiguous` |
+| Mechanical blockage | Automation could not resolve or act | Two indistinguishable actions | Policy-checked `intervention_required`; unattended validation fails |
 | Verification failure | Action ran but evidence does not prove the effect | Wrong member on detail page | `failure/checkpoint_mismatch` |
 | Safety pause | Action needs a person | Sensitive action requiring an operator | `intervention_required` |
 
 Retry requires a named recoverable error, remaining attempts, and proof that the prior effect is
 absent. Recoveries are named and bounded, cannot invoke nested recoveries, and cannot contain
 sensitive actions. Exact limits are in [Constraints and policy](constraints-and-policy.md#execution-bounds).
+
+Human recovery does not reset those budgets. [Continuation boundaries](safety-and-handoff.md#same-session-handoff)
+distinguish retrying an unstarted step from verifying a possibly dispatched effect and advancing.
+Identity failures remain terminal; intervention does not weaken the artifact's success contract.
 
 Omitting `version` resolves the latest publication for that capability ID. Pin an explicit version
 for reproducible invocations. Old demo capabilities are intentionally absent from this distribution;

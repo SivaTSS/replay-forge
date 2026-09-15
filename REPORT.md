@@ -61,8 +61,8 @@ and live `intervention_required`. Failures carry a stable code, available step/c
 Waits are bounded. Retry requires a named eligible error, remaining attempts, and proof of no
 prior effect. Recovery executes declared corrections and rejoins a fixed step; uncertain mutations
 are not repeated. Thirteen genuinely discovered exception/recovery branches and 32 model-free
-matrix replays cover all declared cases across both tenants. Unknown faults stop; authentication
-expiry has no learned re-login path. Ordinary target failures do not automatically request a human.
+matrix replays cover all declared cases across both tenants. Unhandled faults stop or pause under
+the routing policy; authentication expiry has no learned re-login path.
 See [fault coverage](docs/requirements.md#runtime-fault-coverage).
 
 ## 4. Heterogeneity & multi-tenant
@@ -84,17 +84,17 @@ policy. Independent tenant origins and fleet rollout remain
 ## 5. Escalation & handoff
 
 Discovery detects repeated state/actions, low confidence, explicit escalation, and unresolved
-safety boundaries. Replay pauses for sensitive policy decisions or adapter-recommended intervention;
-other unrecovered errors return failure. Routing carries task, step, surface, and reason.
+safety boundaries. Replay routes unrecovered target/action faults and sensitive decisions to
+policy-checked handoff. Invalid input, denied policy, and wrong identity remain terminal.
 
 The operator claims the retained browser using an exclusive expiring lease. Paired compare-and-swap
 updates keep intervention state and ownership atomic. Input binds lease version, current frame,
 viewport, and command sequence; stale input is rejected. Human actions are audited without typed text.
 
-Replay resume checks fresh state and the interrupted effect or declared outcome. Discovery resume
-requires accepted human input and changed allowed state, preserves consumed budgets, and invalidates
-outputs. Human actions are not fabricated automation steps: fresh unattended replay still gates
-publication and can reject a manually dependent draft. No post-discovery approval exists.
+Replay retries unstarted steps after fresh readiness checks; uncertain dispatch requires effect
+verification, never blind repetition. Discovery requires accepted human input and changed allowed
+state. Both invalidate cached outputs and preserve spent budgets. Human actions are not artifact
+steps: fresh unattended replay still gates publication. No post-discovery approval exists.
 
 HTTP polling provides frames and read-only history without video infrastructure. Browser handoff
 tests use explicit blocking/policy fixtures, not model discoveries.
@@ -107,8 +107,8 @@ is denied; sensitive work pauses. Registration prevents arbitrary caller-selecte
 
 Evidence uses restricted fields, keyed pseudonyms, and classification-based redaction before
 storage. Known-value artifact guards reject captured private literals. Failure screenshots are
-fully masked; new image-signature capture defaults off. This sacrifices visual post-mortem detail:
-the richer attachment proves capture, not what the failed screen displayed.
+fully masked; new image-signature capture defaults off. A scanned, value-free `trace.zip` records
+phase, dispatch uncertainty, condition kind, available counts, and retry state—not screen content.
 
 Authorized discovery sends transient synthetic screenshots to OpenAI with `store=false`; that is
 not Zero Data Retention. Langfuse stores local call metrics, not prompts or frames.
@@ -122,9 +122,9 @@ Files preserve capabilities/evidence; live coordination remains in memory. Postg
 distributed workers, production authentication, desktop, durable video, and model replay fallback
 are cut to focus on the local execution contract. Restart loses active work, not saved programs.
 
-The two stretch goals are typed invocation and cross-tenant reuse. Next priorities are broader
-fault handoff and privacy-safe diagnostics. Real-data deployment also needs authentication,
+The two stretch goals are typed invocation and cross-tenant reuse. Session-expiry and role-denial
+discovery remain unproven. Real-data deployment also needs authentication,
 tenant authorization, provider data controls, and retention enforcement.
 
-[README](README.md) gives exact commands; [verification](docs/verification.md#verified-snapshot)
-records measured proof. [Requirements](docs/requirements.md) maps the PDF to delivery and remaining concerns.
+[README](README.md) gives commands; [verification](docs/verification.md#final-submission-pass)
+records proof; [requirements](docs/requirements.md) maps delivery and remaining concerns.

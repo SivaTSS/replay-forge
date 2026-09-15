@@ -50,13 +50,48 @@ editing learned artifacts, adding coordinates, or relaxing confidence/policy gat
 failed run is not counted as a pass. These are point-in-time results, not exhaustive correctness
 or universal secret-detection guarantees.
 
-Passing this snapshot does not close every PDF concern. The final documentation audit identifies
-[routing and diagnostic limitations](requirements.md#remaining-concerns) separately from test
-results. They require implementation work, not stronger wording in this report.
+The subsequent documentation audit identified routing and diagnostic gaps. The bounded
+implementation pass below addresses them; [remaining concerns](requirements.md#remaining-concerns)
+still distinguish demonstrated application scenarios from broader production coverage.
+
+## Final submission pass
+
+Code revision `4739d33` adds value-free diagnostic retention and dispatch-aware blocked-replay
+handoff. No task artifacts, target UI, provider behavior, or discovery records were changed.
+Heavy checks ran sequentially, without model calls.
+
+| Gate | Result |
+|---|---|
+| Unit/API regression | 875 passed; 90.90% branch-aware domain coverage |
+| Real Chromium regression | All 83 passed, including discovery/replay handoff, target correctness, and changed-input/viewport reuse |
+| Python quality | Formatting/lint passed; 179-file type check passed |
+| Submission tooling | 14 tests passed |
+| Evidence integrity | 53 bundles verified; submission evidence gate has no missing category |
+| Documentation | 17 documents checked; 23 diagrams rendered in both themes with no clipped labels; all 19 evidence-index links resolve |
+| Report length | 956 words; three pages on both A4 and US Letter using the print settings below |
+| Credential audit | No configured-credential matches or recognized credential patterns in working files and reachable history |
+
+Two new model-free bundles supplement the original 51:
+
+- [Injected obstruction handoff](../evidence/replay-injected-obstruction-handoff/manifest.json):
+  unchanged published payoff artifact, real screen obstruction, operator clearance through the
+  live input API, same-step continuation, exact live outputs, and zero model events.
+- [Unattended target failure](../evidence/replay-unattended-target-diagnostic/manifest.json):
+  missing synthetic member against payoff `1.0.1`, terminal `target_absent`, closed browser,
+  masked failure frame, and a scanned diagnostic ZIP. This is not a learned not-found outcome.
+
+Unit regressions additionally prove no blind repeat after uncertain dispatch, rejection without
+an effect contract, preserved automatic retry budgets across repeated handoffs, fresh output
+reads, denied-location rejection, and no nested intervention inside recovery. Existing discovery
+handoff remains distinct from successful publication: unattended validation still gates every draft.
+
+The frontend build results remain those of the earlier snapshot: this pass changes no frontend
+source. Application-login expiry and role-denial discovery remain explicitly unproven; public
+repository access and submission email are owner actions, not test results.
 
 ## Documentation audit
 
-The 2026-09-14 final pass read all ten assignment pages and checked the docs against source,
+The earlier 2026-09-14 documentation-only audit read all ten assignment pages and checked against source,
 configuration, current artifacts, and evidence. Application code, dependencies, schemas, and
 historical run bundles were not changed. The full Chromium/build snapshot above remains tied to
 its original code revision; it is not presented as a new end-to-end run.
@@ -86,7 +121,7 @@ objects merely because their names look old would break provenance or tests.
 
 Repository visibility was checked separately: GitHub reports **private**, so public submission
 access remains outstanding. The [submission checklist](requirements.md#submission-checklist)
-also records the unsent email and remaining implementation concerns.
+also records the unsent email and remaining proof boundaries.
 
 ## What is proved where
 
@@ -97,7 +132,7 @@ also records the unsent email and remaining implementation concerns.
 | Model-free reuse | [Replay matrix](../backend/tests/integration/test_visual_portability.py) | Both tenants, changed member/inputs, 1440×900; provider credentials unset |
 | Single deployed UI | [Route tests](../backend/tests/integration/test_demo_routes.py) | Old paths return 404 |
 | Bank correctness | [Workstation tests](../backend/tests/integration/test_servicing_workstation.py), [interaction tests](../backend/tests/integration/test_servicing_interactions.py), target unit tests | Scripted application tests, not discovery |
-| Same-session handoff | [Session test](../backend/tests/integration/test_playwright_surface.py), [console test](../backend/tests/integration/test_operator_console.py) | Sensitive policy injected into a temporary copy of the genuine payoff artifact |
+| Same-session handoff | [Session test](../backend/tests/integration/test_playwright_surface.py), [console test](../backend/tests/integration/test_operator_console.py) | Both injected sensitive policy and a visible test obstruction over the unchanged published payoff artifact; not model discovery |
 | Blocked discovery handoff | [Discovery console test](../backend/tests/integration/test_discovery_handoff.py), [continuation tests](../backend/tests/unit/discovery/test_continuation.py) | Explicit blocking provider; real browser control, same-session resume, re-pause, termination and shutdown; not genuine discovery evidence |
 | Live replay/history | [Console test](../backend/tests/integration/test_operator_console.py), [managed replay matrix](../backend/tests/integration/test_visual_portability.py) | Actual PNGs before completion; history remains read-only across resume; refresh reconnects without another run |
 | Viewer isolation | [Viewer unit tests](../backend/tests/unit/runs/test_viewing.py), [HTTP tests](../backend/tests/unit/api/test_viewing_api.py) | Token authorization, bounded frame/event retention, expiry, no-cache responses |
