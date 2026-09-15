@@ -133,8 +133,8 @@ flowchart TB
 ```
 
 `ProviderContext` and `PlanningContext` are transient and may contain the goal, synthetic inputs,
-and an unmasked live PNG. These authorized discovery frames are distinct from masked evidence
-frames; they are not written to local evidence. Managed viewing retains only the latest discovery
+and an unmasked live PNG. Routine perception frames are transient; failure and handoff captures
+are retained separately as explicitly unredacted `RawScreenshot` evidence. Managed viewing retains only the latest discovery
 frame in memory. A provider response is only a proposal. It becomes a recording
 after policy allows it, the adapter executes it, and deterministic postconditions pass.
 

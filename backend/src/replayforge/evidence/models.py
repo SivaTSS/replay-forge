@@ -27,6 +27,25 @@ class RetentionClass(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class RawScreenshot:
+    """Unredacted viewport pixels. Never claim these passed text/PII sanitization."""
+
+    content: bytes
+    media_type: Literal["image/png"] = "image/png"
+    redaction_directives: tuple[str, ...] = ("unredacted:raw-screenshot",)
+
+    def __post_init__(self) -> None:
+        if not self.content.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("raw screenshot must contain PNG content")
+        if len(self.content) > MAX_ATTACHMENT_BYTES:
+            raise ValueError("raw screenshot exceeds the storage limit")
+        if self.media_type != "image/png" or self.redaction_directives != (
+            "unredacted:raw-screenshot",
+        ):
+            raise ValueError("raw screenshots must declare unredacted PNG content")
+
+
+@dataclass(frozen=True, slots=True)
 class SanitizedEvidence:
     """Bytes that have passed redaction and the forbidden-content scanner."""
 

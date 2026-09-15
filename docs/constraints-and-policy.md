@@ -74,7 +74,7 @@ value to replace an earlier safety budget.
 | Visual capability asset | `512 KB` | Assets are small canonical PNG signatures, not screenshots |
 | Application registry | `1 MB` | Bound trusted startup configuration |
 | Evidence event/result/manifest | `2 MB` each | Bound JSON parsing and review |
-| Evidence attachment | `20 MB` | Permit masked PNG/trace evidence without arbitrary blobs |
+| Evidence attachment | `20 MB` | Bound PNG/trace evidence without arbitrary blobs; raw PNGs carry an explicit unredacted marker |
 | Run events / attachments | `10,000` / `100` | Keep manifests finite |
 | Artifact validation request | `1 MB` | Match the capability publication envelope |
 | Human text input | `1,000` characters | Bound an interactive control command; text is not retained |

@@ -13,6 +13,7 @@ from pathlib import Path
 from replayforge.evidence.models import (
     MAX_ATTACHMENT_BYTES,
     EvidenceRecord,
+    RawScreenshot,
     RetentionClass,
     SanitizedEvidence,
 )
@@ -34,7 +35,7 @@ class LocalEvidenceStore:
         self,
         run_id: str,
         kind: str,
-        payload: SanitizedEvidence,
+        payload: SanitizedEvidence | RawScreenshot,
         retention_class: RetentionClass,
     ) -> EvidenceRecord:
         parse_id(run_id, EntityKind.RUN)
@@ -43,7 +44,8 @@ class LocalEvidenceStore:
         if len(payload.content) > MAX_ATTACHMENT_BYTES:
             raise ValueError("evidence payload exceeds the storage limit")
         evidence_id = new_id(EntityKind.EVIDENCE)
-        relative = Path(run_id) / f"{kind}-{evidence_id}.bin"
+        suffix = ".png" if payload.media_type == "image/png" else ".bin"
+        relative = Path(run_id) / f"{kind}-{evidence_id}{suffix}"
         destination = self._resolve_key(relative.as_posix())
         destination.parent.mkdir(parents=True, exist_ok=True)
         self._sync_directory(self.root)

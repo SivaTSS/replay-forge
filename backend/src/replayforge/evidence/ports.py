@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import (
+    EvidenceRecord,
+    RawScreenshot,
+    RetentionClass,
+    SanitizedEvidence,
+)
 
 
 class EvidenceStore(Protocol):
@@ -12,7 +17,7 @@ class EvidenceStore(Protocol):
         self,
         run_id: str,
         kind: str,
-        payload: SanitizedEvidence,
+        payload: SanitizedEvidence | RawScreenshot,
         retention_class: RetentionClass,
     ) -> EvidenceRecord: ...
 

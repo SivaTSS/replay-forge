@@ -35,7 +35,7 @@ from replayforge.capabilities.values import (
     validate_object,
 )
 from replayforge.evidence.diagnostics import ExecutionDiagnostic, bounded_count
-from replayforge.evidence.models import RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import RawScreenshot, RetentionClass
 from replayforge.interventions.leases import ControlLeaseService
 from replayforge.interventions.models import (
     AUTOMATION_OWNER,
@@ -1069,6 +1069,7 @@ class ReplayEngine:
             error.observed,
             session,
             diagnostic,
+            failure_frame=error.failure_frame,
         )
 
     def _intervene(
@@ -1146,10 +1147,10 @@ class ReplayEngine:
         session: SurfaceSession,
         kind: str,
     ) -> None:
-        frame = session.capture_sanitized_evidence_frame()
-        self.recorder.attach_sanitized(
+        frame = session.capture_provider_frame()
+        self.recorder.attach_screenshot(
             kind,
-            SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+            RawScreenshot(frame),
             RetentionClass.HUMAN_AUDIT,
         )
 
@@ -1164,6 +1165,7 @@ class ReplayEngine:
         observed: dict[str, object] | None = None,
         session: SurfaceSession | None = None,
         diagnostic: ExecutionDiagnostic | None = None,
+        failure_frame: bytes | None = None,
     ) -> FailureResult:
         step_index = next(
             (i for i, step in enumerate(request.artifact.steps) if step.id == step_id), None
@@ -1186,9 +1188,15 @@ class ReplayEngine:
             details=diagnostic.safe_payload(),
         )
         evidence_frame = "not_applicable"
-        if session is not None:
+        if session is not None or failure_frame is not None:
             try:
-                self._attach_failure_frame(request.run_id, session)
+                if session is not None:
+                    self._attach_failure_frame(request.run_id, session)
+                else:
+                    assert failure_frame is not None
+                    self.recorder.attach_screenshot(
+                        "failure-state", RawScreenshot(failure_frame), RetentionClass.FAILURE
+                    )
                 evidence_frame = "captured"
             except (OSError, RuntimeError, ValueError):
                 evidence_frame = "unavailable"
@@ -1211,10 +1219,10 @@ class ReplayEngine:
         )
 
     def _attach_failure_frame(self, run_id: str, session: SurfaceSession) -> None:
-        frame = session.capture_sanitized_evidence_frame()
-        self.recorder.attach_sanitized(
+        frame = session.capture_provider_frame()
+        self.recorder.attach_screenshot(
             "failure-state",
-            SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+            RawScreenshot(frame),
             RetentionClass.FAILURE,
         )
 

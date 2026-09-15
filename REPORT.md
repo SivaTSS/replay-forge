@@ -112,10 +112,10 @@ access. Risk inference can raise a model's declaration. Irreversible automation 
 sensitive actions require human control. This is conservative because UI automation cannot promise
 transactional rollback.
 
-Evidence is redacted before storage using restricted fields, classifications, keyed pseudonyms,
-and known-value guards. Fully masked screenshots protect retained pixels; a compact diagnostic
-ZIP preserves execution phase, dispatch uncertainty, condition types, and retry state for debugging.
-The archive excludes raw browser content; new image-asset capture defaults off to minimize retained data.
+Structured evidence is redacted using restricted fields, classifications, keyed pseudonyms,
+and known-value guards. Failure and handoff PNGs retain visible pixels for synthetic-data debugging
+and are explicitly marked unredacted; they require review before sharing. A compact diagnostic ZIP
+records execution phase, dispatch uncertainty, condition types, and retry state without UI values.
 
 Live screens and caller outputs are different from retained evidence. Authorized synthetic discovery
 sends unmasked screenshots to OpenAI with `store=false`, which is not a zero-retention guarantee.

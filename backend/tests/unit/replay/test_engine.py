@@ -17,7 +17,12 @@ from replayforge.capabilities.models import (
     RouteCondition,
     TextCondition,
 )
-from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import (
+    EvidenceRecord,
+    RawScreenshot,
+    RetentionClass,
+    SanitizedEvidence,
+)
 from replayforge.interventions.leases import (
     ControlLeaseService,
     InMemoryControlLeaseRepository,
@@ -91,6 +96,8 @@ class FakeSurfaceSession:
         )
 
     def capture_provider_frame(self) -> bytes:
+        if self.evidence_capture_error is not None:
+            raise self.evidence_capture_error
         return b"\x89PNG\r\n\x1a\nsynthetic-frame"
 
     def capture_sanitized_evidence_frame(self) -> SanitizedSurfaceFrame:
@@ -198,7 +205,9 @@ class FakeSurfaceDriver:
 @dataclass
 class MemoryRecorder:
     events: list[tuple[str, str | None]] = field(default_factory=list)
-    attachments: list[tuple[str, SanitizedEvidence, RetentionClass]] = field(default_factory=list)
+    attachments: list[tuple[str, SanitizedEvidence | RawScreenshot, RetentionClass]] = field(
+        default_factory=list
+    )
     recorded_details: list[dict[str, object]] = field(default_factory=list)
     run_id: str | None = None
 
@@ -225,7 +234,7 @@ class MemoryRecorder:
     def attach_sanitized(
         self,
         kind: str,
-        payload: SanitizedEvidence,
+        payload: SanitizedEvidence | RawScreenshot,
         retention_class: RetentionClass,
     ) -> EvidenceRecord:
         self.attachments.append((kind, payload, retention_class))
@@ -239,6 +248,11 @@ class MemoryRecorder:
             redaction_directives=payload.redaction_directives,
             created_at=datetime(2026, 9, 10, 12, 30, tzinfo=UTC),
         )
+
+    def attach_screenshot(
+        self, kind: str, payload: RawScreenshot, retention_class: RetentionClass
+    ) -> EvidenceRecord:
+        return self.attach_sanitized(kind, payload, retention_class)
 
 
 @dataclass
@@ -835,6 +849,24 @@ def test_invalid_input_fails_before_opening_surface(
     assert recorder.recorded_details[-1]["evidence_frame"] == "not_applicable"
 
 
+def test_readiness_error_retains_frame_after_driver_closes_page(
+    valid_artifact_data: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine, recorder, _ = build_engine(FakeSurfaceSession())
+    error = SurfaceError("visual_grounding_budget_exceeded", "Readiness timed out.")
+    error.failure_frame = b"\x89PNG\r\n\x1a\nlast-visible-state"
+
+    def fail_open(*args: object) -> None:
+        raise error
+
+    monkeypatch.setattr(FakeSurfaceDriver, "open", fail_open)
+    result = engine.execute(request_for(valid_artifact_data))
+    assert isinstance(result, FailureResult)
+    assert result.code == error.code
+    assert recorder.attachments[0][1].content == error.failure_frame
+    assert recorder.recorded_details[-1]["evidence_frame"] == "captured"
+
+
 def test_incompatible_tenant_fails_before_opening_surface(
     valid_artifact_data: dict[str, Any],
 ) -> None:
@@ -863,6 +895,8 @@ def test_checkpoint_mismatch_never_returns_outputs(
     assert not hasattr(result, "outputs")
     assert [kind for kind, _, _ in recorder.attachments] == ["failure-state"]
     assert recorder.attachments[0][2] is RetentionClass.FAILURE
+    assert recorder.attachments[0][1].content == session.capture_provider_frame()
+    assert recorder.attachments[0][1].redaction_directives == ("unredacted:raw-screenshot",)
     assert recorder.recorded_details[-1]["evidence_frame"] == "captured"
 
 
@@ -997,7 +1031,7 @@ def test_replay_continuation_revalidates_and_finishes_without_replaying_human_st
         "handoff-after",
     ]
     assert all(
-        attachment.redaction_directives == ("mask:synthetic-fields",)
+        attachment.redaction_directives == ("unredacted:raw-screenshot",)
         for _, attachment, _ in recorder.attachments
     )
 

@@ -92,7 +92,7 @@ govern execution. Existing bundle bytes and hashes remain unchanged.
 | Live replay/history | [Console test](../backend/tests/integration/test_operator_console.py), [managed replay matrix](../backend/tests/integration/test_visual_portability.py) | Actual PNGs before completion; history remains read-only across resume; refresh reconnects without another run |
 | Viewer isolation | [Viewer unit tests](../backend/tests/unit/runs/test_viewing.py), [HTTP tests](../backend/tests/unit/api/test_viewing_api.py) | Token authorization, bounded frame/event retention, expiry, no-cache responses |
 | Error semantics | [Replay engine tests](../backend/tests/unit/replay/test_engine.py) | Declared outcomes, recoveries, ambiguous targets, safe retries, and failures |
-| Privacy | Artifact, journal, evidence, and provider unit suites | Classification/known-value guards and full-viewport masking; not a universal PII detector |
+| Privacy | Artifact, journal, evidence, and provider unit suites | Classification/known-value guards for structured data; raw screenshot retention is explicitly declared, not PII sanitization |
 | Empty-registry onboarding | [Runtime tests](../backend/tests/unit/runtime/test_composition.py) | No application-specific seed capability required |
 
 The handoff fixture is explicitly marked `injected-handoff-test`, not `openai`. It adds a
@@ -205,7 +205,7 @@ scenario/
 └── manifest.json      Provenance, command, redaction metadata, closed-set hashes
 ```
 
-A run requiring richer evidence may also include masked screenshots or sanitized trace attachments.
+A run requiring richer evidence may also include unredacted failure/handoff PNGs or sanitized trace attachments. Historical bundles keep their original masked PNGs.
 The current discovery bundles contain structured evidence; live screenshots sent to the model are
 not stored as public screenshots. Full-viewport masks prove retention policy, not visual page content.
 

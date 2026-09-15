@@ -1,5 +1,24 @@
 # Evidence
 
+## Screenshots and storage
+
+New replay and discovery failures store the actual viewport **without masking**, as do before/after
+handoff captures. Files live under the configured evidence directory (default:
+`evidence/runtime/<run-id>/*-<evidence-id>.png`). Open the PNG directly; its sidecar metadata and run
+manifest carry its SHA-256 hash, retention class, and `unredacted:raw-screenshot` marker.
+Writes are atomic and files are owner-readable/writable only. Runtime evidence is Git-ignored.
+
+This preserves visible failure context on synthetic applications. It is not image redaction:
+anything on screen may be retained. Use synthetic data only and inspect every exported PNG before
+sharing. Structured logs/results still use their existing redaction rules. Export copies retained
+PNG bytes unchanged into `screenshots/001.png`, etc., and preserves their privacy declarations.
+
+Capture is best-effort: a destroyed browser or an error before a page exists cannot yield a current
+screenshot. Rendered-readiness failures capture before closing the page. Terminal events report
+`evidence_frame` as `captured`, `unavailable`, or `not_applicable`. Successful discovery does not
+save a screen history. Old masked images cannot be unmasked; the 53 committed bundles below remain
+immutable records of their original runs, not new captures.
+
 Primary model recordings cover three tasks on the single servicing workstation:
 
 | Bundle | Business task |
@@ -90,8 +109,8 @@ uv run python scripts/verify_evidence_bundles.py evidence --require-submission
 ```
 
 Bundles contain `artifact.yaml`, `events.jsonl`, `result.json`, and `manifest.json`.
-Discovery screenshots are transient; these are structured evidence bundles, not retained raw
-PII-bearing page captures. Private runtime records are ignored and are not submission files.
+These historical discovery bundles contain structured evidence, not raw page histories.
+New failure/handoff capture follows the storage policy above. Private runtime records are ignored.
 
 Fully masked PNGs demonstrate the retention boundary, not the visual state that caused a failure.
 Use the ordered events, exact artifact, terminal result, and newer diagnostic ZIPs to inspect a
@@ -146,3 +165,65 @@ uv run python scripts/validate_scenario_evidence.py \
 Old-UI runs were removed, not relabeled as workstation runs. Browser regressions for policy-driven
 handoff use explicit temporary fixtures and real live control, not fabricated discovery evidence.
 See [verification](../docs/verification.md) for the precise proof boundaries.
+
+## Complete bundle index
+
+Each link opens the immutable manifest; sibling files contain its artifact, ordered events,
+terminal result, and any declared attachments. `discovery-*` records model-driven execution;
+`replay-*` records model-free execution. Scenario replays retain the candidate actually tested.
+
+| Bundle | Recorded result |
+|---|---|
+| [discovery-card-acknowledge-member-notice](discovery-card-acknowledge-member-notice/manifest.json) | `success` |
+| [discovery-card-card-already-locked](discovery-card-card-already-locked/manifest.json) | `success` |
+| [discovery-card-card-expired](discovery-card-card-expired/manifest.json) | `success` |
+| [discovery-card-invalid-maintenance-reason](discovery-card-invalid-maintenance-reason/manifest.json) | `success` |
+| [discovery-card-member-not-found](discovery-card-member-not-found/manifest.json) | `success` |
+| [discovery-card-member-restricted](discovery-card-member-restricted/manifest.json) | `success` |
+| [discovery-payoff-acknowledge-member-notice](discovery-payoff-acknowledge-member-notice/manifest.json) | `success` |
+| [discovery-payoff-invalid-payoff-date](discovery-payoff-invalid-payoff-date/manifest.json) | `success` |
+| [discovery-payoff-member-not-found](discovery-payoff-member-not-found/manifest.json) | `success` |
+| [discovery-payoff-member-restricted](discovery-payoff-member-restricted/manifest.json) | `success` |
+| [discovery-payoff-quote-date-unavailable](discovery-payoff-quote-date-unavailable/manifest.json) | `success` |
+| [discovery-servicing-card-lock](discovery-servicing-card-lock/manifest.json) | `success` |
+| [discovery-servicing-loan-payoff](discovery-servicing-loan-payoff/manifest.json) | `success` |
+| [discovery-servicing-transaction](discovery-servicing-transaction/manifest.json) | `success` |
+| [discovery-transaction-member-not-found](discovery-transaction-member-not-found/manifest.json) | `success` |
+| [discovery-transaction-not-found](discovery-transaction-not-found/manifest.json) | `success` |
+| [discovery-transaction-parameterized](discovery-transaction-parameterized/manifest.json) | `success` |
+| [replay-card-harbor-acknowledge-member-notice](replay-card-harbor-acknowledge-member-notice/manifest.json) | `success` |
+| [replay-card-harbor-card-already-locked](replay-card-harbor-card-already-locked/manifest.json) | `business_outcome · card_already_locked` |
+| [replay-card-harbor-card-expired](replay-card-harbor-card-expired/manifest.json) | `business_outcome · card_expired` |
+| [replay-card-harbor-invalid-maintenance-reason](replay-card-harbor-invalid-maintenance-reason/manifest.json) | `failure · invalid_maintenance_reason` |
+| [replay-card-harbor-member-not-found](replay-card-harbor-member-not-found/manifest.json) | `business_outcome · member_not_found` |
+| [replay-card-harbor-member-restricted](replay-card-harbor-member-restricted/manifest.json) | `failure · member_restricted` |
+| [replay-card-harbor-primary](replay-card-harbor-primary/manifest.json) | `success` |
+| [replay-card-summit-acknowledge-member-notice](replay-card-summit-acknowledge-member-notice/manifest.json) | `success` |
+| [replay-card-summit-card-already-locked](replay-card-summit-card-already-locked/manifest.json) | `business_outcome · card_already_locked` |
+| [replay-card-summit-card-expired](replay-card-summit-card-expired/manifest.json) | `business_outcome · card_expired` |
+| [replay-card-summit-invalid-maintenance-reason](replay-card-summit-invalid-maintenance-reason/manifest.json) | `failure · invalid_maintenance_reason` |
+| [replay-card-summit-member-not-found](replay-card-summit-member-not-found/manifest.json) | `business_outcome · member_not_found` |
+| [replay-card-summit-member-restricted](replay-card-summit-member-restricted/manifest.json) | `failure · member_restricted` |
+| [replay-card-summit-primary](replay-card-summit-primary/manifest.json) | `success` |
+| [replay-injected-obstruction-handoff](replay-injected-obstruction-handoff/manifest.json) | `success` |
+| [replay-payoff-harbor-acknowledge-member-notice](replay-payoff-harbor-acknowledge-member-notice/manifest.json) | `success` |
+| [replay-payoff-harbor-invalid-payoff-date](replay-payoff-harbor-invalid-payoff-date/manifest.json) | `failure · invalid_payoff_date` |
+| [replay-payoff-harbor-member-not-found](replay-payoff-harbor-member-not-found/manifest.json) | `business_outcome · member_not_found` |
+| [replay-payoff-harbor-member-restricted](replay-payoff-harbor-member-restricted/manifest.json) | `failure · member_restricted` |
+| [replay-payoff-harbor-primary](replay-payoff-harbor-primary/manifest.json) | `success` |
+| [replay-payoff-harbor-quote-date-unavailable](replay-payoff-harbor-quote-date-unavailable/manifest.json) | `business_outcome · quote_date_unavailable` |
+| [replay-payoff-summit-acknowledge-member-notice](replay-payoff-summit-acknowledge-member-notice/manifest.json) | `success` |
+| [replay-payoff-summit-invalid-payoff-date](replay-payoff-summit-invalid-payoff-date/manifest.json) | `failure · invalid_payoff_date` |
+| [replay-payoff-summit-member-not-found](replay-payoff-summit-member-not-found/manifest.json) | `business_outcome · member_not_found` |
+| [replay-payoff-summit-member-restricted](replay-payoff-summit-member-restricted/manifest.json) | `failure · member_restricted` |
+| [replay-payoff-summit-primary](replay-payoff-summit-primary/manifest.json) | `success` |
+| [replay-payoff-summit-quote-date-unavailable](replay-payoff-summit-quote-date-unavailable/manifest.json) | `business_outcome · quote_date_unavailable` |
+| [replay-servicing-missing-record](replay-servicing-missing-record/manifest.json) | `failure · target_absent` |
+| [replay-servicing-payoff](replay-servicing-payoff/manifest.json) | `success` |
+| [replay-transaction-harbor-member-not-found](replay-transaction-harbor-member-not-found/manifest.json) | `business_outcome · member_not_found` |
+| [replay-transaction-harbor-primary](replay-transaction-harbor-primary/manifest.json) | `success` |
+| [replay-transaction-harbor-transaction-not-found](replay-transaction-harbor-transaction-not-found/manifest.json) | `business_outcome · transaction_not_found` |
+| [replay-transaction-summit-member-not-found](replay-transaction-summit-member-not-found/manifest.json) | `business_outcome · member_not_found` |
+| [replay-transaction-summit-primary](replay-transaction-summit-primary/manifest.json) | `success` |
+| [replay-transaction-summit-transaction-not-found](replay-transaction-summit-transaction-not-found/manifest.json) | `business_outcome · transaction_not_found` |
+| [replay-unattended-target-diagnostic](replay-unattended-target-diagnostic/manifest.json) | `failure · target_absent` |

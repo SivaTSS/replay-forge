@@ -26,6 +26,7 @@ from replayforge.capabilities.serialization import (
 from replayforge.evidence.export import EvidenceExportRequest, export_evidence_bundle
 from replayforge.evidence.integrity import verify_run_manifest
 from replayforge.evidence.local_store import LocalEvidenceStore
+from replayforge.evidence.models import RawScreenshot, RetentionClass
 from replayforge.interventions.models import HumanInputCommand
 from replayforge.policy.types import Risk
 from replayforge.runs.results import FailureResult, InterventionRequiredResult, SuccessResult
@@ -40,7 +41,7 @@ pytestmark = pytest.mark.integration
 REPOSITORY = Path(__file__).resolve().parents[3]
 
 
-def test_generic_dom_frame_adapter_and_private_screenshot_retention() -> None:
+def test_generic_dom_frame_adapter_and_private_screenshot_retention(tmp_path: Path) -> None:
     """In-memory HTML tests the optional adapter, not a second demo application."""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
@@ -76,6 +77,21 @@ def test_generic_dom_frame_adapter_and_private_screenshot_retention() -> None:
             pixels = cv2.imdecode(np.frombuffer(retained.content, np.uint8), cv2.IMREAD_COLOR)
             assert pixels is not None and np.all(pixels == (39, 24, 17))
             assert retained.redaction_directives == ("mask:full-viewport",)
+            raw = session.capture_provider_frame()
+            store = LocalEvidenceStore(tmp_path / "evidence", SystemClock())
+            from replayforge.shared.ids import EntityKind, new_id
+
+            record = store.write(
+                str(new_id(EntityKind.RUN)),
+                "failure-state",
+                RawScreenshot(raw),
+                RetentionClass.FAILURE,
+            )
+            assert record.key.endswith(".png")
+            assert store.read(record.key) == raw
+            pixels = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+            assert pixels is not None and np.any(pixels != pixels[0, 0])
+            assert record.redaction_directives == ("unredacted:raw-screenshot",)
         finally:
             session.close()
             browser.close()
@@ -252,7 +268,7 @@ def test_visual_obstruction_handoff_retries_original_step(
         runtime.close()
 
 
-def test_missing_record_fails_closed_with_masked_evidence(demo_bank: str, tmp_path: Path) -> None:
+def test_missing_record_fails_closed_with_raw_evidence(demo_bank: str, tmp_path: Path) -> None:
     runtime = build_runtime(
         RuntimeSettings(
             artifact_directory=REPOSITORY / "capabilities",

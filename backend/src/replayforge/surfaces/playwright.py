@@ -212,7 +212,10 @@ class PlaywrightSurfaceDriver:
         if launch.rendered_surface:
             try:
                 validate_rendered_readiness(session, launch)
-            except BaseException:
+            except BaseException as error:
+                if isinstance(error, SurfaceError):
+                    with suppress(OSError, RuntimeError, ValueError):
+                        error.failure_frame = session.capture_provider_frame()
                 session.close()
                 self.active_session = None
                 raise

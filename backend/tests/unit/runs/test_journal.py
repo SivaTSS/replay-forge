@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import (
+    EvidenceRecord,
+    RawScreenshot,
+    RetentionClass,
+    SanitizedEvidence,
+)
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.policy.types import DataClassification
 from replayforge.runs import journal as journal_module
@@ -228,7 +233,7 @@ class FailingEvidenceStore:
         self,
         run_id: str,
         kind: str,
-        payload: SanitizedEvidence,
+        payload: SanitizedEvidence | RawScreenshot,
         retention_class: RetentionClass,
     ) -> EvidenceRecord:
         del run_id, kind, payload, retention_class

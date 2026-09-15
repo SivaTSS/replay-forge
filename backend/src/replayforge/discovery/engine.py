@@ -64,7 +64,7 @@ from replayforge.discovery.privacy import (
     validate_artifact_privacy,
 )
 from replayforge.discovery.scenarios import scenario_expected_condition
-from replayforge.evidence.models import RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import RawScreenshot, RetentionClass
 from replayforge.evidence.redaction import EvidenceRejectedError, StructuredRedactor
 from replayforge.interventions.leases import (
     ControlLeaseService,
@@ -178,13 +178,17 @@ class DiscoveryEngine:
         except StopIteration as completed:
             return cast(DiscoveryResult, completed.value)
         if self.intervention_router is None:
-            loop.close()
-            return self._failure(pause.request, pause.code, "Discovery is blocked.")
+            try:
+                return self._failure(
+                    pause.request, pause.session, pause.code, "Discovery is blocked."
+                )
+            finally:
+                loop.close()
         try:
-            frame = pause.session.capture_sanitized_evidence_frame()
-            self.recorder.attach_sanitized(
+            frame = pause.session.capture_provider_frame()
+            self.recorder.attach_screenshot(
                 "discovery-handoff-before",
-                SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+                RawScreenshot(frame),
                 RetentionClass.HUMAN_AUDIT,
             )
             intervention_id = str(new_id(EntityKind.INTERVENTION))
@@ -239,10 +243,10 @@ class DiscoveryEngine:
             raise SurfaceError(
                 "resume_state_unchanged", "The blocked discovery state has not changed."
             )
-        frame = pause.session.capture_sanitized_evidence_frame()
-        self.recorder.attach_sanitized(
+        frame = pause.session.capture_provider_frame()
+        self.recorder.attach_screenshot(
             "discovery-handoff-after",
-            SanitizedEvidence(frame.content, "image/png", frame.redaction_directives),
+            RawScreenshot(frame),
             RetentionClass.HUMAN_AUDIT,
         )
         self.recorder.record("resume_checkpoint_verified", pause.request.run_id)
@@ -255,12 +259,15 @@ class DiscoveryEngine:
 
     def cancel(self, intervention_id: str) -> FailureResult:
         continuation = self._continuations.pop(intervention_id)
-        continuation.loop.close()
-        return self._failure(
-            continuation.pause.request,
-            "discovery_terminated",
-            "Discovery was terminated while paused.",
-        )
+        try:
+            return self._failure(
+                continuation.pause.request,
+                continuation.pause.session,
+                "discovery_terminated",
+                "Discovery was terminated while paused.",
+            )
+        finally:
+            continuation.loop.close()
 
     def _run(self, request: DiscoveryRequest) -> Generator[DiscoveryPause, int, DiscoveryResult]:
         session: SurfaceSession | None = None
@@ -327,7 +334,9 @@ class DiscoveryEngine:
 
             for _step_number in range(1, request.max_steps + 1):
                 if self.clock.now() - started_at >= request.timeout:
-                    return self._failure(request, "discovery_timeout", "Time budget exhausted.")
+                    return self._failure(
+                        request, session, "discovery_timeout", "Time budget exhausted."
+                    )
                 lease = self.lease_service.heartbeat(
                     session.session_id, lease.version, AUTOMATION_OWNER
                 )
@@ -402,6 +411,7 @@ class DiscoveryEngine:
                     if request.scenario is not None and observed_branch is None:
                         return self._failure(
                             request,
+                            session,
                             "scenario_branch_missing",
                             "Scenario completion requires a verified branch marker.",
                         )
@@ -464,6 +474,7 @@ class DiscoveryEngine:
                     if reference is None:
                         return self._failure(
                             request,
+                            session,
                             "scenario_reference_invalid",
                             "The requested recorded action is unavailable.",
                         )
@@ -483,6 +494,7 @@ class DiscoveryEngine:
                     if request.scenario is None or observed_branch is not None or not recordings:
                         return self._failure(
                             request,
+                            session,
                             "scenario_branch_invalid",
                             "A scenario requires one branch after an executed prefix.",
                         )
@@ -620,15 +632,23 @@ class DiscoveryEngine:
                         )
                 history.append(history_item)
 
-            return self._failure(request, "max_steps_exceeded", "Discovery step budget exhausted.")
+            return self._failure(
+                request, session, "max_steps_exceeded", "Discovery step budget exhausted."
+            )
         except ModelProviderError as error:
-            return self._failure(request, error.code, error.safe_message)
+            return self._failure(request, session, error.code, error.safe_message)
         except SurfaceError as error:
-            return self._failure(request, error.code, error.safe_message)
+            return self._failure(
+                request, session, error.code, error.safe_message, failure_frame=error.failure_frame
+            )
         except LeaseExpiredError:
-            return self._failure(request, "control_lease_expired", "Automation control expired.")
+            return self._failure(
+                request, session, "control_lease_expired", "Automation control expired."
+            )
         except LeaseConflictError:
-            return self._failure(request, "control_lease_conflict", "Automation ownership changed.")
+            return self._failure(
+                request, session, "control_lease_conflict", "Automation ownership changed."
+            )
         finally:
             if session is not None:
                 session.close()
@@ -689,6 +709,7 @@ class DiscoveryEngine:
         except ArtifactPrivacyError as error:
             return self._failure(
                 request,
+                session,
                 "artifact_privacy_rejected",
                 str(error),
                 privacy_rejection=ArtifactPrivacyDiagnostic(
@@ -698,25 +719,28 @@ class DiscoveryEngine:
         except EvidenceRejectedError:
             return self._failure(
                 request,
+                session,
                 "artifact_privacy_rejected",
                 "The compiled trace contains private or forbidden data.",
             )
         except ValueError:
             return self._failure(
                 request,
+                session,
                 "artifact_compilation_failed",
                 "The observed trace could not be compiled into a safe capability.",
             )
         if not session.wait_until(artifact.checkpoint.condition, outputs, request.inputs, 10_000):
             return self._failure(
                 request,
+                session,
                 "completion_not_verified",
                 "Completion lacked deterministic checkpoint evidence.",
             )
         try:
             validate_object(artifact.outputs, outputs)
         except ContractValidationError as error:
-            return self._failure(request, "completion_output_invalid", str(error))
+            return self._failure(request, session, "completion_output_invalid", str(error))
         self.recorder.record("artifact_compiled", request.run_id)
         return DiscoverySuccess(
             status="success",
@@ -889,6 +913,7 @@ class DiscoveryEngine:
         ):
             return self._failure(
                 request,
+                session,
                 "literal_customer_value",
                 "Discovery cannot publish a customer value embedded in an action.",
             )
@@ -976,7 +1001,7 @@ class DiscoveryEngine:
             details={"decision": decision.decision.value, "reason": decision.reason_code},
         )
         if decision.decision is Decision.DENY:
-            return self._failure(request, "policy_blocked", decision.explanation)
+            return self._failure(request, session, "policy_blocked", decision.explanation)
         if decision.decision is Decision.REQUIRE_HUMAN_APPROVAL:
             if decision.reason_code == "sensitive_action_requires_approval":
                 raise SurfaceError(
@@ -991,7 +1016,7 @@ class DiscoveryEngine:
         if isinstance(proposal.action, ExtractAction):
             if target is None:
                 return self._failure(
-                    request, "target_absent", "Extraction requires a resolved target."
+                    request, session, "target_absent", "Extraction requires a resolved target."
                 )
             observed_value = session.extract(target)
             value = self._transform(observed_value, proposal.action.transform)
@@ -1010,6 +1035,7 @@ class DiscoveryEngine:
             if receipt.status is ActionStatus.FAILED:
                 return self._failure(
                     request,
+                    session,
                     receipt.error_code or "action_failed",
                     "The discovery action did not complete.",
                 )
@@ -1019,6 +1045,7 @@ class DiscoveryEngine:
             if not session.wait_until(proposal.action.condition, outputs, request.inputs, 10_000):
                 return self._failure(
                     request,
+                    session,
                     "action_condition_not_verified",
                     "The action's condition was not observed.",
                 )
@@ -1028,6 +1055,7 @@ class DiscoveryEngine:
             if not session.wait_until(proposal.expected_condition, outputs, request.inputs, 10_000):
                 return self._failure(
                     request,
+                    session,
                     "expected_condition_not_verified",
                     "The action's expected condition was not observed after execution.",
                 )
@@ -1048,7 +1076,9 @@ class DiscoveryEngine:
                     request.run_id,
                     details={"output": output},
                 )
-                return self._failure(request, "output_invalid", "The extracted output is invalid.")
+                return self._failure(
+                    request, session, "output_invalid", "The extracted output is invalid."
+                )
             verified_postconditions.append(OutputValidCondition(kind="output_valid", output=output))
         after = session.observe()
         self.recorder.record("action_result", request.run_id)
@@ -1070,12 +1100,29 @@ class DiscoveryEngine:
     def _failure(
         self,
         request: DiscoveryRequest,
+        session: SurfaceSession | None,
         code: str,
         message: str,
         *,
         privacy_rejection: ArtifactPrivacyDiagnostic | None = None,
+        failure_frame: bytes | None = None,
     ) -> FailureResult:
-        self.recorder.record("discovery_failed", request.run_id, details={"code": code})
+        evidence_frame = "not_applicable"
+        if session is not None or failure_frame is not None:
+            try:
+                content = session.capture_provider_frame() if session is not None else failure_frame
+                assert content is not None
+                self.recorder.attach_screenshot(
+                    "discovery-failure-state", RawScreenshot(content), RetentionClass.FAILURE
+                )
+                evidence_frame = "captured"
+            except (OSError, RuntimeError, ValueError):
+                evidence_frame = "unavailable"
+        self.recorder.record(
+            "discovery_failed",
+            request.run_id,
+            details={"code": code, "evidence_frame": evidence_frame},
+        )
         return FailureResult(
             status="failure",
             run_id=request.run_id,

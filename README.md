@@ -293,7 +293,7 @@ shared terminology. Start with [Architecture](docs/architecture.md),
 | Journal events | Sanitized events are written to evidence; live journal indexes remain in memory |
 | Suite progress, browser sessions, leases, viewer buffers | In memory; restart loses active execution and control state |
 | Viewer screens | Temporary, potentially sensitive frames; no persisted screen-history files |
-| Failure/handoff diagnostics | Separately retained fully masked frames and bounded value-free diagnostic ZIP, not a native Playwright trace |
+| Failure/handoff diagnostics | Unmasked PNGs for replay and discovery, plus a bounded value-free diagnostic ZIP; not a native Playwright trace. Raw images are for synthetic-data use and require review before sharing. |
 | Langfuse | Separate discovery telemetry stack with PostgreSQL, ClickHouse, Redis, and MinIO; materially heavier than the replay runtime |
 
 ReplayForge has no database/object-store adapter, distributed queue, production authentication,

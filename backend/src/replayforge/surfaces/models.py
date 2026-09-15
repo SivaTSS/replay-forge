@@ -35,6 +35,8 @@ class SurfaceError(RuntimeError):
         self.intervention_recommended = intervention_recommended
         self.expected = expected
         self.observed = observed
+        # Private binary evidence, never included in the public error message/details.
+        self.failure_frame: bytes | None = None
 
 
 class ActionStatus(StrEnum):

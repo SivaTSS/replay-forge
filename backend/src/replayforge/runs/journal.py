@@ -22,6 +22,7 @@ from replayforge.evidence.models import (
     EventEvidence,
     EvidenceRecord,
     ManifestEntry,
+    RawScreenshot,
     RetentionClass,
     RunEvidenceManifest,
     SanitizedEvidence,
@@ -149,7 +150,22 @@ class InMemoryRunJournal:
         payload: SanitizedEvidence,
         retention_class: RetentionClass,
     ) -> EvidenceRecord:
-        """Persist already-sanitized binary evidence and publish a new manifest snapshot."""
+        """Attach sanitized binary evidence without changing its privacy declaration."""
+        return self._attach(kind, payload, retention_class)
+
+    def attach_screenshot(
+        self, kind: str, payload: RawScreenshot, retention_class: RetentionClass
+    ) -> EvidenceRecord:
+        """Retain explicitly unredacted pixels, independently of structured redaction."""
+        return self._attach(kind, payload, retention_class)
+
+    def _attach(
+        self,
+        kind: str,
+        payload: SanitizedEvidence | RawScreenshot,
+        retention_class: RetentionClass,
+    ) -> EvidenceRecord:
+        """Persist a bounded attachment and publish a new manifest snapshot."""
 
         if payload.media_type not in {"image/png", "application/zip"}:
             raise ValueError("run attachments must be PNG images or ZIP archives")

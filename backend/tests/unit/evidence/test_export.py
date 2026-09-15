@@ -14,7 +14,7 @@ from replayforge.evidence.export import (
     verify_evidence_bundle,
 )
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.evidence.models import RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import RawScreenshot, RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import EvidenceRejectedError
 from replayforge.policy.types import DataClassification
 from replayforge.runs.journal import InMemoryRunJournal
@@ -61,6 +61,22 @@ def _request(journal: InMemoryRunJournal) -> EvidenceExportRequest:
         commands=("curl http://127.0.0.1:8000/api/v1/capabilities/example/invoke",),
         commit_sha="abcdef1",
     )
+
+
+def test_raw_png_export_preserves_pixels_and_unredacted_marker(tmp_path: Path) -> None:
+    clock = FrozenClock(datetime(2026, 9, 10, 12, tzinfo=UTC))
+    store = LocalEvidenceStore(tmp_path / "runtime", clock)
+    journal = InMemoryRunJournal(str(new_id(EntityKind.RUN)), clock, evidence_store=store)
+    journal.record("replay_started", journal.run_id)
+    content = b"\x89PNG\r\n\x1a\nraw-test-pixels"
+    journal.attach_screenshot("failure-state", RawScreenshot(content), RetentionClass.FAILURE)
+    journal.finalize({"status": "failure", "run_id": journal.run_id}, {})
+    destination = tmp_path / "replay-success"
+    export_evidence_bundle(store, destination, _request(journal))
+    assert (destination / "screenshots/001.png").read_bytes() == content
+    manifest = json.loads((destination / "manifest.json").read_text())
+    assert "unredacted:raw-screenshot" in manifest["redaction"]["directives"]
+    verify_evidence_bundle(destination)
 
 
 def test_export_writes_stable_verified_bundle(tmp_path: Path) -> None:

@@ -4,12 +4,21 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from replayforge.evidence.models import EvidenceRecord, RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import (
+    EvidenceRecord,
+    RawScreenshot,
+    RetentionClass,
+    SanitizedEvidence,
+)
 from replayforge.interventions.models import InterventionContext
 from replayforge.surfaces.models import NormalizedObservation
 
 
 class RunRecorder(Protocol):
+    def attach_screenshot(
+        self, kind: str, payload: RawScreenshot, retention_class: RetentionClass
+    ) -> EvidenceRecord: ...
+
     @property
     def evidence_manifest_key(self) -> str: ...
 

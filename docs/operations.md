@@ -2,6 +2,15 @@
 
 [Documentation index](README.md)
 
+## Failure screenshots
+
+Replay and discovery retain unmasked failure/handoff PNGs under `evidence/runtime/<run-id>/`
+(or `REPLAYFORGE_EVIDENCE_DIRECTORY`). Restart the runtime after updating the code to activate
+this behavior. Open the `.png` directly; its sidecar and manifest record the hash and
+`unredacted:raw-screenshot` declaration. Files are Git-ignored and written with owner-only
+permissions. Use synthetic data and review images before exporting or sharing them.
+See the [evidence index](../evidence/README.md) for all committed recordings and capture limits.
+
 ## Local topology
 
 ```text

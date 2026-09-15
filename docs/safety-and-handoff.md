@@ -107,7 +107,7 @@ sequenceDiagram
         participant B as Retained browser
     end
     A->>R: sensitive or stuck condition
-    R->>B: capture masked before-frame
+    R->>B: capture raw before-frame
     R-->>A: intervention_required
     O->>R: claim(expected version)
     loop while operator owns session
@@ -127,7 +127,7 @@ sequenceDiagram
     end
 ```
 
-Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence. Before persistence, every screenshot is fully masked in memory: neither DOM selectors nor OCR can establish that all remaining pixels are public.
+Accepted manual input is deliberately narrow: left click, text insertion, and ten navigation/editing keys. Text content is never placed in audit events; only its character count is recorded. Pointer evidence records coordinates, source frame, viewport, and sequence. Failure and handoff PNGs retain the visible viewport without masking, explicitly labeled `unredacted:raw-screenshot`. This is a synthetic-data debugging choice: neither DOM selectors nor OCR can certify that all pixels are public. Do not use real credentials or customer data with raw retention enabled by this deployment.
 
 Discovery can pause on low confidence, repeated state/action, model escalation, or an unresolved
 safety boundary. Its original loop resumes only after accepted human input changes the allowed
@@ -189,7 +189,7 @@ different paths, with different recipients and lifetimes.
 | Live manual control | Current human lease holder | Unmasked viewport; transient and non-cacheable, not a retained evidence image |
 | Execution viewing | Holder of the per-execution viewer token | Actual frames and results; bounded in-memory retention, no screenshot files, no control authority |
 | Successful invocation | API caller | Typed task outputs; evidence redaction does not redact the caller's result |
-| Durable evidence | Confined local files | Restricted events/results; fully masked viewport images preserve dimensions, not visual content |
+| Durable evidence | Confined local files | Restricted events/results; explicitly unredacted failure/handoff PNGs preserve visible state. Runtime files are Git-ignored; exported images require review before sharing. |
 | Published capability | Local registry | Symbolic bindings and semantic targets; not the original customer inputs or model transcript |
 | New image signatures | Capability asset store | Runtime capture disabled by default; explicit synthetic-only opt-in requires loopback target origins. Existing curated assets remain readable |
 
@@ -253,7 +253,7 @@ These guards deliberately fail closed on known matches. They do not identify eve
 short input, encoded value, or personal image; synthetic-only discovery is the supported demo
 boundary. Do not point this deployment at real customer records on the strength of these checks.
 
-The operator viewport is live and therefore unmasked for the authorized lease holder. Failure and handoff screenshots are masked in memory before persistence.
+The operator viewport is live and unmasked for the authorized lease holder. Failure and handoff screenshots are also stored unmasked for this synthetic-data deployment. Structured event/result redaction remains independent; it does not sanitize image pixels.
 
 Full masking intentionally loses visual post-mortem detail; use the authorized live viewport to
 inspect the screen. New failure and blocked-replay events retain value-free diagnostics instead:
@@ -279,8 +279,8 @@ disabled. Do not enable the flag for real customer records.
 | Policy | Single boolean guard, adapter-specific checks, layered policy | Layer intersection | Every authority can only narrow permission; decisions stay auditable |
 | Risky replay action | Allow with logging, deny all, human intervention | Sensitive → human; irreversible → deny | Demonstrates safe progress without pretending irreversible recovery is solved |
 | Evidence redaction | Redact at display, redact after storage, redact before write | Before write | Known sensitive fields and unknown diagnostics are excluded at the retention boundary |
-| Screenshot retention | Fixture selectors, OCR masks, full-frame suppression | Full frame | No general proof that unmasked pixels are public; visual diagnostics are sacrificed explicitly |
-| Failure diagnostics | Raw browser trace, masked image alone, value-free snapshot | Scanned snapshot + ordered events | Explains where and why execution stopped without retaining UI values; one final ZIP preserves the exporter contract |
+| Screenshot retention | Fixture selectors, OCR masks, full-frame suppression, raw capture | Explicit raw capture | Preserves visual debugging on synthetic surfaces without pretending OCR provides universal PII masking; review images before sharing |
+| Failure diagnostics | Raw browser trace, image alone, value-free snapshot | PNG + scanned snapshot + ordered events | Visible state plus execution context; raw pixels and sanitized structured data have separate, explicit contracts |
 | Blocked replay continuation | Restart, repeat blindly, dispatch-aware continuation | Restore/retry before dispatch; verify/advance otherwise | Preserves the same session without duplicating uncertain mutations or resetting automatic budgets |
 | Image signatures | Treat edges as anonymous, permit all crops, restricted capture | Off by default | Edge maps can preserve sensitive content; synthetic opt-in keeps the demo option explicit |
 | Session takeover | Open new browser, expose existing browser | Existing context | Preserves cookies, route, and form state across control transfer |

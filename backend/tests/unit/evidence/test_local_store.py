@@ -7,7 +7,7 @@ import pytest
 
 from replayforge.evidence import local_store
 from replayforge.evidence.local_store import LocalEvidenceStore
-from replayforge.evidence.models import RetentionClass, SanitizedEvidence
+from replayforge.evidence.models import RawScreenshot, RetentionClass, SanitizedEvidence
 from replayforge.evidence.redaction import StructuredRedactor
 from replayforge.shared.clock import FrozenClock
 from replayforge.shared.ids import EntityKind, new_id
@@ -86,3 +86,30 @@ def test_store_refuses_to_replace_an_existing_evidence_identity(
         store.write(run_id, "event", payload, RetentionClass.OPERATIONAL)
 
     assert len(tuple(path for path in store.root.rglob("*") if path.is_file())) == 2
+
+
+def test_raw_screenshot_is_unchanged_private_png_with_honest_metadata(
+    store: LocalEvidenceStore,
+) -> None:
+    raw = b"\x89PNG\r\n\x1a\nunmasked-test-pixels"
+    record = store.write(
+        str(new_id(EntityKind.RUN)), "failure-state", RawScreenshot(raw), RetentionClass.FAILURE
+    )
+    path = store.root / record.key.removeprefix("evidence://")
+    assert path.suffix == ".png"
+    assert path.read_bytes() == raw
+    assert path.stat().st_mode & 0o777 == 0o600
+    metadata = json.loads(path.with_suffix(".metadata.json").read_text())
+    assert metadata["redaction_directives"] == ["unredacted:raw-screenshot"]
+    assert record.content_hash == "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+@pytest.mark.parametrize("content", [b"", b"not-png"])
+def test_raw_screenshot_rejects_non_png(content: bytes) -> None:
+    with pytest.raises(ValueError, match="PNG"):
+        RawScreenshot(content)
+
+
+def test_raw_screenshot_cannot_claim_masking() -> None:
+    with pytest.raises(ValueError, match="unredacted"):
+        RawScreenshot(b"\x89PNG\r\n\x1a\npixels", redaction_directives=("mask:all",))

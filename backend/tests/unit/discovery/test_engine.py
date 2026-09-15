@@ -714,12 +714,29 @@ def test_unverified_completion_is_failure(
     assert result.code == "completion_not_verified"
 
 
+def test_failure_screenshot_error_does_not_replace_discovery_error(
+    valid_artifact_data: dict[str, Any],
+) -> None:
+    artifact = CapabilityArtifact.model_validate(valid_artifact_data)
+    session = FakeSurfaceSession(
+        evidence_capture_error=SurfaceError("screenshot_failed", "Closed.")
+    )
+    engine, _ = build_discovery(session, FailingModelProvider([]), artifact)
+    recorder = cast(MemoryRecorder, engine.recorder)
+    result = engine.execute(make_request())
+    assert isinstance(result, FailureResult)
+    assert recorder.attachments == []
+    assert recorder.recorded_details[-1]["evidence_frame"] == "unavailable"
+    assert session.closed
+
+
 def test_provider_failure_becomes_safe_terminal_result(
     valid_artifact_data: dict[str, Any],
 ) -> None:
     artifact = CapabilityArtifact.model_validate(valid_artifact_data)
     session = FakeSurfaceSession()
     engine, _ = build_discovery(session, FailingModelProvider([]), artifact)
+    recorder = cast(MemoryRecorder, engine.recorder)
 
     result = engine.execute(make_request())
 
@@ -727,6 +744,9 @@ def test_provider_failure_becomes_safe_terminal_result(
     assert result.code == "provider_unavailable"
     assert result.message == "Provider is temporarily unavailable."
     assert session.closed is True
+    assert [kind for kind, _, _ in recorder.attachments] == ["discovery-failure-state"]
+    assert recorder.attachments[0][1].content == session.capture_provider_frame()
+    assert recorder.attachments[0][1].redaction_directives == ("unredacted:raw-screenshot",)
 
 
 def test_recoverable_effect_absent_locator_failure_is_replanned_without_raw_details(
