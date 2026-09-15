@@ -1,5 +1,21 @@
 # Evidence
 
+## Latest visible failure capture
+
+[Open the actual replay screenshot](replay-payoff-readiness-raw/screenshots/001.png).
+
+![Actual replay viewport at the readiness timeout](replay-payoff-readiness-raw/screenshots/001.png)
+
+The [recording manifest](replay-payoff-readiness-raw/manifest.json) binds this unmasked PNG to
+the actual payoff `1.0.1` replay on revision `f172a0f`. It stopped with
+`visual_grounding_budget_exceeded` during initial rendered readiness, before any task action.
+The image shows the synthetic member directory at that stop; it is not a completed lookup or
+a missing-member result. No model calls, changed artifacts, or altered timing limits were used.
+
+The recorded command requested the existing missing-record case. Its expected-code check rejected
+this earlier readiness failure, so the completed runtime manifest was exported separately under
+its actual outcome. The screenshot is the original captured file, not a reconstruction.
+
 ## Screenshots and storage
 
 New replay and discovery failures store the actual viewport **without masking**, as do before/after
@@ -16,8 +32,8 @@ PNG bytes unchanged into `screenshots/001.png`, etc., and preserves their privac
 Capture is best-effort: a destroyed browser or an error before a page exists cannot yield a current
 screenshot. Rendered-readiness failures capture before closing the page. Terminal events report
 `evidence_frame` as `captured`, `unavailable`, or `not_applicable`. Successful discovery does not
-save a screen history. Old masked images cannot be unmasked; the 53 committed bundles below remain
-immutable records of their original runs, not new captures.
+save a screen history. Old masked images cannot be unmasked; the 53 historical bundles remain
+immutable records of their original runs. The latest visible capture above is a separate new bundle.
 
 Primary model recordings cover three tasks on the single servicing workstation:
 
@@ -174,6 +190,7 @@ terminal result, and any declared attachments. `discovery-*` records model-drive
 
 | Bundle | Recorded result |
 |---|---|
+| [replay-payoff-readiness-raw](replay-payoff-readiness-raw/manifest.json) | `failure · visual_grounding_budget_exceeded` — unmasked screenshot |
 | [discovery-card-acknowledge-member-notice](discovery-card-acknowledge-member-notice/manifest.json) | `success` |
 | [discovery-card-card-already-locked](discovery-card-card-already-locked/manifest.json) | `success` |
 | [discovery-card-card-expired](discovery-card-card-expired/manifest.json) | `success` |

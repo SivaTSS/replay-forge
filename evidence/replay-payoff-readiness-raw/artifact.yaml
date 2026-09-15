@@ -1,0 +1,562 @@
+schema_version: '1.4'
+capability:
+  id: member.servicing_loan_payoff_quote
+  version: 1.0.1
+  name: Calculate auto-loan payoff quote
+  description: Find the member identified by member_id, calculate and issue a non-binding
+    auto-loan payoff quote for payoff_date without making a payment or changing account
+    state, then extract the completed quote values. Complete only after issuance,
+    not from a review screen, and retain a replayable equality assertion that good_through_date
+    equals the supplied payoff_date.
+  application_family: northstar_member_service
+  surface: web
+  risk: read_only
+  tags:
+  - member_servicing
+  - auto_loan
+  - payoff_quote
+  - read_only_calculation
+  - replayable_assertion
+compatibility:
+  application_family: northstar_member_service
+  base_variant: standard
+  supported_variants:
+  - harbor
+  - summit
+  surface_contract: web.v1
+  entry_point: legacy_servicing
+  rendered_surface: true
+  fingerprint:
+    required_landmarks:
+    - kind: visual_text
+      value: Branch member directory
+    forbidden_landmarks: []
+inputs:
+  type: object
+  additional_properties: false
+  required:
+  - member_id
+  - payoff_date
+  properties:
+    member_id:
+      type: string
+      description: Invocation value for member id.
+      data_classification: customer_identifier
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    payoff_date:
+      type: string
+      description: Invocation value for payoff date.
+      data_classification: personal
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+outputs:
+  type: object
+  additional_properties: false
+  required:
+  - payoff_amount
+  - good_through_date
+  - confirmation_reference
+  properties:
+    payoff_amount:
+      type: string
+      description: Payoff amount returned by the issued auto-loan payoff quote.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    good_through_date:
+      type: string
+      description: Good-through date returned by the issued auto-loan payoff quote.
+      data_classification: financial
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+    confirmation_reference:
+      type: string
+      description: Issuance reference returned by the completed payoff quote.
+      data_classification: operational
+      persistence: redacted
+      required: []
+      properties: {}
+      additional_properties: false
+      enum: []
+preconditions:
+- kind: route
+  pattern: /servicing
+steps:
+- id: step_01_type_member_id_name_city_search_input
+  name: Member ID / name / city search input
+  action:
+    kind: type
+    value:
+      source: input
+      path: member_id
+    clear: true
+  target:
+    description: Member ID / name / city search input
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Member ID / name / city
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_02_click_search_button
+  name: Search button
+  action:
+    kind: click
+  target:
+    description: Search button
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Search
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_03_click_open_button_for_the_single_member_inquir
+  name: Open button for the single member inquiry result
+  action:
+    kind: click
+  target:
+    description: Open button for the single member inquiry result
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Open
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_04_click_loan_servicing_navigation_control
+  name: Loan servicing navigation control
+  action:
+    kind: click
+  target:
+    description: Loan servicing navigation control
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Loan servicing
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_05_type_payoff_date_mm_input
+  name: Payoff date (YYYY-MM-DD) input
+  action:
+    kind: type
+    value:
+      source: input
+      path: payoff_date
+    clear: true
+  target:
+    description: Payoff date (YYYY-MM-DD) input
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_labeled_control
+      label: Payoff date (YYYY-MM-DD)
+      label_match: exact
+      control_kind: text_input
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_06_click_calculate_payoff_button
+  name: Calculate payoff button
+  action:
+    kind: click
+  target:
+    description: Calculate payoff button
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Calculate payoff
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_07_click_confirm_operation_button
+  name: Confirm operation button
+  action:
+    kind: click
+  target:
+    description: Confirm operation button
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_text
+      value: Confirm operation
+      match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions: []
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_08_extract_issued_quote_payoff_amount
+  name: Issued quote payoff amount
+  action:
+    kind: extract
+    output: payoff_amount
+    transform: trim
+  target:
+    description: Issued quote payoff amount
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Payoff amount
+      label_match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: payoff_amount
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_09_extract_issued_quote_good_through_date
+  name: Issued quote good-through date
+  action:
+    kind: extract
+    output: good_through_date
+    transform: trim
+  target:
+    description: Issued quote good-through date
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Good through
+      label_match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: good_through_date
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_10_extract_issued_quote_confirmation_reference
+  name: Issued quote confirmation reference
+  action:
+    kind: extract
+    output: confirmation_reference
+    transform: trim
+  target:
+    description: Issued quote confirmation reference
+    registered_risk: read_only
+    scope:
+      window: primary
+      frame_path: []
+    visual_candidates:
+    - strategy: rendered_field_value
+      label: Confirmation reference
+      label_match: exact
+    candidates: []
+    state:
+      visible: true
+    tenant_overrides_allowed: false
+  preconditions: []
+  postconditions:
+  - kind: output_valid
+    output: confirmation_reference
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+- id: step_11_assert_assert
+  name: assert
+  action:
+    kind: assert
+    condition:
+      kind: identity_matches
+      extracted_output: good_through_date
+      input_path: payoff_date
+  preconditions: []
+  postconditions:
+  - kind: identity_matches
+    extracted_output: good_through_date
+    input_path: payoff_date
+  timeout_ms: 10000
+  retry:
+    max_attempts: 2
+    backoff_ms:
+    - 500
+    retry_on:
+    - target_temporarily_absent
+    require_effect_absent: true
+  recovery_refs: []
+  outcome_refs: []
+  failure_refs: []
+  risk: read_only
+  evidence:
+    before: false
+    after: true
+    on_failure: true
+recoveries: []
+outcomes: []
+failures: []
+checkpoint:
+  id: calculate_auto_loan_payoff_quote_verified
+  condition:
+    kind: all
+    conditions:
+    - kind: route
+      pattern: /servicing
+    - kind: all
+      conditions:
+      - kind: rendered_text
+        value: Payoff amount
+        match: exact
+      - kind: rendered_text
+        value: Good through
+        match: exact
+      - kind: rendered_text
+        value: Confirmation reference
+        match: exact
+    - kind: output_valid
+      output: payoff_amount
+    - kind: output_valid
+      output: good_through_date
+    - kind: output_valid
+      output: confirmation_reference
+policy:
+  allowed_action_types:
+  - extract
+  - type
+  - assert
+  - click
+  allowed_entry_points:
+  - legacy_servicing
+  maximum_risk: read_only
+  allowed_route_patterns:
+  - /servicing
+  forbidden_text_inputs: []
+  output_redaction:
+    payoff_amount: last4
+    good_through_date: last4
+    confirmation_reference: last4
+provenance:
+  discovery_run_id: run_71db81152027445bb3613a7360f75697
+  provider: openai
+  model: gpt-5.6-luna
+  prompt_policy_version: 2.0.0
+  surface_adapter_version: web.v1
+  compiler_version: 2.0.0
+  created_at: '2026-09-14T07:15:05.217015Z'
+  target_fingerprint: dbb8fb6d2400fe5c7aaad7c5106251a2a3f7b2797b7dbce7ce7cbe6acaed9a2b
+  evidence_manifest_key: evidence://run_71db81152027445bb3613a7360f75697/manifest-evd_ef211c4f7e984ad8ae82d23c15845841.bin
+  artifact_content_hash: sha256:ea95e6c1a0aa65528270e7078374eb8997f57a573389fa3a1d827bc516d8f737
