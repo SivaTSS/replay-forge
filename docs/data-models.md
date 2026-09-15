@@ -3,8 +3,9 @@
 [Documentation index](README.md)
 
 ReplayForge separates data by trust and lifetime. Serialized boundaries use strict Pydantic
-models with unknown fields rejected; durable contracts reject field reassignment. Internal state
-uses frozen dataclasses. Nested dictionaries remain ordinary Python mappings, so capability and
+models with unknown fields rejected; durable contracts reject field reassignment. Domain values
+generally use frozen dataclasses; session and viewer coordinators own mutable execution state.
+Nested dictionaries remain ordinary Python mappings, so capability and
 application registries, discovery-suite repositories, and journal reads use detached snapshots.
 This prevents a caller from mutating a published contract through a previously returned object.
 Repository protocols own mutation.
@@ -29,7 +30,8 @@ flowchart TB
 
 ## Identity
 
-Every runtime ID is a prefix plus 32 lowercase hexadecimal characters.
+Every shared entity ID below is a prefix plus 32 lowercase hexadecimal characters. Capability
+IDs, step IDs, operator labels, and adapter-owned handles use their own contracts.
 
 | Prefix | Entity | Scope |
 |---|---|---|
@@ -66,6 +68,10 @@ These fields are separate because format evolution, workflow evolution, adapter 
 and content integrity change independently. Publication preserves the old version; compatibility
 checks decide whether a saved program may run on the current registered surface.
 
+The checked-in [JSON Schema](../schemas/capability-artifact-v1.schema.json) is generated from
+`CapabilityArtifact`. Its `v1` filename denotes the format family; the accepted artifact
+`schema_version` is `1.4`. A regression test checks that the file matches the Python model.
+
 ## Capability artifact
 
 `CapabilityArtifact` is the immutable replay contract. Application registration supplies where
@@ -91,7 +97,7 @@ flowchart TB
 |---|---|
 | Metadata | Capability ID and semantic version are stable; application family matches compatibility |
 | Input/output contracts | Required properties exist; unknown invocation values are rejected; secrets and credentials cannot enter discovered contracts |
-| Compatibility | Tenant set is non-empty; entry point is registered and policy-allowed; landmarks describe the expected surface |
+| Compatibility | Tenant set is non-empty; entry point is capability-policy-allowed; launch-time checks match registration and readiness landmarks |
 | Step | ID is unique; action and target agree; references resolve; timeout and retry counts are bounded |
 | Target | Candidate order is explicit; every candidate has exactly the fields its strategy needs |
 | Recovery | Trigger, bounded uses, and resume step are valid; nested and sensitive recovery are rejected |
@@ -119,6 +125,10 @@ once, and discards it. The geometry prohibition also covers visual fallbacks in 
 capabilities; changing the surface flag cannot bypass it. The guard traverses typed model objects,
 not arbitrary JSON data that happens to contain a field named `strategy`.
 Older `1.0`–`1.3` artifact schemas are rejected; no migration shim is retained.
+
+For rendered discovery, the recorded target retains the candidate that actually resolved, not
+unverified alternatives from the proposal. Input-bound targets keep their symbolic bindings;
+the concrete value used to ground the current screen is not substituted into the artifact.
 
 ## Discovery
 
@@ -172,8 +182,10 @@ flowchart TB
 ```
 
 `NormalizedObservation` contains a typed event and session ID, aware timestamp, absolute route,
-viewport, fingerprint, non-empty landmarks/frame titles, semantic controls and fields, OCR tokens,
-and an optional evidence reference. It contains no Playwright object or full DOM.
+viewport, fingerprint, landmark/frame-title collections, semantic controls and fields, OCR tokens,
+and an optional evidence reference. Collections may be empty; any supplied landmark or frame title
+must be non-blank. The route is an absolute path without query or fragment. The observation contains
+no Playwright object or full DOM.
 
 `ResolvedTarget` contains an adapter-owned handle, candidate index, exactly-one match count,
 registered risk, and optional current-frame visual data. A visual region is valid only with the
@@ -275,11 +287,19 @@ Terminal completed results are `success`, `business_outcome`, or `failure`; each
 JSON-safe values and a manifest key belonging to its run. `intervention_required` is non-terminal:
 it identifies a live paused session and therefore has no finalized manifest requirement.
 
-The journal owns monotonic sequences and exactly-once finalization. Redaction produces
-`SanitizedEvidence`; only that type crosses the storage port. Each `EvidenceRecord` contains an
+The journal owns monotonic sequences and exactly-once finalization. The storage port accepts two
+explicit payload types:
+
+| Payload | Contract |
+|---|---|
+| `SanitizedEvidence` | Structured content or diagnostics that passed redaction and forbidden-content checks |
+| `RawScreenshot` | Unmasked failure/handoff PNG, validated for signature and size and marked `unredacted:raw-screenshot`; not a PII-sanitized image |
+
+Both are bounded to 20,000,000 bytes. Each `EvidenceRecord` contains an
 opaque key, media type, bounded size, SHA-256 hash, retention class, directives, and aware time.
 The authoritative `RunEvidenceManifest` requires unique evidence identities, unique run-owned keys,
 and separate JSON events, binary attachments, and optional terminal result.
+Retention classes describe intended use; they do not implement automatic expiry.
 
 `ExecutionDiagnostic` is a separate strict, frozen snapshot, not an untyped observation dump.
 It bounds counters and normalizes action/error/condition strings to finite vocabularies. The
@@ -307,7 +327,7 @@ retained customer/operator identifiers from simple enumeration. See the
 | Policy | Boolean guard; exceptions; decision record | Layer intersection plus data decision: fail-closed execution and auditable reasons |
 | Human handoff | UI status flag; lease only; separate writes | Intervention plus versioned lease in one transaction: workflow and authority cannot diverge |
 | Run completion | Nullable fields in one result | Discriminated result union: impossible states are rejected |
-| Evidence | Raw logs; arbitrary blobs; typed manifest | Redact before storage, hash every object, and bind every key to its run |
+| Evidence | Raw logs; arbitrary blobs; typed manifest | Redact structured data; explicitly distinguish raw diagnostic PNGs; hash every object and bind every key to its run |
 | Persistence now | PostgreSQL immediately; memory only | Immutable capability/assets and evidence on disk; mutable live coordination in memory |
 
 ## Durability

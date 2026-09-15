@@ -216,10 +216,13 @@ domain event / terminal result
         → new manifest snapshot
 
 browser failure/handoff frame
-        → replace every pixel in memory, retaining frame dimensions
+        → RawScreenshot with unredacted:raw-screenshot directive
         → PNG signature and size validation
         → atomic local write + manifest
 ```
+
+The screenshot path preserves pixels; it does not run text redaction or certify the image as
+free of sensitive data. This deployment uses synthetic records, and images require review before sharing.
 
 The redactor drops credential-, token-, password-, cookie-, authorization-, and secret-shaped keys; drops personal fields; tokenizes customer identifiers; and replaces financial values. It also rejects known provider, cloud, GitHub, bearer, and private-key patterns that survive redaction.
 

@@ -35,7 +35,7 @@ flowchart LR
 
 Local addresses and configuration are in [Operations](operations.md#local-topology).
 
-PostgreSQL is not part of the implemented runtime. Published capabilities and content-addressed visual assets are immutable local files; sanitized evidence is also written to disk. Lease, intervention, journal, and discovery-suite state remains in process memory. The application catalog is checked-in YAML so onboarding is reviewable.
+PostgreSQL is not part of the implemented runtime. Published capabilities and content-addressed visual assets are immutable local files; redacted structured evidence and explicitly unredacted failure/handoff PNGs are also written to disk. Lease, intervention, journal, and discovery-suite state remains in process memory. The application catalog is checked-in YAML so onboarding is reviewable.
 
 `config/applications.yaml` is the onboarding boundary. It owns only application facts: a
 credential-free origin, tenant variants, symbolic entry points, route aliases, readiness
