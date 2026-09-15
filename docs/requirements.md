@@ -7,8 +7,9 @@ The assignment prioritizes system design, core-loop correctness, runtime error h
 control transfer. The [decision index](architecture.md#critical-decision-index) explains the choices;
 the [challenge table](#how-to-challenge-the-claims) links directly to their proof boundaries.
 
-Source: [Assignment A — Computer-Use Automation System](../Assignment%20A%20%E2%80%94%20Computer-Use%20Automation%20System.pdf),
-all ten pages. Section numbers below refer to that PDF, not to these reference documents.
+Source: *Assignment A — Computer-Use Automation System*, all ten pages of the supplied PDF.
+The assignment brief is not redistributed in this repository. Section numbers below refer to
+that PDF, not to these reference documents.
 
 ## PDF traceability
 
@@ -131,6 +132,8 @@ audit. Wider target-specific fault discovery remains outside this final pass.
 | Broader stuck-replay handoff (§3.6) | **Closed within the declared browser scope**: ordinary target/action faults route through policy and dispatch-aware continuation | [Boundary rules and decisions](safety-and-handoff.md#same-session-handoff); real-browser injected-obstruction test and unit safety regressions |
 | Useful retained failure diagnostics (§3.5) | **Closed without unmasking screens**: ordered diagnostic snapshots and one final scanned ZIP | [Retention contract](safety-and-handoff.md#evidence-path); fresh trace export and integrity checks |
 | Wider application fault coverage (§3.3) | Declared cases are proved; application session expiry and role-denial discovery are not | Genuine observed scenarios on a suitable authorized target, with exact model-free outcome/recovery checks |
+| Fresh local replay readiness | Two packaging-check launches exceeded the configured grounding budget before task actions | Diagnose the timing margin and demonstrate a fresh replay in the intended submission environment; see [packaging check](verification.md#submission-packaging-check) |
+| Card-lock metadata consistency | The description says sensitive; executable risk and policy say reversible | A new validated publication with consistent description; historical artifacts and evidence must not be overwritten |
 
 No test suite certifies every possible target state. Production authentication, native desktop,
 distributed storage and a full operator product remain separate, explicit cuts. Application-login

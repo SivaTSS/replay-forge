@@ -23,6 +23,12 @@ and account inquiry, transaction research, transfers, card maintenance, holds, p
 service cases, and an activity journal. Its controls are rendered on a single canvas;
 the canonical automation cannot rely on DOM form controls.
 
+![ReplayForge execution console displaying an actual replay, browser frame, and failure status](docs/assets/replay-viewer.png)
+
+*Actual execution console, not a mockup. This model-free payoff replay stopped at the configured
+OCR grounding limit before task actions; it is not a successful-run claim. All displayed data is
+synthetic. The capture is separate from the immutable, sanitized evidence bundles below.*
+
 Genuinely discovered capabilities exercise three different business operations on that same UI: transaction
 investigation, loan-payoff quotation, and temporary card lock. Each artifact is independently
 validated on Harbor and Summit. The engine and compiler are task-independent: navigation and

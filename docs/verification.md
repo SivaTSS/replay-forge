@@ -91,6 +91,30 @@ repository access and submission email are owner actions, not test results.
 
 ## Documentation audit
 
+### Submission packaging check
+
+The subsequent packaging pass verified all **53 bundles** (17 discovery, 36 replay), their
+recording commits, all seven published artifacts, and both diagnostic archives. All **274 focused
+capability/evidence/journal tests** and **14 tooling tests** passed. Submission-local Markdown
+links were checked against tracked paths, not just files available on the author's machine.
+No application code, policies, published artifacts, or historical bundle contents changed.
+
+The README now shows the actual execution viewer. Two fresh model-free payoff `1.0.2` attempts
+stopped before task execution with `visual_grounding_budget_exceeded`, including run
+`run_16af943003384a459a5bb72da7702492`. The screenshot shows that failure honestly. A separate local
+OCR check measured 8.84 and 9.18 seconds on a 1440 × 900 synthetic frame; this is evidence of a
+tight timing margin, not proof of the precise cause of the replay failure. The configured
+10-second grounding limit was not increased. Earlier successful browser/evidence results remain
+historical proof, not a claim that this fresh launch passed.
+
+Tracked files and reachable Git history were scanned for configured credentials, recognized secret
+patterns, encoded configured credentials, and archive contents. No credential matches were found.
+SSN-shaped and credential-URL matches were explicit synthetic negative-test fixtures. The viewer
+image was visually reviewed: it contains synthetic demo records and no viewer token or credentials.
+These checks are not a universal detector for arbitrary sensitive content.
+
+### Earlier documentation checks
+
 The earlier 2026-09-14 documentation-only audit read all ten assignment pages and checked against source,
 configuration, current artifacts, and evidence. Application code, dependencies, schemas, and
 historical run bundles were not changed. The full Chromium/build snapshot above remains tied to

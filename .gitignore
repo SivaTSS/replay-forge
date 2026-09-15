@@ -18,6 +18,8 @@ __pycache__/
 .ruff_cache/
 .venv/
 *.egg-info/
+# Local inference scratch output
+:memory:.ses
 
 # Node.js
 node_modules/
@@ -30,8 +32,8 @@ test-results/
 evidence/runtime/
 
 # Framework-generated local agent guidance
-apps/demo-bank/AGENTS.md
-apps/demo-bank/CLAUDE.md
+apps/*/AGENTS.md
+apps/*/CLAUDE.md
 
 # Editors and operating systems
 .idea/
